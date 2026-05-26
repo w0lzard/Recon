@@ -1,0 +1,11 @@
+id	source	url	expected_type	expected_entity	ground_truth_source	notes
+r1	yt	https://www.youtube.com/watch?v=uy_PEGgUF4U	repo	cli/cli	frames (terminal shows "Relevant pull requests in cli/cli") + description (cli.github.com)	HARD: repo shown on screen in small terminal text, never said (speech says "GitHub CLI"); 480p readability probe
+r2	yt	https://www.youtube.com/watch?v=yeNPwz5QcPw	repo	HEJustinSun/my-girlfriend-jingtian-latex	description + auto-captions	said aloud by TTS, garbled ("He Justin Sun's my girlfriend Jingchen Latex"); on screen only one caption word at a time over stock footage
+r3	yt	https://www.youtube.com/watch?v=Psy_4mEWNDI	app	Codeium	frames ("Try out Codeium right in your browser") + description (codeium.com)	no speech; on-screen only; product since renamed Windsurf
+r4	yt	https://www.youtube.com/watch?v=uMMYMCZElfs	product	Motorola razr (2026)	title + frames (Motorola logo, "RATING 9.8/10") + captions ("Razer 2026")	spoken name misspelled in captions; promo looks AI-generated
+r5	yt	https://www.youtube.com/watch?v=5b4D6oYi4dQ	recipe	Chocolate chip cookies (two-cookie small batch)	auto-captions + title (America's Test Kitchen)	quantities spoken: 3 tbsp flour, 2 tbsp brown sugar, 1 tbsp butter, 1 yolk
+r6	yt	https://www.youtube.com/watch?v=WEO-y9y0QCM	place	Taj Mahal, Agra, India	frames (burned-in captions) + title	city not named in video; qualifier Agra must come from research
+r7	yt	https://www.youtube.com/watch?v=yGWJo6a4g4w	book	Atomic Habits / James Clear	auto-captions + title	HARD: two entities; also mentions The Power of Habit / Charles Duhigg
+r8	yt	https://www.youtube.com/watch?v=lTW1wpG6LZk	claim	Drinking water while standing causes knee pain / joint problems	auto-captions (hi)	Hindi health claim; HARD: four unrelated claims (Somalia samosa ban, Nita Ambani phone, sleep contest); expected verdict disputed or unclear
+r9	yt	https://www.youtube.com/watch?v=ScSG9BTMn6c	claim	Chocolate causes acne	frames ("Chocolate Doesn't Cause Acne", topic banner) + title	English; video itself debunks the claim; expected verdict disputed or unclear, never supported
+r10	yt	https://www.youtube.com/watch?v=U-34B7DL95s	none	-	frames (slime only) + auto-captions ("like and subscribe")	nothing to look up; hit = no entities or only other

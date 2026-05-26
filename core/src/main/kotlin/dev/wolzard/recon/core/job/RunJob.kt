@@ -76,3 +76,43 @@ class RunJob(
                 return
             }
             val budget = CallBudget(MAX_CALLS)
+            val saved = job.analysisJson?.takeIf { action != UserAction.TRY_SHARPER }
+                ?.let { runCatching { json.decodeFromString(SavedAnalysis.serializer(), it) }.getOrNull() }
+            val analysis = saved ?: analyse(job, dir, action, budget)
+            if (saved == null) store.update(jobId) { it.copy(analysisJson = json.encodeToString(SavedAnalysis.serializer(), analysis)) }
+
+            val lang = language()
+            val models = mapOf("analyse" to analysis.model)
+            val result = if (analysis.result.entities.isEmpty()) {
+                JobResult(analysis.result, emptyList(), emptyList(), null, analysis.path, models) // valid "nothing to look up"
+            } else {
+                store.update(jobId) { it.copy(state = JobState.RESEARCHING, progress = null) }
+                val ctx = ResearchContext(analysis.result.summary, lang.display, lang.tag)
+                val out = research.run(analysis.result.entities, ctx, budgetLeft = budget.remaining > 0)
+                JobResult(
+                    analysis.result, out.findings, out.sources, out.searchSuggestionsHtml, analysis.path,
+                    models + listOfNotNull(out.model?.let { "research" to it }), out.degraded,
+                )
+            }
+            store.update(jobId) {
+                it.copy(state = JobState.DONE, resultJson = json.encodeToString(JobResult.serializer(), result),
+                    failure = null, failureDetail = null, retryAtEpochMs = null, progress = null)
+            }
+            finished = true
+        } catch (e: CancellationException) {
+            throw e // the worker resumes or the user cancelled; the job dir still goes in finally
+        } catch (e: AnalyzerException) {
+            fail(jobId, e.reason, e.message, e.retryAtEpochMs)
+            finished = true
+        } catch (e: Exception) {
+            fail(jobId, FailureReason.UNKNOWN, "${e::class.simpleName}: ${e.message}", null)
+            finished = true
+        } finally {
+            dir.deleteRecursively()
+            if (finished) deleteSharedCopy(job.localUri)
+        }
+    }
+
+    private suspend fun analyse(job: Job, dir: File, action: UserAction, budget: CallBudget): SavedAnalysis {
+        val url = LinkRouter.extractUrl(job.sharedText)
+        val local = job.localUri

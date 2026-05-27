@@ -194,3 +194,42 @@ class RunJob(
         }
         return result?.let { Attempt.Ok(it) } ?: Attempt.Failed(AnalyzerException(FailureReason.NETWORK, message = "analysis timed out"))
     }
+
+    private suspend fun fail(id: String, reason: FailureReason, detail: String?, retryAt: Long?) {
+        store.update(id) { it.copy(state = JobState.FAILED, failure = reason, failureDetail = detail, retryAtEpochMs = retryAt, progress = null) }
+    }
+
+    /** Only Recon's own copies under [sharedRoot] are deleted (never an arbitrary path). */
+    private fun deleteSharedCopy(localUri: String?) {
+        val path = localUri?.removePrefix("file://") ?: return
+        if (localUri.startsWith("content://")) return
+        val f = File(path).canonicalFile
+        val root = sharedRoot.canonicalPath
+        if (!f.path.startsWith(root + File.separator)) return
+        f.delete()
+        f.parentFile?.takeIf { it.path != root && it.listFiles().isNullOrEmpty() }?.delete() // shared/<uuid>/
+    }
+
+    private fun mime(f: File) = when (f.extension.lowercase()) {
+        "webm" -> "video/webm"
+        "mov" -> "video/quicktime"
+        "3gp" -> "video/3gpp"
+        "mkv" -> "video/x-matroska"
+        else -> "video/mp4"
+    }
+
+    private class CallBudget(private val max: Int) {
+        private var used = 0
+        val remaining get() = max - used
+        fun canSpend() = used < max
+        fun spend() { check(canSpend()) { "call budget exceeded" }; used++ }
+    }
+
+    private companion object {
+        const val MAX_CALLS = 2
+        val TERMINAL = setOf(
+            FailureReason.QUOTA_EXCEEDED, FailureReason.API_KEY_MISSING, FailureReason.API_KEY_INVALID,
+            FailureReason.MODEL_BUSY,
+        )
+    }
+}

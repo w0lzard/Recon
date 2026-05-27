@@ -116,3 +116,42 @@ class RunJob(
     private suspend fun analyse(job: Job, dir: File, action: UserAction, budget: CallBudget): SavedAnalysis {
         val url = LinkRouter.extractUrl(job.sharedText)
         val local = job.localUri
+        if (url == null && local == null) throw AnalyzerException(FailureReason.UNSUPPORTED_LINK)
+        val lang = language().display
+
+        var lastError: AnalyzerException? = null
+        if (local == null) {
+            val resolved = if (LinkRouter.needsResolving(url!!)) resolver.resolve(url) else url
+            store.update(job.id) { it.copy(url = resolved) }
+            if (LinkRouter.classify(resolved) is Route.YouTube && analyzer.supportsYouTubeUrl && action != UserAction.TRY_SHARPER) {
+                store.update(job.id) { it.copy(state = JobState.ANALYSING) }
+                when (val r = attempt(budget, timeouts.pathA) { analyzer.analyze(AnalysisInput.YouTubeUrl(resolved), lang) }) {
+                    is Attempt.Ok -> return SavedAnalysis(r.analysis.result, r.analysis.model, "youtube-url")
+                    is Attempt.Failed -> lastError = r.error // falls through to the download path
+                }
+            }
+            return analyseDownload(job, dir, resolved, fetchers.link, action, budget, lang, lastError)
+        }
+        return analyseDownload(job, dir, local, fetchers.sharedFile, action, budget, lang, null)
+    }
+
+    private suspend fun analyseDownload(
+        job: Job, dir: File, source: String, fetcher: MediaFetcher, action: UserAction,
+        budget: CallBudget, lang: String, previous: AnalyzerException?,
+    ): SavedAnalysis {
+        var lastError = previous
+        store.update(job.id) { it.copy(state = JobState.DOWNLOADING, progress = 0f) }
+        val quality = if (action == UserAction.TRY_SHARPER) FetchQuality.SHARPER else FetchQuality.DEFAULT
+        var media = fetch(job.id, fetcher, source, dir, quality, null)
+
+        // Path A: a muxed file ≤ 50 MB. YouTube's two-file download (separate audio) goes straight to Path B.
+        if (media.audio == null && media.video.length() <= timeouts.maxPathABytes) {
+            if (!budget.canSpend()) throw lastError ?: AnalyzerException(FailureReason.UNKNOWN, message = "call budget used up")
+            store.update(job.id) { it.copy(state = JobState.ANALYSING, progress = null) }
+            when (val r = attempt(budget, timeouts.pathA) { analyzer.analyze(AnalysisInput.VideoFile(media.video, mime(media.video)), lang) }) {
+                is Attempt.Ok -> return SavedAnalysis(r.analysis.result, r.analysis.model, "A")
+                is Attempt.Failed -> lastError = r.error
+            }
+        }
+
+        // Path B: frames + audio. Zero frames is never a success: one other-format re-download for links, then fail.

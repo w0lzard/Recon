@@ -155,3 +155,42 @@ class RunJob(
         }
 
         // Path B: frames + audio. Zero frames is never a success: one other-format re-download for links, then fail.
+        store.update(job.id) { it.copy(state = JobState.ANALYSING, progress = null) }
+        var frames = sampler.sample(media.video, File(dir, "frames"))
+        if (frames.frames.isEmpty() && fetcher === fetchers.link) {
+            media = fetch(job.id, fetcher, source, dir, FetchQuality.OTHER_FORMAT, media.formatId)
+            store.update(job.id) { it.copy(state = JobState.ANALYSING, progress = null) }
+            frames = sampler.sample(media.video, File(dir, "frames-retry"))
+        }
+        if (frames.frames.isEmpty()) throw AnalyzerException(FailureReason.VIDEO_UNREADABLE, message = "no frame could be decoded")
+        if (!budget.canSpend()) throw lastError ?: AnalyzerException(FailureReason.UNKNOWN, message = "call budget used up")
+        val input = AnalysisInput.FramesAndAudio(frames.frames, media.audio ?: frames.audio)
+        return when (val r = attempt(budget, timeouts.pathB) { analyzer.analyze(input, lang) }) {
+            is Attempt.Ok -> SavedAnalysis(r.analysis.result, r.analysis.model, "B")
+            is Attempt.Failed -> throw r.error
+        }
+    }
+
+    private suspend fun fetch(id: String, f: MediaFetcher, source: String, dir: File, q: FetchQuality, avoid: String?): FetchedMedia {
+        store.update(id) { it.copy(state = JobState.DOWNLOADING, progress = 0f) }
+        var reported = 0f
+        return f.fetch(source, dir, q, avoid) { p -> if (p - reported >= 0.05f || p >= 1f) reported = p }
+            .also { store.update(id) { it.copy(progress = reported) } }
+    }
+
+    private sealed interface Attempt {
+        data class Ok(val analysis: Analysis) : Attempt
+        data class Failed(val error: AnalyzerException) : Attempt
+    }
+
+    /** One analysis call. Quota/sign-in/busy failures end the job (another path would hit the same wall). */
+    private suspend fun attempt(budget: CallBudget, timeout: Duration, call: suspend () -> Analysis): Attempt {
+        budget.spend()
+        val result = try {
+            withTimeoutOrNull(timeout) { call() }
+        } catch (e: AnalyzerException) {
+            if (e.reason in TERMINAL) throw e
+            return Attempt.Failed(e)
+        }
+        return result?.let { Attempt.Ok(it) } ?: Attempt.Failed(AnalyzerException(FailureReason.NETWORK, message = "analysis timed out"))
+    }

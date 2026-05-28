@@ -39,3 +39,44 @@ object ResultParser {
         val o = parseObject(raw)
         val summary = o.str("summary") ?: invalid("summary missing")
         val entities = (o["entities"] as? JsonArray).orEmpty()
+            .mapNotNull { (it as? JsonObject)?.let(::entity) }
+            .distinctBy { Triple(it.type, it.qualifier?.lowercase(), it.name.lowercase()) }
+            .take(MAX_ENTITIES)
+        val onScreen = (o["onScreenText"] as? JsonArray).orEmpty()
+            .mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf(String::isNotEmpty)?.take(MAX_ON_SCREEN_LEN) }
+            .take(MAX_ON_SCREEN)
+        val confidence = (o["confidence"] as? JsonPrimitive)?.doubleOrNull ?: 0.0
+        return AnalysisResult(entities, summary.take(MAX_STRING), confidence.coerceIn(0.0, 1.0), onScreen)
+    }
+
+    private fun entity(o: JsonObject): Entity? {
+        var type = EntityType.fromWire(o.str("type"))
+        var name = o.str("name")?.trim().orEmpty()
+        var qualifier = o.str("qualifier")?.trim()?.takeIf(String::isNotEmpty)
+        if (type == EntityType.REPO) {
+            if (githubPrefixRe.containsMatchIn(name)) {
+                val parts = name.replace(githubPrefixRe, "").trimEnd('/').split('/')
+                if (parts.size >= 2) { qualifier = parts[0]; name = parts[1] }
+            }
+            if (qualifier != null && !ownerRe.matches(qualifier)) qualifier = null
+            if (!repoNameRe.matches(name)) type = EntityType.OTHER
+        }
+        if (name.isBlank()) return null
+        return Entity(
+            type = type,
+            name = name.take(MAX_STRING),
+            qualifier = qualifier?.take(MAX_STRING),
+            evidence = Evidence.fromWire(o.str("evidence")),
+            saidInVideo = o.str("saidInVideo")?.trim().orEmpty().take(MAX_STRING),
+        )
+    }
+
+    /**
+     * Parses the single research call's `{"items":[…]}`. Items are keyed by `index` into [items];
+     * out-of-range indexes are dropped, the first occurrence wins, missing items are not returned.
+     */
+    fun parseResearch(raw: String, items: List<ResearchItem>, cap: VerdictCap): List<Finding> {
+        val arr = parseObject(raw)["items"] as? JsonArray ?: invalid("items missing")
+        val byIndex = LinkedHashMap<Int, JsonObject>()
+        for (el in arr) {
+            val o = el as? JsonObject ?: continue

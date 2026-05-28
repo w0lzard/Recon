@@ -122,3 +122,44 @@ object ResultParser {
             "confirmed" -> Verdict.CONFIRMED
             "best_match" -> Verdict.BEST_MATCH
             "not_found" -> Verdict.NOT_FOUND
+            "supported" -> Verdict.SUPPORTED
+            "disputed" -> Verdict.DISPUTED
+            "unclear" -> Verdict.UNCLEAR
+            else -> null
+        }
+        val claimVerdicts = setOf(Verdict.SUPPORTED, Verdict.DISPUTED, Verdict.UNCLEAR)
+        val mapped = if (type == EntityType.CLAIM) {
+            v?.takeIf { it in claimVerdicts } ?: Verdict.UNCLEAR
+        } else {
+            v?.takeIf { it !in claimVerdicts } ?: Verdict.BEST_MATCH
+        }
+        if (cap == VerdictCap.WEB) return mapped
+        // Without sources nothing is certain: knowledge answers are capped at BEST_MATCH / UNCLEAR.
+        return when (mapped) {
+            Verdict.CONFIRMED -> Verdict.BEST_MATCH
+            Verdict.SUPPORTED, Verdict.DISPUTED -> Verdict.UNCLEAR
+            else -> mapped
+        }
+    }
+
+    private fun clean(s: String?): String =
+        s.orEmpty().replace(urlRe, "").replace(Regex("[ \\t]{2,}"), " ").trim().take(MAX_STRING)
+
+    /** Strips ``` fences and any prose around the outermost JSON object. */
+    private fun parseObject(raw: String): JsonObject {
+        val start = raw.indexOf('{')
+        val end = raw.lastIndexOf('}')
+        if (start < 0 || end <= start) invalid("no JSON object")
+        val el: JsonElement = try {
+            json.parseToJsonElement(raw.substring(start, end + 1))
+        } catch (e: Exception) {
+            throw AnalyzerException(FailureReason.MODEL_OUTPUT_INVALID, message = "unparseable JSON", cause = e)
+        }
+        return el as? JsonObject ?: invalid("not an object")
+    }
+
+    private fun JsonObject.str(key: String): String? =
+        (this[key] as? JsonPrimitive)?.takeIf { it !is JsonNull }?.contentOrNull
+
+    private fun invalid(msg: String): Nothing = throw AnalyzerException(FailureReason.MODEL_OUTPUT_INVALID, message = msg)
+}

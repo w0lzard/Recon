@@ -80,3 +80,45 @@ object ResultParser {
         val byIndex = LinkedHashMap<Int, JsonObject>()
         for (el in arr) {
             val o = el as? JsonObject ?: continue
+            val i = (o["index"] as? JsonPrimitive)?.intOrNull ?: continue
+            if (i in items.indices && i !in byIndex) byIndex[i] = o
+        }
+        return byIndex.keys.sorted().map { i -> finding(items[i], byIndex.getValue(i), cap) }
+    }
+
+    private fun finding(item: ResearchItem, o: JsonObject, cap: VerdictCap): Finding {
+        val whatItIs = clean(o.str("whatItIs"))
+        val keyFacts = (o["keyFacts"] as? JsonArray).orEmpty()
+            .mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.let(::clean)?.takeIf(String::isNotEmpty) }
+            .take(MAX_FACTS)
+        val howToTry = clean(o.str("howToTry"))
+        val whyInVideo = clean(o.str("whyInVideo"))
+        item.fixed?.let { f ->
+            // Verdict, title, link and basis come from GitHub/Wikipedia; the model only supplies text.
+            return f.copy(
+                whatItIs = whatItIs.ifEmpty { f.whatItIs },
+                keyFacts = keyFacts.ifEmpty { f.keyFacts },
+                howToTry = howToTry.ifEmpty { f.howToTry },
+                whyInVideo = whyInVideo.ifEmpty { f.whyInVideo },
+            )
+        }
+        val knowledge = cap == VerdictCap.KNOWLEDGE
+        return Finding(
+            entity = item.entity,
+            researcher = if (knowledge) "knowledge" else "web",
+            verdict = verdict(item.entity.type, o.str("verdict"), cap),
+            title = clean(o.str("title")).ifEmpty { item.entity.name },
+            whatItIs = whatItIs,
+            keyFacts = keyFacts,
+            howToTry = howToTry,
+            whyInVideo = whyInVideo,
+            primaryLink = null,
+            basis = if (knowledge) Basis.AI_KNOWLEDGE else Basis.WEB_SOURCES,
+        )
+    }
+
+    private fun verdict(type: EntityType, raw: String?, cap: VerdictCap): Verdict {
+        val v = when (raw?.trim()?.lowercase()) {
+            "confirmed" -> Verdict.CONFIRMED
+            "best_match" -> Verdict.BEST_MATCH
+            "not_found" -> Verdict.NOT_FOUND

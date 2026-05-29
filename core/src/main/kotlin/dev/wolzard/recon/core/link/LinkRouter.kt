@@ -24,3 +24,29 @@ object LinkRouter {
 
     /** Only absolute http(s) URLs with a real host may reach the network or yt-dlp (no file:, intent:, javascript:, …). */
     fun isWebUrl(url: String): Boolean = runCatching { URI(url) }.getOrNull()
+        ?.let { it.scheme?.lowercase() in setOf("http", "https") && host(url) != null } ?: false
+
+    fun classify(url: String): Route = if (matches(host(url), youTubeHosts)) Route.YouTube(url) else Route.Other(url)
+
+    /** Short links and unknown hosts are resolved (redirects followed) before classifying. */
+    fun needsResolving(url: String): Boolean = !matches(host(url), knownPlatforms)
+
+    private fun trim(raw: String): String {
+        var s = raw
+        while (s.isNotEmpty()) {
+            val c = s.last()
+            s = when {
+                c in TRAILING -> s.dropLast(1)
+                c == ')' && s.count { it == ')' } > s.count { it == '(' } -> s.dropLast(1)
+                else -> return s
+            }
+        }
+        return s
+    }
+
+    private fun host(url: String): String? =
+        runCatching { URI(url).host?.lowercase()?.removeSuffix(".") }.getOrNull()?.takeIf { it.contains('.') }
+
+    // Exact host or any subdomain of it (www., m., music., vm., …).
+    private fun matches(host: String?, set: Set<String>) = host != null && set.any { host == it || host.endsWith(".$it") }
+}

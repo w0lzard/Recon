@@ -20,3 +20,26 @@ data class Job(
     val retryAtEpochMs: Long? = null,
     val progress: Float? = null,
     val analysisJson: String? = null,   // saved before research, so Retry can resume without a new analysis
+    val resultJson: String? = null,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+/** Persisted as JSON in JobEntity.resultJson. */
+@Serializable
+data class JobResult(
+    val analysis: AnalysisResult,
+    val findings: List<Finding>,
+    val sources: List<Source>,                       // per job (D17), grounded researcher only
+    val searchSuggestionsHtml: String?,              // groundingMetadata.searchEntryPoint.renderedContent
+    val path: String,                                // "youtube-url" | "A" | "B"
+    val models: Map<String, String> = emptyMap(),    // "analyse"/"research" → model id that answered
+    val degraded: Map<String, Long?> = emptyMap(),   // researcher id or "budget" → retryAt epoch ms (null = unknown)
+)
+
+class AnalyzerException(
+    val reason: FailureReason,
+    val retryAtEpochMs: Long? = null,
+    message: String? = null,
+    cause: Throwable? = null,
+) : Exception(message ?: reason.name, cause)

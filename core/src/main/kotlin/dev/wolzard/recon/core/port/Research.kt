@@ -24,3 +24,30 @@ data class ResearchOutput(
     val sources: List<Source> = emptyList(),
     val searchSuggestionsHtml: String? = null,
     val references: Map<Entity, String> = emptyMap(),
+    val model: String? = null,                        // AI researchers: the model that answered
+)
+
+class ResearchUnavailable(val retryAtEpochMs: Long?, cause: Throwable? = null) : Exception(cause)
+
+interface GitHubClient {
+    suspend fun repo(owner: String, name: String): GhRepo?      // null = 404. @throws GitHubRateLimited, IOException
+    suspend fun readme(owner: String, name: String): String?
+    suspend fun search(query: String): List<GhRepo>             // `q=<query> in:name`, ≤ 10 results
+}
+
+class GitHubRateLimited(val resetEpochMs: Long?) : Exception("GitHub rate limit")
+
+/** The job's single research call (D9, D13): knowledge (default) or grounded web. */
+interface AiResearcher {
+    val id: String                                   // "knowledge" | "web"
+    /** @throws ResearchUnavailable */
+    suspend fun research(items: List<ResearchItem>, ctx: ResearchContext): ResearchOutput
+}
+
+/** Keyless Wikipedia REST (T10). */
+interface WikipediaClient {
+    suspend fun search(lang: String, query: String): List<WikiHit>        // ≤ 3
+    suspend fun summary(lang: String, key: String): WikiSummary?
+}
+data class WikiHit(val key: String, val title: String)
+data class WikiSummary(val title: String, val extract: String, val url: String?, val disambiguation: Boolean)

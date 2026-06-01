@@ -104,3 +104,38 @@ For each item return:
         "For claims: what the evidence actually says.",
         "For claims: what the scientific or expert consensus is believed to be.",
     ) + "\n" + """
+Do not invent prices, versions or dates you are unsure of.
+Do not include URLs in any field. Write in {language}.
+Respond only with a JSON object exactly in this shape, no other text:
+{"items":[{"index":0,"title":"","verdict":"best_match","whatItIs":"","keyFacts":[""],"howToTry":"","whyInVideo":""}]}
+""".trimIndent()
+
+    /** responseSchema for the analyse call (Gemini OpenAPI subset). */
+    val ANALYZE_SCHEMA = """
+{
+  "type": "object",
+  "properties": {
+    "entities": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "properties": {
+          "type":        { "type": "string", "enum": ["repo","app","product","book","person","place","recipe","claim","other"] },
+          "name":        { "type": "string" },
+          "qualifier":   { "type": "string", "nullable": true },
+          "evidence":    { "type": "string", "enum": ["spoken","on-screen","inferred"] },
+          "saidInVideo": { "type": "string" }
+        },
+        "required": ["type","name","qualifier","evidence","saidInVideo"]
+      }
+    },
+    "summary":      { "type": "string" },
+    "confidence":   { "type": "number" },
+    "onScreenText": { "type": "array", "items": { "type": "string" }, "maxItems": 20 }
+  },
+  "required": ["entities","summary","confidence","onScreenText"],
+  "propertyOrdering": ["entities","summary","confidence","onScreenText"]
+}
+""".trimIndent()
+}

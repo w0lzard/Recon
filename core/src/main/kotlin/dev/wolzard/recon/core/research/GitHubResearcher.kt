@@ -39,3 +39,44 @@ class GitHubResearcher(private val client: GitHubClient) : Researcher {
             }
         } catch (e: GitHubRateLimited) {
             throw ResearchUnavailable(e.resetEpochMs, e)
+        } catch (e: IOException) {
+            throw ResearchUnavailable(null, e)
+        }
+        return ResearchOutput(findings, references = references)
+    }
+
+    private suspend fun search(e: Entity): Finding? {
+        val tokens = RepoMatcher.tokens(e.name, e.qualifier)
+        if (tokens.isEmpty()) return null
+        val hits = client.search(RepoMatcher.andQuery(tokens)).toMutableList()
+        if (hits.size < 3 && tokens.size > 1) hits += client.search(RepoMatcher.orQuery(tokens))
+        val target = listOfNotNull(e.qualifier, e.name).joinToString("/")
+        val ranked = hits.filter(::isGitHubLink).distinctBy { it.fullName.lowercase() }
+            .map { it to RepoMatcher.similarity(it.fullName, target) }
+            .sortedByDescending { it.second }
+        ranked.firstOrNull { (r, _) -> r.fullName.substringAfter('/').equals(e.name, ignoreCase = true) }
+            ?.let { (r, _) -> return found(e, r, Verdict.BEST_MATCH) }
+        val candidates = ranked.filter { it.second >= MIN_SIMILARITY }.take(MAX_CANDIDATES).map { it.first }
+        if (candidates.isEmpty()) return null
+        return Finding(
+            entity = e, researcher = id, verdict = Verdict.BEST_MATCH, title = target,
+            whatItIs = e.saidInVideo, keyFacts = emptyList(), howToTry = "", whyInVideo = "",
+            primaryLink = null, basis = Basis.GITHUB_API, candidates = candidates,
+        )
+    }
+
+    private fun found(e: Entity, r: GhRepo, verdict: Verdict) = Finding(
+        entity = e, researcher = id, verdict = verdict, title = r.fullName,
+        whatItIs = r.description.orEmpty(), keyFacts = emptyList(), howToTry = "", whyInVideo = "",
+        primaryLink = r.htmlUrl, stars = r.stars, basis = Basis.GITHUB_API,
+    )
+
+    private fun isGitHubLink(r: GhRepo) = r.htmlUrl.startsWith("https://github.com/")
+
+    private companion object {
+        const val MAX_RESOLVED = 3
+        const val MAX_CANDIDATES = 3
+        const val MIN_SIMILARITY = 0.4
+        const val README_CHARS = 8_000
+    }
+}

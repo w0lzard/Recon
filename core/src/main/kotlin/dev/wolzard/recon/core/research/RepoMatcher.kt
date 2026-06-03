@@ -24,3 +24,28 @@ object RepoMatcher {
     fun andQuery(tokens: List<String>): String = tokens.joinToString(" ")
 
     fun orQuery(tokens: List<String>): String =
+        tokens.sortedByDescending { it.length }.take(MAX_OR_TERMS).joinToString(" OR ")
+
+    /** 0..1: half normalised edit similarity of the whole name, half token overlap. */
+    fun similarity(candidateFullName: String, target: String): Double {
+        val a = candidateFullName.lowercase().filter(Char::isLetterOrDigit)
+        val b = target.lowercase().filter(Char::isLetterOrDigit)
+        if (a.isEmpty() || b.isEmpty()) return 0.0
+        val edit = 1.0 - levenshtein(a, b).toDouble() / maxOf(a.length, b.length)
+        val ta = tokens(candidateFullName, null).toSet()
+        val tb = tokens(target, null).toSet()
+        val overlap = if (ta.isEmpty() || tb.isEmpty()) 0.0 else (ta intersect tb).size.toDouble() / (ta union tb).size
+        return 0.5 * edit + 0.5 * overlap
+    }
+
+    private fun levenshtein(a: String, b: String): Int {
+        var prev = IntArray(b.length + 1) { it }
+        for (i in 1..a.length) {
+            val cur = IntArray(b.length + 1)
+            cur[0] = i
+            for (j in 1..b.length) cur[j] = minOf(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + if (a[i - 1] == b[j - 1]) 0 else 1)
+            prev = cur
+        }
+        return prev[b.length]
+    }
+}

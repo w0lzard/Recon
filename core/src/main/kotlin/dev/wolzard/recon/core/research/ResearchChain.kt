@@ -41,3 +41,46 @@ class ResearchChain(
         for (r in listOf(github, wikipedia)) {
             val todo = researched.filter { it !in resolved && r.accepts(it.type) }
             if (todo.isEmpty()) continue
+            try {
+                val out = r.research(todo, ctx)
+                out.findings.forEach { resolved[it.entity] = it }
+                references += out.references
+            } catch (e: ResearchUnavailable) {
+                degraded[r.id] = e.retryAtEpochMs
+            }
+        }
+
+        var sources = emptyList<Source>()
+        var suggestions: String? = null
+        var model: String? = null
+        // Candidate pickers (no link yet) are left to the user; everything else goes to the one AI call.
+        val aiItems = researched.filter { resolved[it]?.candidates?.isNotEmpty() != true }
+            .map { ResearchItem(it, references[it], resolved[it]) }
+        if (aiItems.isNotEmpty()) {
+            if (!budgetLeft) {
+                if (aiItems.any { it.fixed == null }) degraded["budget"] = null
+            } else {
+                val ai = if (grounding() == GroundingCapability.AVAILABLE && web != null) web else knowledge
+                try {
+                    val out = ai.research(aiItems, ctx)
+                    out.findings.forEach { resolved[it.entity] = it }
+                    sources = out.sources
+                    suggestions = out.searchSuggestionsHtml
+                    model = out.model
+                } catch (e: ResearchUnavailable) {
+                    degraded[ai.id] = e.retryAtEpochMs
+                }
+            }
+        }
+
+        val findings = entities.map { e -> resolved[e] ?: notChecked(e) }
+        return ResearchOutcome(findings, sources, suggestions, degraded, model)
+    }
+
+    private fun notChecked(e: Entity) = Finding(
+        entity = e, researcher = "none", verdict = Verdict.NOT_CHECKED, title = e.name, whatItIs = e.saidInVideo,
+        keyFacts = emptyList(), howToTry = "", whyInVideo = "", primaryLink = null, basis = Basis.VIDEO_ONLY,
+    )
+
+    private companion object { const val MAX_RESEARCHED = 6 }
+}

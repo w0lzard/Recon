@@ -201,3 +201,43 @@ class RunJobTest {
         assertEquals("B", result().path)
     }
 
+    @Test fun pathAQuotaFailsWithoutTryingPathB() = runTest {
+        job()
+        val a = Analyzer(AnalyzerException(FailureReason.QUOTA_EXCEEDED, retryAtEpochMs = 5_000))
+        runJob(a)("j1")
+        assertEquals(1, a.inputs.size)
+        val j = store.get("j1")!!
+        assertEquals(JobState.FAILED, j.state)
+        assertEquals(FailureReason.QUOTA_EXCEEDED, j.failure)
+        assertEquals(5_000L, j.retryAtEpochMs)
+    }
+
+    @Test fun allModelsWithoutQuotaWaitWithoutAnyCall() = runTest {
+        job()
+        waitUntil = 9_000L
+        val a = Analyzer()
+        runJob(a)("j1")
+        assertEquals(0, a.inputs.size)
+        assertEquals(JobState.WAITING_QUOTA, state())
+        assertEquals(9_000L, store.get("j1")!!.retryAtEpochMs)
+    }
+
+    @Test fun largeFileSkipsPathA() = runTest {
+        job()
+        val a = Analyzer()
+        runJob(a, link = Fetcher(bytes = 5_000))("j1")
+        assertTrue(a.inputs.single() is AnalysisInput.FramesAndAudio)
+        assertEquals(1, ai.calls)
+    }
+
+    @Test fun zeroFramesRetriesOnceInAnotherFormatThenFails() = runTest {
+        job()
+        val link = Fetcher(bytes = 5_000)
+        val sampler = Sampler(0, 0)
+        val a = Analyzer()
+        runJob(a, link = link, sampler = sampler)("j1")
+        assertEquals(listOf(FetchQuality.DEFAULT to null, FetchQuality.OTHER_FORMAT to "f1"), link.calls)
+        assertEquals(2, sampler.calls)
+        assertEquals(0, a.inputs.size)
+        assertEquals(FailureReason.VIDEO_UNREADABLE, store.get("j1")!!.failure)
+        assertFalse(JobState.DONE in store.states)

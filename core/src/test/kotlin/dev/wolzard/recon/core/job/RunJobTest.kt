@@ -39,3 +39,43 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import org.junit.rules.TemporaryFolder
+import java.io.File
+import kotlin.time.Duration.Companion.seconds
+
+class RunJobTest {
+    @get:Rule val tmp = TemporaryFolder()
+
+    // --- fakes
+
+    private class Store : JobStore {
+        val jobs = MutableStateFlow<Map<String, Job>>(emptyMap())
+        val states = mutableListOf<JobState>()
+        fun put(job: Job) { jobs.value = jobs.value + (job.id to job); states += job.state }
+        override fun observeAll() = jobs.map { it.values.toList() }
+        override fun observe(id: String) = jobs.map { it[id] }
+        override suspend fun get(id: String) = jobs.value[id]
+        override suspend fun create(sharedText: String, localUri: String?) = error("unused")
+        override suspend fun update(id: String, transform: (Job) -> Job) {
+            val old = jobs.value.getValue(id)
+            val new = transform(old)
+            jobs.value = jobs.value + (id to new)
+            if (new.state != old.state) states += new.state
+        }
+        override suspend fun delete(id: String) { jobs.value = jobs.value - id }
+        override suspend fun findRunning() = emptyList<Job>()
+    }
+
+    private val entities = listOf(Entity(EntityType.APP, "Codeium", null, Evidence.ON_SCREEN, "An AI code tool."))
+    private fun analysis(e: List<Entity> = entities) = Analysis(AnalysisResult(e, "A demo.", 0.9), "m1")
+
+    private inner class Analyzer(vararg outcomes: Any) : VideoAnalyzer {
+        private val queue = ArrayDeque(outcomes.toList())
+        val inputs = mutableListOf<AnalysisInput>()
+        override val supportsYouTubeUrl = true
+        override suspend fun analyze(input: AnalysisInput, language: String): Analysis {
+            inputs += input
+            return when (val o = queue.removeFirstOrNull() ?: analysis()) {
+                is Analysis -> o

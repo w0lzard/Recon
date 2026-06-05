@@ -160,3 +160,44 @@ class RunJobTest {
     // --- routes and fallbacks
 
     @Test fun youtubeGoesStraightToAnalysisWithoutDownload() = runTest {
+        job("https://youtu.be/Psy_4mEWNDI")
+        val link = Fetcher()
+        val a = Analyzer()
+        runJob(a, link = link)("j1")
+        assertEquals(listOf(JobState.QUEUED, JobState.ANALYSING, JobState.RESEARCHING, JobState.DONE), store.states)
+        assertTrue(link.calls.isEmpty())
+        assertTrue(a.inputs.single() is AnalysisInput.YouTubeUrl)
+        assertEquals("youtube-url", result().path)
+        assertEquals(mapOf("analyse" to "m1", "research" to "m2"), result().models)
+    }
+
+    @Test fun youtubeNetworkFailureFallsBackToDownloadAndPathB() = runTest {
+        job("https://youtu.be/Psy_4mEWNDI")
+        val link = Fetcher(audio = true)
+        val a = Analyzer(AnalyzerException(FailureReason.NETWORK))
+        runJob(a, link = link)("j1")
+        assertEquals(1, link.calls.size)
+        val b = a.inputs[1] as AnalysisInput.FramesAndAudio
+        assertEquals("audio.m4a", b.audio!!.name)                         // YouTube's separate m4a feeds Path B
+        assertEquals(JobState.DONE, state())
+        assertEquals("B", result().path)
+    }
+
+    @Test fun pathAFailureFallsBackToPathBAndSkipsResearchForBudget() = runTest {
+        job()
+        val a = Analyzer(AnalyzerException(FailureReason.UNKNOWN))
+        runJob(a)("j1")
+        assertTrue(a.inputs[0] is AnalysisInput.VideoFile)
+        assertTrue(a.inputs[1] is AnalysisInput.FramesAndAudio)
+        assertEquals("B", result().path)
+        assertEquals(0, ai.calls)                                          // budget: 2 analysis calls used
+        assertTrue(result().degraded.containsKey("budget"))
+    }
+
+    @Test fun pathATimeoutFallsBackToPathB() = runTest {
+        job()
+        val a = Analyzer(200_000L)
+        runJob(a)("j1")
+        assertEquals("B", result().path)
+    }
+

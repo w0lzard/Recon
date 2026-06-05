@@ -120,3 +120,43 @@ class RunJobTest {
         override val id = "knowledge"
         var calls = 0
         override suspend fun research(items: List<ResearchItem>, ctx: ResearchContext): ResearchOutput {
+            calls++
+            if (unavailable) throw ResearchUnavailable(123L)
+            return ResearchOutput(items.map { dev.wolzard.recon.core.model.Finding(it.entity, "knowledge", Verdict.BEST_MATCH, it.entity.name, "w", emptyList(), "", "", null, null, dev.wolzard.recon.core.model.Basis.AI_KNOWLEDGE) }, model = "m2")
+        }
+    }
+
+    private val store = Store()
+    private val ai = Ai()
+    private var waitUntil: Long? = null
+
+    private fun runJob(
+        analyzer: VideoAnalyzer,
+        link: MediaFetcher = Fetcher(),
+        shared: MediaFetcher = Fetcher(),
+        sampler: FrameSampler = Sampler(),
+        timeouts: Timeouts = Timeouts(pathA = 150.seconds, pathB = 120.seconds, maxPathABytes = 1_000),
+    ) = RunJob(
+        store = store,
+        resolver = object : LinkResolver { override suspend fun resolve(url: String) = url },
+        fetchers = Fetchers(link, shared),
+        sampler = sampler,
+        analyzer = analyzer,
+        research = ResearchChain(Keyless("github"), Keyless("wikipedia"), ai, null) { GroundingCapability.UNAVAILABLE },
+        language = { Language("English", "en") },
+        quotaWaitUntil = { waitUntil },
+        workRoot = tmp.root,
+        clock = { 1_000L },
+        timeouts = timeouts,
+    )
+
+    private fun job(text: String = "look https://www.instagram.com/reel/abc/", localUri: String? = null, analysisJson: String? = null) =
+        Job("j1", text, localUri = localUri, analysisJson = analysisJson, createdAt = 0, updatedAt = 0).also { store.put(it) }
+
+    private suspend fun result(): JobResult = Json.decodeFromString(JobResult.serializer(), store.get("j1")!!.resultJson!!)
+    private suspend fun state() = store.get("j1")!!.state
+    private fun jobDir() = File(tmp.root, "jobs/j1")
+
+    // --- routes and fallbacks
+
+    @Test fun youtubeGoesStraightToAnalysisWithoutDownload() = runTest {

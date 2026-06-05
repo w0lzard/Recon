@@ -79,3 +79,44 @@ class RunJobTest {
             inputs += input
             return when (val o = queue.removeFirstOrNull() ?: analysis()) {
                 is Analysis -> o
+                is Exception -> throw o
+                is Long -> { delay(o); analysis() }
+                else -> error(o)
+            }
+        }
+    }
+
+    private inner class Fetcher(private val audio: Boolean = false, private val bytes: Int = 100, private val block: CompletableDeferred<Unit>? = null) : MediaFetcher {
+        val calls = mutableListOf<Pair<FetchQuality, String?>>()
+        var lastDir: File? = null
+        override suspend fun fetch(source: String, destDir: File, quality: FetchQuality, avoidFormatId: String?, onProgress: (Float) -> Unit): FetchedMedia {
+            calls += quality to avoidFormatId
+            lastDir = destDir
+            destDir.mkdirs()
+            val v = File(destDir, "video.mp4").apply { writeBytes(ByteArray(bytes)) }
+            onProgress(0.5f)
+            block?.await()
+            return FetchedMedia(v, if (audio) File(destDir, "audio.m4a").apply { writeBytes(ByteArray(4)) } else null, "f${calls.size}")
+        }
+    }
+
+    private class Sampler(vararg frameCounts: Int) : FrameSampler {
+        private val counts = ArrayDeque(frameCounts.toList())
+        var calls = 0
+        override suspend fun sample(video: File, outDir: File): AnalysisInput.FramesAndAudio {
+            calls++
+            outDir.mkdirs()
+            val n = counts.removeFirstOrNull() ?: 3
+            return AnalysisInput.FramesAndAudio((0 until n).map { AnalysisInput.Frame(File(outDir, "f$it.jpg").apply { writeBytes(ByteArray(1)) }, it * 2000L) }, null)
+        }
+    }
+
+    private class Keyless(override val id: String) : Researcher {
+        override fun accepts(type: EntityType) = false
+        override suspend fun research(entities: List<Entity>, ctx: ResearchContext) = ResearchOutput(emptyList())
+    }
+
+    private inner class Ai(var unavailable: Boolean = false) : AiResearcher {
+        override val id = "knowledge"
+        var calls = 0
+        override suspend fun research(items: List<ResearchItem>, ctx: ResearchContext): ResearchOutput {

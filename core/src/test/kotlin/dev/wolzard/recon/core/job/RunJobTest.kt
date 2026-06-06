@@ -282,3 +282,43 @@ class RunJobTest {
         assertEquals(JobState.DONE, state())
         assertEquals(1, a.inputs.size)
         assertEquals(0, ai.calls)
+        assertTrue(result().findings.isEmpty())
+        assertFalse(JobState.RESEARCHING in store.states)
+    }
+
+    @Test fun degradedResearchIsStillDone() = runTest {
+        job("https://youtu.be/x")
+        ai.unavailable = true
+        runJob(Analyzer())("j1")
+        assertEquals(JobState.DONE, state())
+        assertEquals(123L, result().degraded["knowledge"])
+        assertEquals(Verdict.NOT_CHECKED, result().findings.single().verdict)
+    }
+
+    @Test fun savedAnalysisSkipsAnalysisAndStartsAtResearching() = runTest {
+        val saved = Json.encodeToString(SavedAnalysis.serializer(), SavedAnalysis(analysis().result, "m1", "A"))
+        job(analysisJson = saved)
+        val a = Analyzer()
+        runJob(a)("j1", UserAction.RESEARCH_ONLY)
+        assertEquals(0, a.inputs.size)
+        assertEquals(listOf(JobState.QUEUED, JobState.RESEARCHING, JobState.DONE), store.states)
+        assertEquals(1, ai.calls)
+        assertEquals("A", result().path)
+    }
+
+    @Test fun budgetNeverExceedsTwoAiCalls() = runTest {
+        val cases: List<Pair<String, Array<Any>>> = listOf(
+            "https://youtu.be/a" to arrayOf(),
+            "https://youtu.be/a" to arrayOf(AnalyzerException(FailureReason.NETWORK), AnalyzerException(FailureReason.UNKNOWN)),
+            "https://www.instagram.com/reel/a/" to arrayOf(AnalyzerException(FailureReason.UNKNOWN)),
+            "https://www.instagram.com/reel/a/" to arrayOf(200_000L),
+        )
+        for ((text, outcomes) in cases) {
+            ai.calls = 0
+            job(text)
+            val a = Analyzer(*outcomes)
+            runJob(a, link = Fetcher(audio = text.contains("youtu")))("j1")
+            assertTrue("$text ${outcomes.toList()}: ${a.inputs.size} + ${ai.calls}", a.inputs.size + ai.calls <= 2)
+        }
+    }
+

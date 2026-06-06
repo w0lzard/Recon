@@ -241,3 +241,44 @@ class RunJobTest {
         assertEquals(0, a.inputs.size)
         assertEquals(FailureReason.VIDEO_UNREADABLE, store.get("j1")!!.failure)
         assertFalse(JobState.DONE in store.states)
+    }
+
+    @Test fun zeroFramesThenFramesAfterRetrySucceeds() = runTest {
+        job()
+        runJob(Analyzer(), link = Fetcher(bytes = 5_000), sampler = Sampler(0, 4))("j1")
+        assertEquals(JobState.DONE, state())
+    }
+
+    @Test fun sharedFileWithZeroFramesFailsWithoutRetry() = runTest {
+        val sharedRoot = tmp.newFolder("shared")
+        val copy = File(sharedRoot, "j1.mp4").apply { writeBytes(ByteArray(5_000)) }
+        job(text = "", localUri = copy.path)
+        val shared = Fetcher(bytes = 5_000)
+        runJob(Analyzer(), shared = shared, sampler = Sampler(0))("j1")
+        assertEquals(1, shared.calls.size)
+        assertEquals(FailureReason.VIDEO_UNREADABLE, store.get("j1")!!.failure)
+        assertFalse(copy.exists())                                         // the shared copy is gone after FAILED
+    }
+
+    @Test fun trySharperDownloadsAt720p() = runTest {
+        job()
+        val link = Fetcher()
+        runJob(Analyzer(), link = link)("j1", UserAction.TRY_SHARPER)
+        assertEquals(FetchQuality.SHARPER, link.calls.single().first)
+    }
+
+    @Test fun noUrlIsUnsupportedLink() = runTest {
+        job("just text, no link")
+        runJob(Analyzer())("j1")
+        assertEquals(FailureReason.UNSUPPORTED_LINK, store.get("j1")!!.failure)
+    }
+
+    // --- research handling
+
+    @Test fun r10NoEntitiesIsDoneWithOneAiCallInTotal() = runTest {
+        job("https://youtu.be/U-34B7DL95s")
+        val a = Analyzer(analysis(emptyList()))
+        runJob(a)("j1")
+        assertEquals(JobState.DONE, state())
+        assertEquals(1, a.inputs.size)
+        assertEquals(0, ai.calls)

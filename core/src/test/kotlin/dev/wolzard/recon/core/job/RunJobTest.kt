@@ -322,3 +322,44 @@ class RunJobTest {
         }
     }
 
+    // --- errors and cleanup
+
+    @Test fun unexpectedExceptionIsUnknownWithClassName() = runTest {
+        job("https://youtu.be/x")
+        runJob(Analyzer(IllegalStateException("boom")))("j1")
+        val j = store.get("j1")!!
+        assertEquals(FailureReason.UNKNOWN, j.failure)
+        assertTrue(j.failureDetail!!.contains("IllegalStateException"))
+    }
+
+    @Test fun workDirDeletedOnDoneAndFailed() = runTest {
+        job()
+        val link = Fetcher()
+        runJob(Analyzer(), link = link)("j1")
+        assertEquals(jobDir(), link.lastDir)
+        assertFalse(jobDir().exists())
+        job()
+        runJob(Analyzer(AnalyzerException(FailureReason.API_KEY_INVALID)), link = link)("j1")
+        assertEquals(JobState.FAILED, state())
+        assertFalse(jobDir().exists())
+    }
+
+    @Test fun workDirDeletedWhenCancelledMidDownload() = runTest {
+        job()
+        val gate = CompletableDeferred<Unit>()
+        val link = Fetcher(block = gate)
+        val run = launch { runJob(Analyzer(), link = link)("j1") }
+        testScheduler.advanceUntilIdle()
+        assertTrue(jobDir().exists())
+        assertEquals(JobState.DOWNLOADING, state())
+        run.cancel(CancellationException("user cancelled"))
+        run.join()
+        assertFalse(jobDir().exists())
+    }
+
+    @Test fun progressIsReportedWhileDownloading() = runTest {
+        job()
+        runJob(Analyzer())("j1")
+        assertNull(store.get("j1")!!.progress)   // cleared when the job ends
+    }
+}

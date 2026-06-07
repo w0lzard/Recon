@@ -168,3 +168,45 @@ class ResultParserTest {
         )
         assertFalse(out[0].whatItIs.contains("example.com"))
         assertTrue(out[0].whatItIs.startsWith("Buy it at"))
+    }
+
+    @Test fun researchMissingItemNotReturned() {
+        val out = ResultParser.parseResearch(research(item(1, "supported")), listOf(ResearchItem(product), ResearchItem(claim)), VerdictCap.WEB)
+        assertEquals(listOf(claim), out.map { it.entity })
+        assertEquals(Verdict.SUPPORTED, out[0].verdict)
+    }
+
+    @Test fun researchGarbageThrows() = assertInvalid {
+        ResultParser.parseResearch("no json here", listOf(ResearchItem(product)), VerdictCap.WEB)
+    }
+
+    @Test fun knowledgeCapLimitsVerdictsAndSetsBasis() {
+        val out = ResultParser.parseResearch(
+            research(item(0, "confirmed"), item(1, "disputed"), item(2, "supported")),
+            listOf(ResearchItem(product), ResearchItem(claim), ResearchItem(claim.copy(name = "Other claim"))),
+            VerdictCap.KNOWLEDGE,
+        )
+        assertEquals(listOf(Verdict.BEST_MATCH, Verdict.UNCLEAR, Verdict.UNCLEAR), out.map { it.verdict })
+        assertTrue(out.all { it.basis == Basis.AI_KNOWLEDGE && it.researcher == "knowledge" })
+    }
+
+    @Test fun fixedGithubItemKeepsVerdictLinkAndBasisTakesText() {
+        val fixed = Finding(
+            entity = repo, researcher = "github", verdict = Verdict.CONFIRMED, title = "cli/cli",
+            whatItIs = "GitHub's official command line tool", keyFacts = emptyList(), howToTry = "", whyInVideo = "",
+            primaryLink = "https://github.com/cli/cli", stars = 40000, basis = Basis.GITHUB_API,
+        )
+        val out = ResultParser.parseResearch(
+            research(item(0, "best_match", whatItIs = "A tool to use GitHub from the terminal.", title = "wrong/title")),
+            listOf(ResearchItem(repo, reference = "README text", fixed = fixed)), VerdictCap.KNOWLEDGE,
+        )
+        val f = out.single()
+        assertEquals(Verdict.CONFIRMED, f.verdict)
+        assertEquals("cli/cli", f.title)
+        assertEquals("https://github.com/cli/cli", f.primaryLink)
+        assertEquals(Basis.GITHUB_API, f.basis)
+        assertEquals("github", f.researcher)
+        assertEquals("A tool to use GitHub from the terminal.", f.whatItIs)
+        assertEquals("h", f.howToTry)
+    }
+}

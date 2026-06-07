@@ -40,3 +40,46 @@ class ResultParserTest {
         assertEquals(1, r.entities.size)
         assertEquals(Entity(EntityType.REPO, "cli", "cli", Evidence.ON_SCREEN, "s"), r.entities[0])
         assertEquals("A video.", r.summary)
+        assertEquals(0.8, r.confidence, 0.0)
+        assertEquals(listOf("gh repo"), r.onScreenText)
+    }
+
+    @Test fun fencedAndProsePrefixedInputParses() {
+        val json = analysis(ent("book", "Atomic Habits", "James Clear"))
+        assertEquals(1, ResultParser.parseAnalysis("```json\n$json\n```").entities.size)
+        assertEquals(1, ResultParser.parseAnalysis("Here is the JSON you asked for:\n$json\nThanks").entities.size)
+    }
+
+    @Test fun unknownFieldsAreIgnored() {
+        val r = ResultParser.parseAnalysis(analysis(ent("app", "Codeium"), extra = ""","mood":"happy""""))
+        assertEquals("Codeium", r.entities[0].name)
+    }
+
+    @Test fun missingSummaryThrows() = assertInvalid {
+        ResultParser.parseAnalysis("""{"entities":[],"confidence":0.0,"onScreenText":[]}""")
+    }
+
+    @Test fun garbageThrows() {
+        assertInvalid { ResultParser.parseAnalysis("I could not watch the video, sorry.") }
+        assertInvalid { ResultParser.parseAnalysis("{not json") }
+    }
+
+    // --- types and values
+
+    @Test fun unknownTypeBecomesOther() {
+        assertEquals(EntityType.OTHER, ResultParser.parseAnalysis(analysis(ent("podcast", "Lex"))).entities[0].type)
+    }
+
+    @Test fun confidenceIsClamped() {
+        val r = ResultParser.parseAnalysis(analysis(ent("app", "X")).replace("0.8", "1.7"))
+        assertEquals(1.0, r.confidence, 0.0)
+    }
+
+    // --- repo validation
+
+    @Test fun invalidRepoOwnerBecomesNull() {
+        assertNull(ResultParser.parseAnalysis(analysis(ent("repo", "cli", "not an owner!"))).entities[0].qualifier)
+    }
+
+    @Test fun githubUrlInRepoNameIsSplit() {
+        val e = ResultParser.parseAnalysis(analysis(ent("repo", "github.com/a/b"))).entities[0]

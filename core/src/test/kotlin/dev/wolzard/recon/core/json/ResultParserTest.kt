@@ -83,3 +83,45 @@ class ResultParserTest {
 
     @Test fun githubUrlInRepoNameIsSplit() {
         val e = ResultParser.parseAnalysis(analysis(ent("repo", "github.com/a/b"))).entities[0]
+        assertEquals("a", e.qualifier)
+        assertEquals("b", e.name)
+        val e2 = ResultParser.parseAnalysis(analysis(ent("repo", "https://github.com/cli/cli"))).entities[0]
+        assertEquals("cli" to "cli", e2.qualifier to e2.name)
+    }
+
+    @Test fun repoNameWithSpacesIsRetypedOther() {
+        val e = ResultParser.parseAnalysis(analysis(ent("repo", "My Girlfriend Jinchen LaTeX"))).entities[0]
+        assertEquals(EntityType.OTHER, e.type)
+    }
+
+    // --- limits
+
+    @Test fun duplicatesCollapseAndBlankNamesDrop() {
+        val r = ResultParser.parseAnalysis(analysis(ent("app", "Codeium"), ent("app", "codeium"), ent("app", " ")))
+        assertEquals(1, r.entities.size)
+    }
+
+    @Test fun atMostEightEntities() {
+        val many = (1..12).map { ent("product", "P$it") }.toTypedArray()
+        assertEquals(8, ResultParser.parseAnalysis(analysis(*many)).entities.size)
+    }
+
+    @Test fun onScreenTextAndStringsAreCapped() {
+        val long = "x".repeat(900)
+        val texts = (1..30).joinToString(",") { "\"$long\"" }
+        val raw = """{"entities":[${ent("app", long)}],"summary":"$long","confidence":0.5,"onScreenText":[$texts]}"""
+        val r = ResultParser.parseAnalysis(raw)
+        assertEquals(20, r.onScreenText.size)
+        assertTrue(r.onScreenText.all { it.length <= 200 })
+        assertEquals(500, r.summary.length)
+        assertEquals(500, r.entities[0].name.length)
+    }
+
+    // --- r10 fixture: "no entity" is a valid analysis
+
+    @Test fun r10EmptyEntitiesIsValid() {
+        val r = ResultParser.parseAnalysis(
+            """{"entities":[],"summary":"Hands squeeze and stretch colourful slime while a voice asks viewers to like and subscribe.","confidence":0.0,"onScreenText":[]}"""
+        )
+        assertTrue(r.entities.isEmpty())
+        assertEquals(0.0, r.confidence, 0.0)

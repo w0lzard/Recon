@@ -125,3 +125,46 @@ class ResultParserTest {
         )
         assertTrue(r.entities.isEmpty())
         assertEquals(0.0, r.confidence, 0.0)
+    }
+
+    // --- parseResearch
+
+    private val product = Entity(EntityType.PRODUCT, "Razr 2026", "Motorola", Evidence.SPOKEN, "A foldable phone.")
+    private val claim = Entity(EntityType.CLAIM, "Chocolate causes acne", null, Evidence.ON_SCREEN, "Says it does not.")
+    private val repo = Entity(EntityType.REPO, "cli", "cli", Evidence.ON_SCREEN, "GitHub's CLI.")
+
+    private fun item(i: Int, verdict: String, whatItIs: String = "W$i", title: String = "T$i") =
+        """{"index":$i,"title":"$title","verdict":"$verdict","whatItIs":"$whatItIs","keyFacts":["a","b","c","d","e","f"],"howToTry":"h","whyInVideo":"y"}"""
+
+    private fun research(vararg items: String) = """{"items":[${items.joinToString(",")}]}"""
+
+    @Test fun researchIndexOutOfRangeDroppedAndDuplicateFirstWins() {
+        val out = ResultParser.parseResearch(
+            research(item(0, "confirmed", whatItIs = "first"), item(0, "not_found", whatItIs = "second"), item(5, "confirmed")),
+            listOf(ResearchItem(product)), VerdictCap.WEB,
+        )
+        assertEquals(1, out.size)
+        assertEquals("first", out[0].whatItIs)
+        assertEquals(Verdict.CONFIRMED, out[0].verdict)
+        assertEquals(5, out[0].keyFacts.size)
+        assertEquals("web", out[0].researcher)
+        assertEquals(Basis.WEB_SOURCES, out[0].basis)
+        assertNull(out[0].primaryLink)
+    }
+
+    @Test fun researchVerdictTypeMismatchesAreMapped() {
+        val out = ResultParser.parseResearch(
+            research(item(0, "confirmed"), item(1, "disputed")),
+            listOf(ResearchItem(claim), ResearchItem(product)), VerdictCap.WEB,
+        )
+        assertEquals(Verdict.UNCLEAR, out[0].verdict)
+        assertEquals(Verdict.BEST_MATCH, out[1].verdict)
+    }
+
+    @Test fun researchUrlsAreStrippedFromText() {
+        val out = ResultParser.parseResearch(
+            research(item(0, "confirmed", whatItIs = "Buy it at https://shop.example.com/razr now or www.example.com")),
+            listOf(ResearchItem(product)), VerdictCap.WEB,
+        )
+        assertFalse(out[0].whatItIs.contains("example.com"))
+        assertTrue(out[0].whatItIs.startsWith("Buy it at"))

@@ -29,3 +29,34 @@ class PromptsTest {
 
     @Test fun analyzeFillsLanguageAndAllowsEmptyList() {
         val p = Prompts.analyze("Hindi")
+        assertTrue(p.contains("Write summary and saidInVideo in Hindi."))
+        assertTrue(p.contains("An empty list is a correct, complete answer"))
+        assertFalse(p.contains("{language}"))
+    }
+
+    @Test fun researchContainsEveryItemIndexAndSaidInVideo() {
+        val p = Prompts.research(ctx, items)
+        items.forEachIndexed { i, it -> assertTrue(p.contains("$i. [${it.entity.type.wire}] ${it.entity.name}")) }
+        items.forEach { assertTrue(p.contains(it.entity.saidInVideo)) }
+        assertTrue(p.contains("0. [repo] cli — cli — the video says: \"Shows the gh tool.\""))
+        assertTrue(p.contains("2. [claim] Chocolate causes acne — the video says:"))
+        assertTrue(p.contains("A reel about tools."))
+        assertTrue(p.contains("Write in Hindi."))
+        assertTrue(p.contains("Use Google Search"))
+    }
+
+    @Test fun knowledgeIsSelfContainedAndIncludesReferences() {
+        val p = Prompts.knowledge(ctx, items)
+        assertTrue(p.contains("You have NO web access"))
+        assertTrue(p.contains("Reference (GitHub README): README: gh is GitHub on the command line."))
+        assertTrue(p.contains("Reference (Wikipedia extract): The Taj Mahal is an ivory-white marble mausoleum."))
+        assertTrue(p.contains("howToTry:"))
+        assertFalse(p.contains("as in the web research prompt"))
+        assertFalse(p.contains("Google Search"))
+        assertFalse(Regex("\\{[a-zA-Z]+\\}").containsMatchIn(p.substringBefore("Respond only")))
+    }
+
+    @Test fun schemasParseAsJson() {
+        Json.parseToJsonElement(Prompts.ANALYZE_SCHEMA) as JsonObject
+    }
+}

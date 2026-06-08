@@ -32,3 +32,37 @@ class LinkRouterTest {
             "https://m.youtube.com/shorts/x",
             "https://www.youtube.com/watch?v=Psy_4mEWNDI",
             "https://youtube.com/shorts/abc",
+            "https://music.youtube.com/watch?v=1",
+            "https://youtu.be/abc",
+        ).forEach { assertEquals(it, Route.YouTube(it), LinkRouter.classify(it)) }
+        assertEquals(Route.Other("https://notyoutube.com/x"), LinkRouter.classify("https://notyoutube.com/x"))
+        assertEquals(Route.Other("https://www.instagram.com/reel/1/"), LinkRouter.classify("https://www.instagram.com/reel/1/"))
+    }
+
+    @Test fun unknownHostsNeedResolvingKnownOnesDoNot() {
+        assertTrue(LinkRouter.needsResolving("https://bit.ly/3abc"))
+        assertTrue(LinkRouter.needsResolving("https://t.co/xyz"))
+        listOf(
+            "https://youtu.be/a", "https://www.instagram.com/reel/1/", "https://vm.tiktok.com/Z/", "https://www.tiktok.com/@a/video/1",
+            "https://x.com/a/status/1", "https://twitter.com/a", "https://m.facebook.com/watch/?v=1", "https://fb.watch/x",
+            "https://www.reddit.com/r/a/comments/1/", "https://music.youtube.com/watch?v=1",
+        ).forEach { assertFalse(it, LinkRouter.needsResolving(it)) }
+    }
+
+    private val nonWeb = listOf(
+        "file:///data/data/dev.wolzard.recon/databases/recon.db", "file://host/x", "intent://scan/#Intent;scheme=zxing;end",
+        "javascript:alert(1)", "content://media/external/video/1", "ftp://example.com/a.mp4", "-o/etc/x", "//example.com/a",
+    )
+
+    @Test fun onlyHttpAndHttpsAreWebUrls() {
+        assertTrue(LinkRouter.isWebUrl("https://youtu.be/abc"))
+        assertTrue(LinkRouter.isWebUrl("HTTP://www.instagram.com/reel/x/"))
+        nonWeb.forEach { assertFalse(it, LinkRouter.isWebUrl(it)) }
+        assertFalse(LinkRouter.isWebUrl("https://localhost/x"))   // no dotted host
+    }
+
+    @Test fun nonWebSchemesAreNeverExtracted() {
+        nonWeb.forEach { assertNull(it, LinkRouter.extractUrl("look $it")) }
+        assertEquals("https://youtu.be/a", LinkRouter.extractUrl("javascript:void(0) then https://youtu.be/a"))
+    }
+}

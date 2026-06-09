@@ -42,3 +42,48 @@ class GitHubResearcherTest {
         val client = FakeClient(repos = mapOf("cli/cli" to gh("cli/cli", 40000, "GitHub's official command line tool")))
         val e = repo("cli", "cli")
         val out = GitHubResearcher(client).research(listOf(e), ctx)
+        val f = out.findings.single()
+        assertEquals(Verdict.CONFIRMED, f.verdict)
+        assertEquals("cli/cli", f.title)
+        assertEquals("https://github.com/cli/cli", f.primaryLink)
+        assertEquals(40000, f.stars)
+        assertEquals(Basis.GITHUB_API, f.basis)
+        assertEquals("GitHub's official command line tool", f.whatItIs)
+        assertEquals("README of cli/cli", out.references[e])
+        assertTrue(client.queries.isEmpty())
+    }
+
+    @Test fun notFoundThenExactNameSearchHitIsBestMatch() = runTest {
+        val client = FakeClient(searches = mapOf("vilmibm user status" to listOf(gh("vilmibm/gh-user-status"), gh("x/gh-user-status-fork"), gh("y/user-status"))))
+        val f = GitHubResearcher(client).research(listOf(repo("gh-user-status", "vilmibm")), ctx).findings.single() // repo() 404
+        assertEquals(Verdict.BEST_MATCH, f.verdict)
+        assertEquals("https://github.com/vilmibm/gh-user-status", f.primaryLink)
+        assertTrue(f.candidates.isEmpty())
+    }
+
+    @Test fun noCandidateAboveMinimumFallsThrough() = runTest {
+        val client = FakeClient(searches = mapOf("unrelated thing" to listOf(gh("someone/completely-different"))))
+        assertTrue(GitHubResearcher(client).research(listOf(repo("unrelated-thing")), ctx).findings.isEmpty())
+    }
+
+    @Test fun atMostThreeResolved() = runTest {
+        val repos = (1..5).associate { "o/r$it" to gh("o/r$it") }
+        val out = GitHubResearcher(FakeClient(repos = repos)).research((1..5).map { repo("r$it", "o") }, ctx)
+        assertEquals(3, out.findings.size)
+        assertEquals(listOf("o/r1", "o/r2", "o/r3"), out.findings.map { it.title })
+    }
+
+    @Test fun rateLimitIsResearchUnavailable() = runTest {
+        try {
+            GitHubResearcher(FakeClient(rateLimited = true)).research(listOf(repo("cli", "cli")), ctx); fail()
+        } catch (e: ResearchUnavailable) {
+            assertEquals(42L, e.retryAtEpochMs)
+        }
+    }
+
+    @Test fun nonGithubLinksAreRejected() = runTest {
+        val bad = GhRepo("cli/cli", "http://evil.example/cli", "d", 1)
+        val out = GitHubResearcher(FakeClient(repos = mapOf("cli/cli" to bad))).research(listOf(repo("cli", "cli")), ctx)
+        assertTrue(out.findings.isEmpty())
+    }
+

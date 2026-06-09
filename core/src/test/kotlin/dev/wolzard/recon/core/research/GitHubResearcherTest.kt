@@ -87,3 +87,47 @@ class GitHubResearcherTest {
         assertTrue(out.findings.isEmpty())
     }
 
+    @Test fun onlyReposAreAccepted() {
+        val r = GitHubResearcher(FakeClient())
+        assertTrue(r.accepts(EntityType.REPO))
+        EntityType.entries.filter { it != EntityType.REPO }.forEach { assertTrue(!r.accepts(it)) }
+    }
+
+    // --- r2: garbled spoken repo name. Search responses recorded from the real GitHub API on 2026-10-08.
+
+    private val orHits = listOf(
+        "HEJustinSun/my-girlfriend-jingtian-latex", "fuzzland/girlfriend", "chihongze/girlfriend", "habi/latex", "mbr/latex",
+        "sohamch08/LaTeX", "wxflogic/latex", "codetyphon/girlfriend", "SDN-Survey/latex", "qinnian/LaTeX",
+    ).map { gh(it) }
+
+    @Test fun r2SpokenNameGivesCandidatesForTheUserToPick() = runTest {
+        val client = FakeClient(searches = mapOf(
+            "justinsun girlfriend jinchin latex" to emptyList(),
+            "girlfriend OR justinsun OR jinchin OR latex" to orHits,
+        ))
+        val f = GitHubResearcher(client).research(listOf(repo("he-justinsun-s-girlfriend-jinchin-latex", null, Evidence.SPOKEN)), ctx).findings.single()
+        assertEquals(listOf("justinsun girlfriend jinchin latex", "girlfriend OR justinsun OR jinchin OR latex"), client.queries)
+        assertTrue(f.candidates.size in 1..3)
+        assertEquals("HEJustinSun/my-girlfriend-jingtian-latex", f.candidates.first().fullName)
+        assertNull(f.primaryLink)
+        assertEquals(Verdict.BEST_MATCH, f.verdict)
+    }
+
+    @Test fun r2OtherGarblingGivesTheSameRepo() = runTest {
+        val client = FakeClient(searches = mapOf(
+            "hejiansun girlfriend jingjing latex" to emptyList(),
+            "girlfriend OR hejiansun OR jingjing OR latex" to orHits,
+        ))
+        val f = GitHubResearcher(client).research(listOf(repo("My-girlfriend-Jingjing-LaTeX", "HeJiansun", Evidence.SPOKEN)), ctx).findings.single()
+        assertEquals("HEJustinSun/my-girlfriend-jingtian-latex", f.candidates.first().fullName)
+        assertTrue(client.queries.size <= 2)
+    }
+
+    @Test fun repoMatcherTokensAndQueries() {
+        assertEquals(listOf("justinsun", "girlfriend", "jinchin", "latex"), RepoMatcher.tokens("he-justinsun-s-girlfriend-jinchin-latex", null))
+        assertEquals(listOf("hejiansun", "girlfriend", "jingjing", "latex"), RepoMatcher.tokens("My-girlfriend-Jingjing-LaTeX", "HeJiansun"))
+        assertEquals(listOf("git", "hub", "user", "status"), RepoMatcher.tokens("gitHubUserStatus", null))
+        assertEquals("girlfriend OR hejiansun OR jingjing OR latex", RepoMatcher.orQuery(listOf("hejiansun", "girlfriend", "jingjing", "latex")))
+        assertTrue(RepoMatcher.similarity("cli/cli", "cli/cli") > RepoMatcher.similarity("cli/cli", "cli/cli-extras"))
+    }
+}

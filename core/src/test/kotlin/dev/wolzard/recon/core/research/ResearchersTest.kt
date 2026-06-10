@@ -39,3 +39,43 @@ class ResearchersTest {
     ) : LanguageModel {
         val calls = mutableListOf<Pair<String, Boolean>>()
         override suspend fun generate(prompt: String, schema: String?, googleSearch: Boolean): ModelAnswer {
+            calls += prompt to googleSearch
+            error?.let { throw it }
+            val n = Regex("""^(\d+)\. \[""", RegexOption.MULTILINE).findAll(prompt).count()
+            val items = (0 until n).joinToString(",") { """{"index":$it,"title":"T$it","verdict":"$verdict","whatItIs":"AI text $it","keyFacts":["k"],"howToTry":"h","whyInVideo":"y"}""" }
+            return ModelAnswer("""{"items":[$items]}""", sources, if (sources.isEmpty()) null else "<div/>", "m1")
+        }
+    }
+
+    private class FakeWiki(
+        val pages: Map<String, WikiSummary> = emptyMap(),
+        val fail: Boolean = false,
+        val langs: Set<String> = setOf("en"),
+    ) : WikipediaClient {
+        val requests = mutableListOf<String>()
+        override suspend fun search(lang: String, query: String): List<WikiHit> {
+            requests += "search:$lang:$query"
+            if (fail) throw IOException("offline")
+            if (lang !in langs) return emptyList()
+            return pages.keys.filter { k -> query.contains(k, ignoreCase = true) }.map { WikiHit(it.replace(' ', '_'), it) }
+        }
+        override suspend fun summary(lang: String, key: String): WikiSummary? { requests += "summary:$lang:$key"; return pages[key.replace('_', ' ')] }
+    }
+
+    private class NoGitHub : GitHubClient {
+        override suspend fun repo(owner: String, name: String): GhRepo? = null
+        override suspend fun readme(owner: String, name: String): String? = null
+        override suspend fun search(query: String): List<GhRepo> = emptyList()
+    }
+
+    private val taj = WikiSummary("Taj Mahal", "The Taj Mahal is an ivory-white marble mausoleum on the right bank of the river Yamuna in Agra, Uttar Pradesh, India. It was commissioned in 1631. More text.", "https://en.m.wikipedia.org/wiki/Taj_Mahal", false)
+
+    // --- KnowledgeResearcher (default)
+
+    @Test fun knowledgeMakesOneUngroundedCallAndCapsVerdicts() = runTest {
+        val lm = FakeLm(verdict = "disputed")
+        val claim = e(EntityType.CLAIM, "Chocolate causes acne")
+        val out = KnowledgeResearcher(lm).research(listOf(ResearchItem(claim)), ctx)
+        assertEquals(1, lm.calls.size)
+        assertEquals(false, lm.calls[0].second)
+        assertTrue(lm.calls[0].first.contains("You have NO web access"))

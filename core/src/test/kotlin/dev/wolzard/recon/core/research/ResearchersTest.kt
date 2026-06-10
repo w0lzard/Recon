@@ -120,3 +120,44 @@ class ResearchersTest {
     @Test fun r6TajMahalIsConfirmedWithLinkAndNoAiCall() = runTest {
         val wiki = FakeWiki(mapOf("Taj Mahal" to taj))
         val place = e(EntityType.PLACE, "Taj Mahal", "Agra, India")
+        val out = WikipediaResearcher(wiki).research(listOf(place), ctx)
+        val f = out.findings.single()
+        assertEquals(Verdict.CONFIRMED, f.verdict)
+        assertEquals("https://en.m.wikipedia.org/wiki/Taj_Mahal", f.primaryLink)
+        assertEquals(Basis.WIKIPEDIA, f.basis)
+        assertEquals("The Taj Mahal is an ivory-white marble mausoleum on the right bank of the river Yamuna in Agra, Uttar Pradesh, India. It was commissioned in 1631.", f.whatItIs)
+        assertEquals(taj.extract, out.references[place])
+        assertTrue(wiki.requests.size <= 2)
+    }
+
+    @Test fun disambiguationPageIsNotReturned() = runTest {
+        val wiki = FakeWiki(mapOf("Mercury" to WikiSummary("Mercury", "Mercury may refer to:", "https://en.m.wikipedia.org/wiki/Mercury", true)))
+        assertTrue(WikipediaResearcher(wiki).research(listOf(e(EntityType.OTHER, "Mercury")), ctx).findings.isEmpty())
+    }
+
+    @Test fun claimsAndRecipesAreNeverAccepted() {
+        val w = WikipediaResearcher(FakeWiki())
+        assertTrue(!w.accepts(EntityType.CLAIM) && !w.accepts(EntityType.RECIPE) && !w.accepts(EntityType.REPO))
+        listOf(EntityType.PERSON, EntityType.PLACE, EntityType.BOOK, EntityType.PRODUCT, EntityType.APP, EntityType.OTHER).forEach { assertTrue(w.accepts(it)) }
+    }
+
+    @Test fun nonWikipediaUrlIsDropped() = runTest {
+        val wiki = FakeWiki(mapOf("Taj Mahal" to taj.copy(url = "https://evil.example/wiki/Taj_Mahal")))
+        assertNull(WikipediaResearcher(wiki).research(listOf(e(EntityType.PLACE, "Taj Mahal", "Agra, India")), ctx).findings.single().primaryLink)
+    }
+
+    @Test fun deviceLanguageThenEnglishFallback() = runTest {
+        val wiki = FakeWiki(mapOf("Taj Mahal" to taj))
+        WikipediaResearcher(wiki).research(listOf(e(EntityType.PLACE, "Taj Mahal")), ctx.copy(languageTag = "hi"))
+        assertTrue(wiki.requests.first().startsWith("search:hi:"))
+        assertTrue(wiki.requests.any { it.startsWith("search:en:") })
+    }
+
+    @Test fun qualifierMissingFromExtractIsBestMatch() = runTest {
+        val wiki = FakeWiki(mapOf("Taj Mahal" to taj))
+        assertEquals(Verdict.BEST_MATCH, WikipediaResearcher(wiki).research(listOf(e(EntityType.PLACE, "Taj Mahal", "Bengaluru")), ctx).findings.single().verdict)
+    }
+
+    // --- ResearchChain
+
+    private fun chain(lm: FakeLm, wiki: WikipediaClient = FakeWiki(), grounding: GroundingCapability = GroundingCapability.UNAVAILABLE) =

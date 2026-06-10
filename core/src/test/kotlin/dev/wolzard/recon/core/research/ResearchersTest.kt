@@ -201,3 +201,44 @@ class ResearchersTest {
     @Test fun wikipediaHitsGetAiTextButKeepVerdictAndLink() = runTest {
         val lm = FakeLm(verdict = "not_found")
         val place = e(EntityType.PLACE, "Taj Mahal", "Agra, India")
+        val out = chain(lm, FakeWiki(mapOf("Taj Mahal" to taj))).run(listOf(place), ctx, budgetLeft = true)
+        val f = out.findings.single()
+        assertEquals(Verdict.CONFIRMED, f.verdict)
+        assertEquals("https://en.m.wikipedia.org/wiki/Taj_Mahal", f.primaryLink)
+        assertEquals("AI text 0", f.whatItIs)
+        assertTrue(lm.calls.single().first.contains("Reference (Wikipedia extract): The Taj Mahal"))
+    }
+
+    @Test fun orderLimitsAndAtMostOneAiCall() = runTest {
+        val lm = FakeLm()
+        val nine = (1..9).map { e(EntityType.PRODUCT, "P$it") }
+        val out = chain(lm).run(nine, ctx, budgetLeft = true)
+        assertEquals(nine, out.findings.map { it.entity })
+        assertEquals(6, out.findings.count { it.verdict != Verdict.NOT_CHECKED })
+        assertEquals(3, out.findings.count { it.verdict == Verdict.NOT_CHECKED })
+        assertEquals(1, lm.calls.size)
+        assertEquals("m1", out.model)
+    }
+
+    @Test fun emptyInputMakesNoCalls() = runTest {
+        val lm = FakeLm()
+        val wiki = FakeWiki()
+        val out = chain(lm, wiki).run(emptyList(), ctx, budgetLeft = true)
+        assertTrue(out.findings.isEmpty() && lm.calls.isEmpty() && wiki.requests.isEmpty())
+    }
+
+    @Test fun wikipediaOfflineIsSilentlyDegraded() = runTest {
+        val out = chain(FakeLm(), FakeWiki(fail = true)).run(listOf(e(EntityType.BOOK, "Atomic Habits", "James Clear")), ctx, budgetLeft = true)
+        assertEquals("knowledge", out.findings.single().researcher)
+        assertTrue(out.degraded.containsKey("wikipedia"))
+    }
+
+    @Test fun broaderArticleIsNotAMatch() = runTest {
+        val github = WikiSummary("GitHub", "GitHub is a proprietary developer platform.", "https://en.wikipedia.org/wiki/GitHub", false)
+        val wiki = object : WikipediaClient {
+            override suspend fun search(lang: String, query: String) = listOf(WikiHit("GitHub", "GitHub"))
+            override suspend fun summary(lang: String, key: String) = github
+        }
+        assertTrue(WikipediaResearcher(wiki).research(listOf(e(EntityType.APP, "GitHub Actions", "GitHub")), ctx).findings.isEmpty())
+    }
+}

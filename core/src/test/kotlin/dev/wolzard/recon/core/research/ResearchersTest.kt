@@ -79,3 +79,44 @@ class ResearchersTest {
         assertEquals(1, lm.calls.size)
         assertEquals(false, lm.calls[0].second)
         assertTrue(lm.calls[0].first.contains("You have NO web access"))
+        val f = out.findings.single()
+        assertEquals(Verdict.UNCLEAR, f.verdict)
+        assertEquals(Basis.AI_KNOWLEDGE, f.basis)
+        assertNull(f.primaryLink)
+        assertTrue(out.sources.isEmpty())
+        assertEquals("m1", out.model)
+
+        lm.verdict = "confirmed"
+        assertEquals(Verdict.BEST_MATCH, KnowledgeResearcher(lm).research(listOf(ResearchItem(e(EntityType.PRODUCT, "Razr"))), ctx).findings.single().verdict)
+    }
+
+    @Test fun knowledgeQuotaIsResearchUnavailable() = runTest {
+        val lm = FakeLm(error = AnalyzerException(FailureReason.QUOTA_EXCEEDED, retryAtEpochMs = 99))
+        try { KnowledgeResearcher(lm).research(listOf(ResearchItem(e(EntityType.BOOK, "Atomic Habits"))), ctx); fail() } catch (u: ResearchUnavailable) {
+            assertEquals(99L, u.retryAtEpochMs)
+        }
+    }
+
+    // --- WebSearchResearcher (optional)
+
+    @Test fun webDisputedWithSourcesStaysDisputed() = runTest {
+        val lm = FakeLm(verdict = "disputed", sources = listOf(Source("A", "https://a"), Source("B", "https://b")))
+        val out = WebSearchResearcher(lm).research(listOf(ResearchItem(e(EntityType.CLAIM, "x"))), ctx)
+        assertEquals(Verdict.DISPUTED, out.findings.single().verdict)
+        assertEquals(true, lm.calls.single().second)
+        assertEquals(2, out.sources.size)
+        assertEquals("<div/>", out.searchSuggestionsHtml)
+    }
+
+    @Test fun webSupportedWithoutSourcesIsUnclear() = runTest {
+        val out = WebSearchResearcher(FakeLm(verdict = "supported")).research(listOf(ResearchItem(e(EntityType.CLAIM, "x"))), ctx)
+        assertEquals(Verdict.UNCLEAR, out.findings.single().verdict)
+        val conf = WebSearchResearcher(FakeLm(verdict = "confirmed")).research(listOf(ResearchItem(e(EntityType.APP, "x"))), ctx)
+        assertEquals(Verdict.BEST_MATCH, conf.findings.single().verdict)
+    }
+
+    // --- WikipediaResearcher
+
+    @Test fun r6TajMahalIsConfirmedWithLinkAndNoAiCall() = runTest {
+        val wiki = FakeWiki(mapOf("Taj Mahal" to taj))
+        val place = e(EntityType.PLACE, "Taj Mahal", "Agra, India")

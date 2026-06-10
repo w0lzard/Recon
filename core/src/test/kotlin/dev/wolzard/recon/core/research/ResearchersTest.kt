@@ -161,3 +161,43 @@ class ResearchersTest {
     // --- ResearchChain
 
     private fun chain(lm: FakeLm, wiki: WikipediaClient = FakeWiki(), grounding: GroundingCapability = GroundingCapability.UNAVAILABLE) =
+        ResearchChain(GitHubResearcher(NoGitHub()), WikipediaResearcher(wiki), KnowledgeResearcher(lm), WebSearchResearcher(lm), { grounding })
+
+    @Test fun capabilityPicksTheAiResearcher() = runTest {
+        val lm = FakeLm()
+        chain(lm, grounding = GroundingCapability.AVAILABLE).run(listOf(e(EntityType.APP, "X")), ctx, budgetLeft = true)
+        assertEquals(true, lm.calls.single().second)
+        chain(lm, grounding = GroundingCapability.UNKNOWN).run(listOf(e(EntityType.APP, "X")), ctx, budgetLeft = true)
+        assertEquals(false, lm.calls.last().second)
+    }
+
+    @Test fun noBudgetMeansNoAiCallAndBudgetDegraded() = runTest {
+        val lm = FakeLm()
+        val out = chain(lm, FakeWiki(mapOf("Taj Mahal" to taj))).run(listOf(e(EntityType.PLACE, "Taj Mahal", "Agra, India"), e(EntityType.CLAIM, "c")), ctx, budgetLeft = false)
+        assertTrue(lm.calls.isEmpty())
+        assertEquals(listOf(Verdict.CONFIRMED, Verdict.NOT_CHECKED), out.findings.map { it.verdict })
+        assertTrue(out.degraded.containsKey("budget"))
+    }
+
+    @Test fun unresolvedRepoGoesToTheAiResearcher() = runTest {
+        val lm = FakeLm()
+        val out = chain(lm).run(listOf(e(EntityType.REPO, "zzzz")), ctx, budgetLeft = true)
+        assertEquals("knowledge", out.findings.single().researcher)
+        assertEquals(1, lm.calls.size)
+    }
+
+    @Test fun degradedAiKeepsKeylessFindingsRestNotChecked() = runTest {
+        val lm = FakeLm(error = AnalyzerException(FailureReason.MODEL_BUSY, retryAtEpochMs = 7))
+        val place = e(EntityType.PLACE, "Taj Mahal", "Agra, India")
+        val book = e(EntityType.CLAIM, "Water while standing hurts knees")
+        val out = chain(lm, FakeWiki(mapOf("Taj Mahal" to taj))).run(listOf(place, book), ctx, budgetLeft = true)
+        assertEquals(Verdict.CONFIRMED, out.findings[0].verdict)
+        assertEquals(Verdict.NOT_CHECKED, out.findings[1].verdict)
+        assertEquals(book.saidInVideo, out.findings[1].whatItIs)
+        assertEquals(Basis.VIDEO_ONLY, out.findings[1].basis)
+        assertEquals(7L, out.degraded["knowledge"])
+    }
+
+    @Test fun wikipediaHitsGetAiTextButKeepVerdictAndLink() = runTest {
+        val lm = FakeLm(verdict = "not_found")
+        val place = e(EntityType.PLACE, "Taj Mahal", "Agra, India")

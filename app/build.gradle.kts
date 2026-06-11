@@ -70,3 +70,39 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
+    }
+    testOptions { unitTests.isIncludeAndroidResources = true }
+}
+
+// x86_64 is for the emulator only (debug + gate); release ships arm64-v8a and armeabi-v7a.
+androidComponents {
+    onVariants(selector().withBuildType("release")) { variant ->
+        variant.outputs.forEach { out ->
+            if (out.filters.any { it.identifier == "x86_64" }) out.enabled.set(false)
+            // Debug-signed release (no keystore): recon-0.1.0-UNSIGNED-FOR-RELEASE-arm64-v8a-release.apk.
+            // Debug and test APKs keep plain AGP names. ponytail: VariantOutputImpl is AGP-internal (pinned 9.4.1); recheck on AGP bumps.
+            if (keystoreProps == null) (out as? com.android.build.api.variant.impl.VariantOutputImpl)?.outputFileName?.let { name ->
+                name.set(name.get().replace("recon-$appVersion-", "recon-$appVersion-UNSIGNED-FOR-RELEASE-"))
+            }
+        }
+    }
+}
+
+dependencies {
+    implementation(project(":core"))
+    implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.navigation.compose)
+    implementation(platform(libs.compose.bom))
+    implementation(libs.compose.ui)
+    implementation(libs.compose.ui.tooling.preview)
+    implementation(libs.compose.material3)
+    implementation(libs.compose.material.icons)
+    debugImplementation(libs.compose.ui.test.manifest)
+    debugImplementation(libs.compose.ui.tooling)
+    implementation(platform(libs.koin.bom))

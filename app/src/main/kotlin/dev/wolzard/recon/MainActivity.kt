@@ -117,3 +117,43 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                         }
+                        composable<Notice> {
+                            NoticeScreen {
+                                if (!notice.needed) { nav.popBackStack(); return@NoticeScreen } // re-read from Settings
+                                lifecycleScope.launch { shares.accepted()?.let { openJob.value = it } }
+                                nav.navigate(startDestination(false, signedIn())) { popUpTo(nav.graph.id) { inclusive = true } }
+                            }
+                        }
+                        composable<SignIn> {
+                            SignInScreen(koinViewModel()) {
+                                nav.navigate(Home) { popUpTo(nav.graph.id) { inclusive = true } }
+                            }
+                        }
+                        composable<Settings> { SettingsScreen(koinViewModel(), onNotice = { nav.navigate(Notice) }) { nav.navigate(SignIn) } }
+                    }
+                }
+            }
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        shares.held?.let { outState.putParcelable(HELD_SHARE, it) }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handle(intent)
+    }
+
+    private fun handle(intent: Intent?) {
+        intent?.getStringExtra(EXTRA_JOB_ID)?.let { openJob.value = it; return }
+        if (intent?.action != Intent.ACTION_SEND) return
+        // The job runs regardless of the answer; notifications are optional.
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
+        }
+        // Copy/create right away: a shared video's URI grant is temporary (R14).
+        lifecycleScope.launch { runCatching { shares.share(intent) }.getOrNull()?.let { openJob.value = it } }
+    }
+}

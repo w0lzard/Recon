@@ -78,3 +78,42 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         shares.held = savedInstanceState?.let { BundleCompat.getParcelable(it, HELD_SHARE, Intent::class.java) }
         if (savedInstanceState == null) handle(intent)
+        lifecycleScope.launch { updates.check() } // throttled to once per 24 h; errors stay silent
+        val signedIn = { secrets.get(Secret.GEMINI_COOKIES) != null }
+        val start = startDestination(notice.needed, signedIn())
+        setContent {
+            ReconTheme {
+                val nav = rememberNavController()
+                val pending by openJob.collectAsStateWithLifecycle()
+                LaunchedEffect(pending) {
+                    pending?.let { nav.navigate(JobRoute(it)) { launchSingleTop = true }; openJob.value = null }
+                }
+                Scaffold { padding ->
+                    NavHost(nav, startDestination = start, modifier = Modifier.padding(padding)) {
+                        composable<Home> {
+                            val vm: HomeViewModel = koinViewModel()
+                            val rows by vm.rows.collectAsStateWithLifecycle()
+                            val update by updates.available.collectAsStateWithLifecycle()
+                            HomeScreen(rows, onOpen = { nav.navigate(JobRoute(it)) }, onSettings = { nav.navigate(Settings) }) {
+                                update?.let { u ->
+                                    UpdateBanner(u, ::openInBrowser, { updates.dismiss(u.version) }, Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                                }
+                            }
+                        }
+                        composable<JobRoute> { entry ->
+                            val id = entry.toRoute<JobRoute>().id
+                            val vm: JobViewModel = koinViewModel(key = id) { parametersOf(id) }
+                            val job by vm.job.collectAsStateWithLifecycle()
+                            job?.let { j ->
+                                JobScreen(j, vm.result(j), clock()) { a ->
+                                    when (a) {
+                                        JobAction.SignIn -> nav.navigate(SignIn)
+                                        JobAction.OpenSettings -> nav.navigate(Settings)
+                                        JobAction.Back -> nav.popBackStack()
+                                        JobAction.Cancel -> { vm.act(a); nav.popBackStack() }
+                                        is JobAction.Open -> if (a.url.startsWith("https://")) openCustomTab(a.url)
+                                        else -> vm.act(a)
+                                    }
+                                }
+                            }
+                        }

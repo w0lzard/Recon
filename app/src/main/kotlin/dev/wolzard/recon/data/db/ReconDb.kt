@@ -24,3 +24,28 @@ data class JobEntity(
     val failureDetail: String?,
     val retryAtEpochMs: Long?,
     val progress: Float?,
+    val analysisJson: String?,   // D7: JSON text columns, read whole, never queried inside
+    val resultJson: String?,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+@Dao
+interface JobDao {
+    @Query("SELECT * FROM jobs ORDER BY createdAt DESC") fun observeAll(): Flow<List<JobEntity>>
+    @Query("SELECT * FROM jobs WHERE id = :id") fun observe(id: String): Flow<JobEntity?>
+    @Query("SELECT * FROM jobs WHERE id = :id") suspend fun get(id: String): JobEntity?
+    @Query("SELECT * FROM jobs WHERE state IN (:states)") suspend fun inStates(states: List<JobState>): List<JobEntity>
+    @Insert suspend fun insert(job: JobEntity)
+    @Update suspend fun update(job: JobEntity)
+    @Query("DELETE FROM jobs WHERE id = :id") suspend fun delete(id: String)
+}
+
+// ponytail: exportSchema off until the first schema change ships; add room.schemaDirectory + migrations then.
+@Database(entities = [JobEntity::class], version = 1, exportSchema = false)
+abstract class ReconDb : RoomDatabase() {
+    abstract fun jobs(): JobDao
+}
+
+fun JobEntity.toJob() = Job(id, sharedText, url, localUri, state, failure, failureDetail, retryAtEpochMs, progress, analysisJson, resultJson, createdAt, updatedAt)
+fun Job.toEntity() = JobEntity(id, sharedText, url, localUri, state, failure, failureDetail, retryAtEpochMs, progress, analysisJson, resultJson, createdAt, updatedAt)

@@ -73,3 +73,40 @@ class GeminiWebClient(
         return replyText(r.body)
     }
 
+    /** Sign-in check: re-reads the app page with the saved cookies. @throws AnalyzerException */
+    suspend fun verify() {
+        session = null
+        session()
+    }
+
+    // --- session: GET /app carries the access token (SNlM0e) and request parameters in the page
+
+    private suspend fun session(): Session = lock.withLock {
+        session ?: (initOnce() ?: rotateCookies().let { initOnce() })
+            ?.also { session = it } ?: throw AnalyzerException(FailureReason.API_KEY_INVALID, message = "signed out of Gemini")
+    }
+
+    private suspend fun initOnce(): Session? {
+        val r = send(Request.Builder().url("$appUrl/app").get().header("Origin", ORIGIN).header("Referer", "$ORIGIN/").build())
+        if (r.code != 200) return null
+        fun field(name: String) = Regex("\"$name\":\\s*\"(.*?)\"").find(r.body)?.groupValues?.get(1)
+        val at = field("SNlM0e") ?: return null // signed-out (guest) pages have none
+        return Session(at, field("cfb2h"), field("FdrFJe"), field("TuX5cc") ?: "en", field("qKIAYe") ?: DEFAULT_PUSH_ID)
+    }
+
+    /** __Secure-1PSIDTS expires often; Google hands out a fresh one here (merged by [send]). */
+    private suspend fun rotateCookies() {
+        send(
+            Request.Builder().url(rotateUrl).header("Origin", "https://accounts.google.com")
+                .post("[000,\"-0000000000000000000\"]".toRequestBody("application/json".toMediaType())).build(),
+        )
+    }
+
+    private suspend fun postGenerate(s: Session, prompt: String, files: List<Pair<String, String>>): HttpResult {
+        val uuid = UUID.randomUUID().toString().uppercase()
+        val fileData: JsonElement = if (files.isEmpty()) JsonNull else buildJsonArray {
+            files.forEach { (id, name) -> add(buildJsonArray { add(buildJsonArray { add(JsonPrimitive(id)) }); add(JsonPrimitive(name)) }) }
+        }
+        val inner = MutableList<JsonElement>(81) { JsonNull }.apply {
+            this[0] = JsonArray(listOf(JsonPrimitive(prompt), JsonPrimitive(0), JsonNull, fileData, JsonNull, JsonNull, JsonPrimitive(0)))
+            this[1] = arr(JsonPrimitive(s.hl))

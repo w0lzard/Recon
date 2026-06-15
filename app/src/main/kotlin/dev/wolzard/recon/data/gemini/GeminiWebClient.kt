@@ -36,3 +36,40 @@ import kotlin.random.Random
  */
 class GeminiWebClient(
     client: OkHttpClient,
+    private val secrets: SecretStore,
+    private val appUrl: String = "https://gemini.google.com",
+    private val uploadUrl: String = "https://content-push.googleapis.com/upload",
+    private val rotateUrl: String = "https://accounts.google.com/RotateCookies",
+) {
+    private data class Session(val at: String, val bl: String?, val sid: String?, val hl: String, val pushId: String)
+
+    // Generation can take ~2 min under load; RunJob's own timeouts cancel the call earlier if needed.
+    private val http = client.newBuilder().readTimeout(180, TimeUnit.SECONDS).writeTimeout(180, TimeUnit.SECONDS).build()
+    private val json = Json { isLenient = true }
+    private val lock = Mutex()
+    private var session: Session? = null
+    private var reqId = Random.nextInt(10_000, 100_000)
+
+    /** Uploads one file and returns the id that [generate] takes. */
+    suspend fun upload(file: File, mime: String): String {
+        val s = session()
+        val body = MultipartBody.Builder().setType(MultipartBody.FORM)
+            .addFormDataPart("file", file.name, file.asRequestBody(mime.toMediaType())).build()
+        val r = send(
+            Request.Builder().url(uploadUrl).post(body)
+                .header("Origin", ORIGIN).header("Referer", "$ORIGIN/")
+                .header("X-Tenant-Id", "bard-storage").header("Push-ID", s.pushId).build(),
+            withCookies = false, // a .google.com cookie never goes to googleapis.com; Push-ID authorises the upload
+        )
+        if (r.code !in 200..299 || r.body.isBlank()) throw AnalyzerException(FailureReason.UNKNOWN, message = "upload HTTP ${r.code}")
+        return r.body.trim()
+    }
+
+    /** One prompt, with files from [upload] as (id, file name). Returns the reply text. */
+    suspend fun generate(prompt: String, files: List<Pair<String, String>> = emptyList()): String {
+        val r = postGenerate(session(), prompt, files).takeIf { it.code == 200 }
+            ?: run { session = null; postGenerate(session(), prompt, files) } // stale token: re-init once
+        if (r.code != 200) throw AnalyzerException(FailureReason.UNKNOWN, message = "generate HTTP ${r.code}")
+        return replyText(r.body)
+    }
+

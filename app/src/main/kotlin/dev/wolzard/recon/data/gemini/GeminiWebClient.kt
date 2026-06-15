@@ -110,3 +110,41 @@ class GeminiWebClient(
         val inner = MutableList<JsonElement>(81) { JsonNull }.apply {
             this[0] = JsonArray(listOf(JsonPrimitive(prompt), JsonPrimitive(0), JsonNull, fileData, JsonNull, JsonNull, JsonPrimitive(0)))
             this[1] = arr(JsonPrimitive(s.hl))
+            this[2] = JsonArray(DEFAULT_METADATA)
+            this[6] = arr(JsonPrimitive(1))
+            this[7] = JsonPrimitive(1)          // streaming
+            this[10] = JsonPrimitive(1)
+            this[11] = JsonPrimitive(0)
+            this[17] = arr(arr(JsonPrimitive(0)))
+            this[18] = JsonPrimitive(0)
+            this[27] = JsonPrimitive(1)
+            this[30] = arr(JsonPrimitive(4))
+            this[41] = arr(JsonPrimitive(1))
+            this[45] = JsonPrimitive(1)         // temporary chat: kept out of the user's history
+            this[53] = JsonPrimitive(0)
+            this[59] = JsonPrimitive(uuid)
+            this[61] = JsonArray(emptyList())
+            this[68] = JsonPrimitive(1)
+            this[79] = JsonPrimitive(1)
+            this[80] = JsonPrimitive(1)
+        }
+        val url = "$appUrl/_/BardChatUi/data/assistant.lamda.BardFrontendService/StreamGenerate".toHttpUrl().newBuilder()
+            .addQueryParameter("hl", s.hl).addQueryParameter("_reqid", nextReqId().toString()).addQueryParameter("rt", "c")
+            .apply { s.bl?.let { addQueryParameter("bl", it) }; s.sid?.let { addQueryParameter("f.sid", it) } }
+            .build()
+        val form = FormBody.Builder().add("at", s.at)
+            .add("f.req", JsonArray(listOf(JsonNull, JsonPrimitive(JsonArray(inner).toString()))).toString()).build()
+        return send(
+            Request.Builder().url(url).post(form)
+                .header("Origin", ORIGIN).header("Referer", "$ORIGIN/").header("X-Same-Domain", "1")
+                .header("x-goog-ext-525005358-jspb", "[\"$uuid\",1]").build(),
+        )
+    }
+
+    private fun nextReqId() = synchronized(this) { reqId.also { reqId += 100_000 } }
+
+    // --- response: ")]}'" then length-prefixed JSON frames; the reply text is cumulative, so the last one wins
+
+    internal fun replyText(body: String): String {
+        var text: String? = null
+        for (part in frames(body)) {

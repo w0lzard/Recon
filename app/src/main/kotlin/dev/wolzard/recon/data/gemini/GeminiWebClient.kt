@@ -148,3 +148,41 @@ class GeminiWebClient(
     internal fun replyText(body: String): String {
         var text: String? = null
         for (part in frames(body)) {
+            errorCode(part)?.let(::throwForCode)
+            val inner = (part.at(2) as? JsonPrimitive)?.contentOrNull ?: continue
+            val candidates = runCatching { json.parseToJsonElement(inner) }.getOrNull()?.at(4) as? JsonArray ?: continue
+            (candidates.firstOrNull()?.at(1)?.at(0) as? JsonPrimitive)?.contentOrNull?.let { text = it }
+        }
+        return text?.replace(ARTIFACTS_RE, "")?.takeIf { it.isNotBlank() }
+            ?: throw AnalyzerException(FailureReason.MODEL_OUTPUT_INVALID, message = "no reply text")
+    }
+
+    /** Frame lengths count UTF-16 units from the newline after the number, same as Kotlin's String.length. */
+    internal fun frames(body: String): List<JsonElement> {
+        val s = body.removePrefix(")]}'")
+        val out = mutableListOf<JsonElement>()
+        var i = 0
+        while (true) {
+            while (i < s.length && s[i].isWhitespace()) i++
+            val digitsEnd = (i until s.length).firstOrNull { !s[it].isDigit() } ?: break
+            if (digitsEnd == i) break
+            val end = digitsEnd + s.substring(i, digitsEnd).toInt()
+            if (end > s.length) break
+            val frame = runCatching { json.parseToJsonElement(s.substring(digitsEnd, end)) }.getOrNull()
+            if (frame is JsonArray) out.addAll(frame) else if (frame != null) out.add(frame)
+            i = end
+        }
+        return out
+    }
+
+    private fun errorCode(part: JsonElement): Int? = (part.at(5)?.at(2)?.at(0)?.at(1)?.at(0) as? JsonPrimitive)?.intOrNull
+
+    private fun throwForCode(code: Int): Nothing = throw when (code) {
+        1037 -> AnalyzerException(FailureReason.QUOTA_EXCEEDED, message = "Gemini usage limit reached")
+        1013 -> AnalyzerException(FailureReason.MODEL_BUSY, message = "Gemini temporary error 1013")
+        1060 -> AnalyzerException(FailureReason.MODEL_BUSY, message = "IP temporarily blocked by Google")
+        else -> AnalyzerException(FailureReason.UNKNOWN, message = "Gemini error $code")
+    }
+
+    // --- HTTP with the cookie jar (one header string; Set-Cookie updates are merged back and saved)
+

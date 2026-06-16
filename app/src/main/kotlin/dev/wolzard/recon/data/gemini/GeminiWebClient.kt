@@ -186,3 +186,40 @@ class GeminiWebClient(
 
     // --- HTTP with the cookie jar (one header string; Set-Cookie updates are merged back and saved)
 
+    private suspend fun send(request: Request, withCookies: Boolean = true): HttpResult {
+        val jar = secrets.get(Secret.GEMINI_COOKIES) ?: throw AnalyzerException(FailureReason.API_KEY_MISSING)
+        val r = try {
+            http.newCall(if (withCookies) request.newBuilder().header("Cookie", jar).build() else request).await()
+        } catch (e: IOException) {
+            throw AnalyzerException(FailureReason.NETWORK, cause = e)
+        }
+        val merged = mergeCookies(jar, r.headers.values("Set-Cookie"))
+        if (merged != jar) secrets.put(Secret.GEMINI_COOKIES, merged)
+        return r
+    }
+
+    private fun JsonElement.at(i: Int): JsonElement? = (this as? JsonArray)?.getOrNull(i)
+    private fun arr(vararg e: JsonElement) = JsonArray(e.toList())
+
+    companion object {
+        private const val ORIGIN = "https://gemini.google.com"
+        private const val DEFAULT_PUSH_ID = "feeds/mcudyrk2a4khkz"
+        private val DEFAULT_METADATA = listOf<JsonElement>(
+            JsonPrimitive(""), JsonPrimitive(""), JsonPrimitive(""), JsonNull, JsonNull, JsonNull, JsonNull, JsonNull, JsonNull, JsonPrimitive(""),
+        )
+        private val ARTIFACTS_RE = Regex("""https?://googleusercontent\.com/(?:\w+/)+\d+\n*""")
+
+        /** Applies Set-Cookie values (name=value only; attributes ignored) to a Cookie header string. */
+        fun mergeCookies(jar: String, setCookies: List<String>): String {
+            if (setCookies.isEmpty()) return jar
+            val map = LinkedHashMap<String, String>()
+            fun put(pair: String) {
+                val eq = pair.indexOf('=')
+                if (eq > 0) map[pair.substring(0, eq).trim()] = pair.substring(eq + 1).trim()
+            }
+            jar.split(';').forEach(::put)
+            setCookies.forEach { put(it.substringBefore(';')) }
+            return map.entries.joinToString("; ") { "${it.key}=${it.value}" }
+        }
+    }
+}

@@ -68,3 +68,37 @@ class AndroidFrameSampler : FrameSampler {
         if (Build.VERSION.SDK_INT >= 27) return r.getScaledFrameAtTime(us, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, MAX_EDGE, MAX_EDGE)
         // API 26 has no getScaledFrameAtTime: scale the full frame, then recycle the source before the next frame.
         val full = r.getFrameAtTime(us, MediaMetadataRetriever.OPTION_CLOSEST_SYNC) ?: return null
+        val k = MAX_EDGE.toFloat() / maxOf(full.width, full.height)
+        if (k >= 1f) return full
+        val scaled = Bitmap.createScaledBitmap(full, (full.width * k).toInt().coerceAtLeast(1), (full.height * k).toInt().coerceAtLeast(1), true)
+        if (scaled !== full) full.recycle()
+        return scaled
+    }
+
+    private fun dHash(b: Bitmap): Long {
+        val small = Bitmap.createScaledBitmap(b, DHash.W, DHash.H, true)
+        val px = IntArray(DHash.W * DHash.H)
+        small.getPixels(px, 0, DHash.W, 0, 0, DHash.W, DHash.H)
+        if (small !== b) small.recycle()
+        return DHash.of(IntArray(px.size) { (Color.red(px[it]) * 299 + Color.green(px[it]) * 587 + Color.blue(px[it]) * 114) / 1000 })
+    }
+
+    /** Copies the first audio track without re-encoding. No track, or a codec MP4 can't hold → null (audio is optional). */
+    private fun copyAudio(video: File, out: File): File? {
+        val extractor = MediaExtractor()
+        var muxer: MediaMuxer? = null
+        return try {
+            extractor.setDataSource(video.path)
+            val track = (0 until extractor.trackCount).firstOrNull {
+                extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
+            } ?: return null
+            val format = extractor.getTrackFormat(track)
+            extractor.selectTrack(track)
+            muxer = MediaMuxer(out.path, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+            val outTrack = muxer.addTrack(format)
+            muxer.start()
+            val declared = if (format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE) else null
+            val buf = ByteBuffer.allocate(SamplerLimits.audioBuffer(declared)) // a larger sample throws → no audio
+            val info = MediaCodec.BufferInfo()
+            while (true) {
+                val n = extractor.readSampleData(buf, 0)

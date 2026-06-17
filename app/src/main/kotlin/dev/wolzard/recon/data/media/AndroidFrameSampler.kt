@@ -33,3 +33,38 @@ class AndroidFrameSampler : FrameSampler {
         val frames = mutableListOf<AnalysisInput.Frame>()
         try {
             val duration = try {
+                retriever.setDataSource(video.path)
+                retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+                    ?: throw AnalyzerException(FailureReason.VIDEO_UNREADABLE, message = "no duration")
+            } catch (e: RuntimeException) {
+                throw AnalyzerException(FailureReason.VIDEO_UNREADABLE, message = "can't open video", cause = e)
+            }
+            val w = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull()
+            val h = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull()
+            if (SamplerLimits.frameTooLarge(w, h)) throw AnalyzerException(FailureReason.VIDEO_UNREADABLE, message = "frame size ${w}x$h too large")
+            var lastHash: Long? = null
+            for (t in FrameTimestamps.of(duration)) {
+                coroutineContext.ensureActive()
+                val bitmap = frameAt(retriever, t) ?: continue
+                val hash = dHash(bitmap)
+                if (lastHash != null && DHash.distance(hash, lastHash) <= DUPLICATE_DISTANCE) {
+                    bitmap.recycle()
+                    continue
+                }
+                val file = File(outDir, "f_%02d.jpg".format(frames.size))
+                file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 80, it) }
+                bitmap.recycle()
+                lastHash = hash
+                frames += AnalysisInput.Frame(file, t)
+            }
+        } finally {
+            retriever.release()
+        }
+        AnalysisInput.FramesAndAudio(frames, copyAudio(video, File(outDir, "audio.m4a")))
+    }
+
+    private fun frameAt(r: MediaMetadataRetriever, ms: Long): Bitmap? {
+        val us = ms * 1000
+        if (Build.VERSION.SDK_INT >= 27) return r.getScaledFrameAtTime(us, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, MAX_EDGE, MAX_EDGE)
+        // API 26 has no getScaledFrameAtTime: scale the full frame, then recycle the source before the next frame.
+        val full = r.getFrameAtTime(us, MediaMetadataRetriever.OPTION_CLOSEST_SYNC) ?: return null

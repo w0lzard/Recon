@@ -38,3 +38,43 @@ class ContentUriFetcher(
             val u = Uri.parse(uri)
             val size = runCatching {
                 context.contentResolver.query(u, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { c ->
+                    if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null
+                }
+            }.getOrNull()
+            context.contentResolver.getType(u) to size
+        },
+        allowedLocalRoot = File(context.filesDir, SHARED_DIR),
+    )
+
+    override suspend fun fetch(
+        source: String,
+        destDir: File,
+        quality: FetchQuality,
+        avoidFormatId: String?,
+        onProgress: (Float) -> Unit,
+    ): FetchedMedia = withContext(Dispatchers.IO) {
+        val local = localFileOrNull(source)
+        destDir.mkdirs()
+        val (mime, size) = if (local != null) null to local.length() else describe(source)
+        val out = File(destDir, "video.${extension(mime ?: local?.extension?.let { "video/$it" })}")
+        val input = (if (local != null) openFile(local) else open(source))
+            ?: throw AnalyzerException(FailureReason.DOWNLOAD_FAILED, message = "shared file can't be opened")
+        try {
+            input.use { inp ->
+                out.outputStream().use { o ->
+                    val buf = ByteArray(BUFFER)
+                    var copied = 0L
+                    while (true) {
+                        coroutineContext.ensureActive()
+                        val n = inp.read(buf, 0, BUFFER)
+                        if (n < 0) break
+                        o.write(buf, 0, n)
+                        copied += n
+                        if (copied > maxBytes) {
+                            out.delete()
+                            throw AnalyzerException(FailureReason.DOWNLOAD_FAILED, message = "shared file is too large")
+                        }
+                        if (size != null && size > 0) onProgress((copied.toFloat() / size).coerceAtMost(1f))
+                    }
+                }
+            }

@@ -78,3 +78,43 @@ class ContentUriFetcher(
                     }
                 }
             }
+        } catch (e: java.io.IOException) {
+            throw AnalyzerException(FailureReason.DOWNLOAD_FAILED, message = "shared file can't be read", cause = e)
+        }
+        onProgress(1f)
+        FetchedMedia(out)
+    }
+
+    /** null for content:// (opened by the resolver); the validated canonical file for local sources; else refuse. */
+    private fun localFileOrNull(source: String): File? {
+        val scheme = source.substringBefore("://", missingDelimiterValue = "").lowercase()
+        val path = when (scheme) {
+            "content" -> return null
+            "file" -> runCatching { java.net.URI(source) }.getOrNull()?.takeIf { it.host == null }?.path ?: refuse()
+            "" -> runCatching { java.net.URLDecoder.decode(source.replace("+", "%2B"), "UTF-8") }.getOrNull() ?: refuse()
+            else -> refuse()
+        }
+        val root = allowedLocalRoot?.canonicalFile ?: refuse()
+        val file = File(path).canonicalFile
+        if (!file.path.startsWith(root.path + File.separator) || !file.isFile) refuse()
+        return file
+    }
+
+    private fun refuse(): Nothing = throw AnalyzerException(FailureReason.DOWNLOAD_FAILED, message = "this shared file can't be used")
+
+    private fun extension(mime: String?) = when (mime) {
+        "video/webm" -> "webm"
+        "video/quicktime" -> "mov"
+        "video/3gpp" -> "3gp"
+        "video/x-matroska" -> "mkv"
+        else -> "mp4"
+    }
+
+    companion object {
+        private const val BUFFER = 8 * 1024
+        /** filesDir/shared: where the share activity copies incoming videos (T12). */
+        const val SHARED_DIR = "shared"
+        /** Larger shares are refused (protects storage); Path A already skips files over 50 MB. */
+        const val MAX_BYTES = 512L * 1024 * 1024
+    }
+}

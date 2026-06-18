@@ -102,3 +102,38 @@ class AndroidFrameSampler : FrameSampler {
             val info = MediaCodec.BufferInfo()
             while (true) {
                 val n = extractor.readSampleData(buf, 0)
+                if (n < 0) break
+                info.set(0, n, extractor.sampleTime, if (extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC != 0) MediaCodec.BUFFER_FLAG_KEY_FRAME else 0)
+                muxer.writeSampleData(outTrack, buf, info)
+                extractor.advance()
+            }
+            muxer.stop()
+            out.takeIf { it.length() > 0 }
+        } catch (e: Exception) {
+            Log.w("FrameSampler", "audio copy failed; continuing without audio", e)
+            out.delete()
+            null
+        } finally {
+            runCatching { muxer?.release() }
+            extractor.release()
+        }
+    }
+
+    private companion object {
+        const val MAX_EDGE = 768
+        const val DUPLICATE_DISTANCE = 6
+    }
+}
+
+/** Bounds on file-controlled sizes, so a crafted video can't exhaust memory on a 3 GB phone. */
+object SamplerLimits {
+    private const val MAX_PIXELS = 3840L * 2160   // 4K: ~33 MB ARGB for API 26's full-size frame
+    private const val MAX_EDGE = 8192
+
+    fun frameTooLarge(width: Int?, height: Int?): Boolean {
+        if (width == null || height == null) return false
+        return width > MAX_EDGE || height > MAX_EDGE || width.toLong() * height > MAX_PIXELS
+    }
+
+    fun audioBuffer(declaredMaxInput: Int?): Int = (declaredMaxInput ?: 256 * 1024).coerceIn(64 * 1024, 1024 * 1024)
+}

@@ -42,3 +42,46 @@ object YtDlp {
     }
 
     private suspend fun updateLocked(context: Context): YoutubeDL.UpdateStatus? = withContext(Dispatchers.IO) {
+        runCatching { YoutubeDL.getInstance().updateYoutubeDL(context.applicationContext, YoutubeDL.UpdateChannel._STABLE) }
+            .onSuccess { prefs(context).edit().putBoolean(UPDATED, true).apply() }
+            .onFailure { Log.w("YtDlpUpdate", "yt-dlp update failed", it) }
+            .getOrNull()
+    }
+
+    private fun prefs(context: Context) = context.getSharedPreferences("ytdlp", Context.MODE_PRIVATE)
+    private const val UPDATED = "updatedOnce"
+}
+
+class YoutubeDlRunner(private val context: Context) : YtDlpRunner {
+    override suspend fun run(url: String, args: List<String>, processId: String, onProgress: (Float) -> Unit): String {
+        val request = request(url, args)
+        val ytdl = YoutubeDL.getInstance()
+        return YtDlp.useUpdated(context) { coroutineScope {
+            val call = async(Dispatchers.IO) { ytdl.execute(request, processId) { progress, _, _ -> onProgress((progress / 100f).coerceIn(0f, 1f)) } }
+            try {
+                call.await().out
+            } catch (e: CancellationException) {
+                ytdl.destroyProcessById(processId) // kills the Python child; the job's finally deletes its dir
+                throw e
+            } catch (e: YoutubeDLException) {
+                throw YtDlpException(e.message.orEmpty())
+            }
+        } }
+    }
+
+    companion object {
+        private val flagsWithoutValue = setOf("--no-playlist", "--no-simulate")
+
+        /** http(s) only; the URL goes after "--" so yt-dlp can never read it as an option. */
+        fun request(url: String, args: List<String>): YoutubeDLRequest {
+            if (!LinkRouter.isWebUrl(url)) throw YtDlpException("Not a web link")
+            val request = YoutubeDLRequest(url)
+            var i = 0
+            while (i < args.size) {
+                val key = args[i]
+                if (key in flagsWithoutValue) { request.addOption(key); i++ } else { request.addOption(key, args[i + 1]); i += 2 }
+            }
+            return request.addCommands(listOf("--"))
+        }
+    }
+}

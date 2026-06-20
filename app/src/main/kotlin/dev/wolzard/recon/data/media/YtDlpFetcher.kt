@@ -58,3 +58,33 @@ class YtDlpFetcher(private val runner: YtDlpRunner) : MediaFetcher {
     }
 
     companion object {
+        private const val CAP_480 = "[height<=854][width<=854]"
+        private const val CAP_720 = "[height<=1280][width<=1280]"
+        private val NETWORK_RE = Regex("""Errno (7|-2|-3|101|110|111)|timed out|Network is unreachable|Temporary failure in name resolution""")
+
+        fun buildArgs(destDir: File, quality: FetchQuality = FetchQuality.DEFAULT, avoid: String? = null): List<String> {
+            val x = avoid?.let { "[format_id!=$it]" }.orEmpty()
+            val format = when (quality) {
+                FetchQuality.DEFAULT -> "b$CAP_480/b$CAP_720/w"
+                FetchQuality.SHARPER -> "b$CAP_720/w"
+                FetchQuality.OTHER_FORMAT -> "bv*[vcodec^=avc1]$CAP_480$x/b$CAP_480$x/w$x"
+            }
+            return common(format, destDir, "video")
+        }
+
+        fun youTubeVideoArgs(destDir: File, quality: FetchQuality, avoid: String?): List<String> {
+            val cap = if (quality == FetchQuality.SHARPER) CAP_720 else CAP_480
+            val x = if (quality == FetchQuality.OTHER_FORMAT) avoid?.let { "[format_id!=$it]" }.orEmpty() else ""
+            return common("bv*[vcodec^=avc1]$cap$x/bv*[vcodec!^=av01]$cap$x", destDir, "video")
+        }
+
+        fun youTubeAudioArgs(destDir: File): List<String> = common("ba[ext=m4a]", destDir, "audio")
+
+        private fun common(format: String, destDir: File, stem: String) = listOf(
+            "-f", format,
+            "--no-playlist",
+            "-o", "${destDir.path}/$stem.%(ext)s",
+            "--print", "after_move:%(format_id)s|%(filepath)s", "--no-simulate",
+        )
+    }
+}

@@ -28,3 +28,33 @@ class YtDlpFetcher(private val runner: YtDlpRunner) : MediaFetcher {
         quality: FetchQuality,
         avoidFormatId: String?,
         onProgress: (Float) -> Unit,
+    ): FetchedMedia {
+        destDir.mkdirs()
+        val processId = destDir.name
+        return try {
+            if (LinkRouter.classify(source) is Route.YouTube) {
+                val (formatId, video) = parse(runner.run(source, youTubeVideoArgs(destDir, quality, avoidFormatId), processId) { onProgress(it * 0.8f) }, destDir, "video")
+                val (_, audio) = parse(runner.run(source, youTubeAudioArgs(destDir), processId) { onProgress(0.8f + it * 0.2f) }, destDir, "audio")
+                FetchedMedia(video, audio, formatId)
+            } else {
+                val (formatId, video) = parse(runner.run(source, buildArgs(destDir, quality, avoidFormatId), processId, onProgress), destDir, "video")
+                FetchedMedia(video, null, formatId)
+            }
+        } catch (e: YtDlpException) {
+            val stderr = e.message.orEmpty()
+            val last = stderr.lines().lastOrNull { it.startsWith("ERROR") } ?: stderr.lines().lastOrNull(String::isNotBlank).orEmpty()
+            val reason = if (NETWORK_RE.containsMatchIn(stderr)) FailureReason.NETWORK else FailureReason.DOWNLOAD_FAILED
+            throw AnalyzerException(reason, message = last.take(300), cause = e)
+        }
+    }
+
+    /** Last "format_id|filepath" line printed by `--print after_move:…`; falls back to the expected file name. */
+    private fun parse(stdout: String, destDir: File, stem: String): Pair<String?, File> {
+        val line = stdout.lines().lastOrNull { it.contains('|') }
+        val file = line?.substringAfter('|')?.trim()?.let(::File)?.takeIf { it.exists() }
+            ?: destDir.listFiles()?.firstOrNull { it.name.startsWith("$stem.") && !it.name.endsWith(".part") }
+            ?: throw AnalyzerException(FailureReason.DOWNLOAD_FAILED, message = "yt-dlp produced no file")
+        return line?.substringBefore('|')?.trim()?.ifEmpty { null } to file
+    }
+
+    companion object {

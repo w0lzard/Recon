@@ -30,3 +30,36 @@ class KeystoreSecretStore(context: Context) : SecretStore {
     }
 
     @Synchronized override fun put(key: Secret, value: String?) {
+        if (value == null) {
+            prefs.edit().remove(key.name).apply()
+            return
+        }
+        val cipher = Cipher.getInstance(TRANSFORM)
+        cipher.init(Cipher.ENCRYPT_MODE, secretKey())
+        val out = cipher.iv + cipher.doFinal(value.toByteArray(Charsets.UTF_8))
+        prefs.edit().putString(key.name, Base64.encodeToString(out, Base64.NO_WRAP)).apply()
+    }
+
+    private fun secretKey(): SecretKey {
+        val ks = KeyStore.getInstance(KEYSTORE).apply { load(null) }
+        (ks.getKey(ALIAS, null) as? SecretKey)?.let { return it }
+        val gen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEYSTORE)
+        gen.init(
+            KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setKeySize(256)
+                .build(),
+        )
+        return gen.generateKey()
+    }
+
+    companion object {
+        const val PREFS = "secrets"
+        private const val ALIAS = "recon_secrets"
+        private const val KEYSTORE = "AndroidKeyStore"
+        private const val TRANSFORM = "AES/GCM/NoPadding"
+        private const val IV_BYTES = 12
+        private const val TAG_BITS = 128
+    }
+}

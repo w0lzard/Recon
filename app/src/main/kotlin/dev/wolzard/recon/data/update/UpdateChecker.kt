@@ -37,3 +37,42 @@ class UpdateChecker(
     private val baseUrl: String = "https://api.github.com",
 ) {
     private val json = Json { ignoreUnknownKeys = true }
+    private val _available = MutableStateFlow<UpdateInfo?>(null)
+    /** The banner's update: newer than this build and not dismissed. */
+    val available: StateFlow<UpdateInfo?> = _available.asStateFlow()
+
+    /** Automatic check: never reports errors, only a newer, non-dismissed release. */
+    suspend fun check(force: Boolean = false): UpdateInfo? {
+        val info = if (!force && clock() - prefs.getLong(LAST_CHECK, 0) < DAY_MS) cached() else (checkNow() as? UpdateResult.Newer)?.info
+        return info?.takeIf { isNewer(it.version) && it.version != prefs.getString(DISMISSED, null) }.also { _available.value = it }
+    }
+
+    /** Settings → "Check for updates": always asks GitHub and tells "up to date" apart from "couldn't check". */
+    suspend fun checkNow(): UpdateResult {
+        prefs.edit().putLong(LAST_CHECK, clock()).apply()
+        val result = try { fetch() } catch (e: CancellationException) { throw e } catch (_: Exception) { UpdateResult.Failed }
+        when (result) {
+            is UpdateResult.Newer -> prefs.edit().putString(VERSION, result.info.version).putString(APK, result.info.apkUrl)
+                .putString(PAGE, result.info.releasePageUrl).apply()
+            UpdateResult.UpToDate -> prefs.edit().remove(VERSION).remove(APK).remove(PAGE).apply()
+            UpdateResult.Failed -> Unit // keep the last good result
+        }
+        return result
+    }
+
+    fun dismiss(version: String) {
+        prefs.edit().putString(DISMISSED, version).apply()
+        if (_available.value?.version == version) _available.value = null
+    }
+
+    private suspend fun fetch(): UpdateResult {
+        val request = Request.Builder().url("$baseUrl/repos/$repo/releases/latest")
+            .header("User-Agent", "Recon").header("Accept", "application/vnd.github+json").build()
+        val body = withContext(Dispatchers.IO) {
+            http.newCall(request).execute().use { if (it.isSuccessful) it.body.string() else null }
+        } ?: return UpdateResult.Failed
+        val release = json.decodeFromString(Release.serializer(), body)
+        val version = Version.parse(release.tag)?.let { release.tag.removePrefix("v") } ?: return UpdateResult.Failed
+        if (!isNewer(version)) return UpdateResult.UpToDate
+        val page = release.htmlUrl?.takeIf(::isGitHubHttps) ?: "https://github.com/$repo/releases"
+        val abi = abis.firstOrNull { it in SHIPPED_ABIS }

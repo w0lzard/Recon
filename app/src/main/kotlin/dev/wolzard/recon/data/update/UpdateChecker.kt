@@ -76,3 +76,42 @@ class UpdateChecker(
         if (!isNewer(version)) return UpdateResult.UpToDate
         val page = release.htmlUrl?.takeIf(::isGitHubHttps) ?: "https://github.com/$repo/releases"
         val abi = abis.firstOrNull { it in SHIPPED_ABIS }
+        val apk = abi?.let { a -> release.assets.firstOrNull { it.name == "recon-$version-$a-release.apk" } }
+            ?.url?.takeIf(::isGitHubHttps) ?: page
+        return UpdateResult.Newer(UpdateInfo(version, apk, page))
+    }
+
+    private fun cached(): UpdateInfo? {
+        val v = prefs.getString(VERSION, null) ?: return null
+        return UpdateInfo(v, prefs.getString(APK, null) ?: return null, prefs.getString(PAGE, null) ?: return null)
+    }
+
+    private fun isNewer(version: String): Boolean {
+        val new = Version.parse(version) ?: return false
+        val current = Version.parse(currentVersion) ?: return true
+        return new > current
+    }
+
+    @Serializable private data class Asset(val name: String, @SerialName("browser_download_url") val url: String)
+    @Serializable private data class Release(
+        @SerialName("tag_name") val tag: String,
+        @SerialName("html_url") val htmlUrl: String? = null,
+        val assets: List<Asset> = emptyList(),
+    )
+
+    companion object {
+        /** Release ABIs, in preference order (x86_64 is emulator-only and never shipped). */
+        val SHIPPED_ABIS = listOf("arm64-v8a", "armeabi-v7a")
+        private const val DAY_MS = 24 * 3_600_000L
+        private const val LAST_CHECK = "lastCheck"
+        private const val VERSION = "version"
+        private const val APK = "apkUrl"
+        private const val PAGE = "pageUrl"
+        private const val DISMISSED = "dismissed"
+
+        /** https, host exactly github.com, no user info or odd port. */
+        fun isGitHubHttps(url: String): Boolean = runCatching { URI(url) }.getOrNull()?.let {
+            it.scheme == "https" && it.host == "github.com" && it.rawUserInfo == null && (it.port == -1 || it.port == 443)
+        } ?: false
+    }
+}

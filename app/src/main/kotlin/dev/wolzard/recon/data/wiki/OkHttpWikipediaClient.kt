@@ -30,3 +30,34 @@ class OkHttpWikipediaClient(
     )
     @Serializable private data class ContentUrls(val mobile: Page? = null, val desktop: Page? = null)
     @Serializable private data class Page(val page: String? = null)
+
+    override suspend fun search(lang: String, query: String): List<WikiHit> {
+        val url = "${baseUrl(safe(lang))}/w/rest.php/v1/search/page".toHttpUrl().newBuilder()
+            .addQueryParameter("q", query).addQueryParameter("limit", "3").build()
+        val body = get(url.toString()) ?: return emptyList()
+        return json.decodeFromString(SearchPage.serializer(), body).pages.map { WikiHit(it.key, it.title) }
+    }
+
+    override suspend fun summary(lang: String, key: String): WikiSummary? {
+        val url = "${baseUrl(safe(lang))}/api/rest_v1/page/summary/".toHttpUrl().newBuilder().addPathSegment(key).build()
+        val body = get(url.toString()) ?: return null
+        val s = json.decodeFromString(Summary.serializer(), body)
+        return WikiSummary(s.title, s.extract, s.contentUrls?.mobile?.page ?: s.contentUrls?.desktop?.page, s.type == "disambiguation")
+    }
+
+    private suspend fun get(url: String): String? {
+        val r = http.newCall(
+            Request.Builder().url(url)
+                .header("User-Agent", "Recon/${BuildConfig.VERSION_NAME} (https://github.com/${BuildConfig.RELEASES_REPO})")
+                .header("Accept", "application/json")
+                .get().build(),
+        ).await()
+        return when (r.code) {
+            in 200..299 -> r.body
+            404 -> null
+            else -> throw IOException("Wikipedia HTTP ${r.code}")
+        }
+    }
+
+    private fun safe(lang: String) = lang.takeIf { it.matches(Regex("^[a-z]{2,3}$")) } ?: "en"
+}

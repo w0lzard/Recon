@@ -30,3 +30,34 @@ import dev.wolzard.recon.data.media.ContentUriFetcher
 import dev.wolzard.recon.core.port.FrameSampler
 import dev.wolzard.recon.data.media.YoutubeDlRunner
 import dev.wolzard.recon.data.media.YtDlpFetcher
+import dev.wolzard.recon.data.media.YtDlpRunner
+import dev.wolzard.recon.data.secret.KeystoreSecretStore
+import dev.wolzard.recon.ui.settings.SettingsViewModel
+import dev.wolzard.recon.ui.home.HomeViewModel
+import dev.wolzard.recon.ui.job.JobActions
+import dev.wolzard.recon.ui.job.JobViewModel
+import dev.wolzard.recon.work.JobQueue
+import okhttp3.OkHttpClient
+import dev.wolzard.recon.core.job.Fetchers
+import dev.wolzard.recon.core.job.RunJob
+import dev.wolzard.recon.work.JobRunner
+import dev.wolzard.recon.work.Notifier
+import dev.wolzard.recon.work.ShareIntake
+import dev.wolzard.recon.work.deviceLanguage
+import java.io.File
+import org.koin.android.ext.koin.androidContext
+import org.koin.core.module.dsl.viewModel
+import org.koin.dsl.binds
+import org.koin.dsl.module
+
+val appModule = module {
+    single { OkHttpClient() }
+    single { Room.databaseBuilder(androidContext(), ReconDb::class.java, "recon.db").build() }
+    single<JobStore> { RoomJobStore(get()) }
+    single<LinkResolver> { OkHttpLinkResolver(get()) }
+    single<SecretStore> { KeystoreSecretStore(androidContext()) }
+    single { GeminiWebClient(get(), get()) }
+    single { GeminiWebBackend(get()) } binds arrayOf(VideoAnalyzer::class, LanguageModel::class)
+    single<YtDlpRunner> { YoutubeDlRunner(androidContext()) }
+    single { YtDlpFetcher(get()) }
+    single { ContentUriFetcher(androidContext()) }

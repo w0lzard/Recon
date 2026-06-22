@@ -61,3 +61,35 @@ val appModule = module {
     single<YtDlpRunner> { YoutubeDlRunner(androidContext()) }
     single { YtDlpFetcher(get()) }
     single { ContentUriFetcher(androidContext()) }
+    single<FrameSampler> { AndroidFrameSampler() }
+    single<GitHubClient> { OkHttpGitHubClient(get(), get()) }
+    single { GitHubResearcher(get()) }
+    single<WikipediaClient> { OkHttpWikipediaClient(get()) }
+    // ponytail: no grounded researcher; the web reply's citations aren't parsed yet, so web answers would have no sources.
+    single { ResearchChain(get<GitHubResearcher>(), WikipediaResearcher(get()), KnowledgeResearcher(get()), web = null) { GroundingCapability.UNAVAILABLE } }
+    single<() -> Long> { System::currentTimeMillis }
+    single { Notifier(androidContext()) }
+    single {
+        RunJob(
+            store = get(), resolver = get(), fetchers = Fetchers(get<YtDlpFetcher>(), get<ContentUriFetcher>()),
+            sampler = get(), analyzer = get(), research = get(), language = ::deviceLanguage,
+            quotaWaitUntil = { null }, // the web app reports no reset time for its usage limit
+            workRoot = androidContext().cacheDir,
+            sharedRoot = File(androidContext().filesDir, ContentUriFetcher.SHARED_DIR),
+            clock = get(),
+        )
+    }
+    single<JobRunner> { val runJob: RunJob = get(); JobRunner { id, action -> runJob(id, action) } }
+    single { ShareIntake(androidContext(), get(), get()) }
+    viewModel { SignInViewModel(get()) { get<GeminiWebClient>().verify() } }
+    single {
+        UpdateChecker(
+            get(), androidContext().getSharedPreferences("update", Context.MODE_PRIVATE), BuildConfig.VERSION_NAME,
+            BuildConfig.RELEASES_REPO, Build.SUPPORTED_ABIS.toList(), get(),
+        )
+    }
+    viewModel { SettingsViewModel(get(), get()) }
+    single { JobActions(get(), { job -> JobQueue.cancel(androidContext(), job) }) { id, action -> JobQueue.enqueue(androidContext(), id, action) } }
+    viewModel { params -> JobViewModel(params.get(), get(), get()) }
+    viewModel { HomeViewModel(get()) }
+}

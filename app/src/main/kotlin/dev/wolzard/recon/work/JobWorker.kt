@@ -34,3 +34,39 @@ class JobWorker(context: Context, params: WorkerParameters) : CoroutineWorker(co
         runCatching { setForeground(notifier.foregroundInfo(id)) } // may be refused in the background; the job still runs
 
         try {
+            runner.run(id, action)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            store.update(id) { it.copy(state = JobState.FAILED, failure = FailureReason.UNKNOWN, failureDetail = e::class.simpleName, progress = null) }
+            store.get(id)?.let { notifier.finished(it, null) }
+            return Result.failure()
+        }
+
+        val job = store.get(id) ?: return Result.success()
+        when (job.state) {
+            JobState.WAITING_QUOTA -> JobQueue.enqueueAfter(applicationContext, id, action, (job.retryAtEpochMs ?: clock()) - clock())
+            JobState.DONE, JobState.FAILED -> notifier.finished(job, summary(job))
+            else -> Unit
+        }
+        return Result.success()
+    }
+
+    /**
+     * Jobs Room shows as running belong to a run that died: reset them to QUEUED (this one runs now, others are
+     * re-enqueued). Job dirs other than this job's are orphans of process death and are deleted.
+     */
+    private suspend fun recoverAndSweep(id: String) {
+        for (stuck in store.findRunning()) {
+            store.update(stuck.id) { it.copy(state = JobState.QUEUED, progress = null) }
+            if (stuck.id != id) JobQueue.enqueue(applicationContext, stuck.id)
+        }
+        File(applicationContext.cacheDir, "jobs").listFiles()?.filter { it.name != id }?.forEach { it.deleteRecursively() }
+    }
+
+    private fun summary(job: dev.wolzard.recon.core.model.Job): String? = job.resultJson?.let {
+        runCatching { json.decodeFromString(JobResult.serializer(), it).analysis.summary }.getOrNull()
+    }
+
+    private companion object { val json = Json { ignoreUnknownKeys = true } }
+}

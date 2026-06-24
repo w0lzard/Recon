@@ -26,3 +26,31 @@ class ShareIntake(private val context: Context, private val store: JobStore, pri
             val dir = File(context.filesDir, "${ContentUriFetcher.SHARED_DIR}/${UUID.randomUUID()}")
             val copy = copier.fetch(uri.toString(), dir).video
             store.create(intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty(), copy.path)
+        } else {
+            val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.takeIf { it.isNotBlank() } ?: return null
+            store.create(text, null)
+        }
+        JobQueue.enqueue(context, id)
+        return id
+    }
+}
+
+/**
+ * T16: until the personal-use notice is accepted, a share is held (raw intent, unvalidated) and creates no job.
+ * [accepted] releases it through the same [intake] as any fresh share, so it is validated then, not when held.
+ * ponytail: held in memory (+ the activity's saved state); a process death before accept drops it.
+ */
+class ShareGate(private val notice: Notice, private val intake: suspend (Intent) -> String?) {
+    var held: Intent? = null
+
+    /** @return the job id, or null if held or not a usable share. */
+    suspend fun share(intent: Intent): String? {
+        if (notice.needed) { held = intent; return null }
+        return intake(intent)
+    }
+
+    suspend fun accepted(): String? {
+        notice.accept()
+        return held?.also { held = null }?.let { intake(it) }
+    }
+}

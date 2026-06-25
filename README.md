@@ -1,9 +1,45 @@
+<div align="center">
+
+<img src="docs/logo.svg" alt="Recon" width="112" height="112">
+
 # Recon
 
-Share a short video to Recon from any Android app. It tells you what the video is about and looks up the specific
-things it mentions (apps, books, places, repos, products), with sources where it can. Android 8+, sideload only.
-Uses Gemini with your own Google account. See `docs/plan.md` for the full plan.
+**Share a short video from any app. Find out what's in it.**
 
+Recon tells you what a video is about, then looks up the specific things it mentions:<br>
+apps, books, places, repos, products, with sources where it can.
+
+[![Release](https://img.shields.io/github/v/release/w0lzard/Recon?style=flat-square&color=A8E06C&labelColor=161A18)](https://github.com/w0lzard/Recon/releases/latest)
+![Android 8+](https://img.shields.io/badge/Android-8%2B-A8E06C?style=flat-square&labelColor=161A18&logo=android&logoColor=white)
+![Kotlin](https://img.shields.io/badge/Kotlin-Compose-A8E06C?style=flat-square&labelColor=161A18&logo=kotlin&logoColor=white)
+![Sideload only](https://img.shields.io/badge/distribution-sideload-A8E06C?style=flat-square&labelColor=161A18)
+![No analytics](https://img.shields.io/badge/analytics-none-A8E06C?style=flat-square&labelColor=161A18)
+
+[**Download**](https://github.com/w0lzard/Recon/releases/latest) · [Install](#install) · [Verify](#verify-the-download) · [Privacy](#privacy) · [Build](#building)
+
+<br>
+
+<img src="docs/screenshots/readme-home.png" alt="Home" width="190">&nbsp;
+<img src="docs/screenshots/readme-job_running.png" alt="Job in progress" width="190">&nbsp;
+<img src="docs/screenshots/readme-job_candidates.png" alt="Result with repo candidates" width="190">&nbsp;
+<img src="docs/screenshots/readme-settings.png" alt="Settings" width="190">
+
+</div>
+
+<br>
+
+## What it does
+
+| | |
+|---|---|
+| **Share** | Send a video link, or the video itself, to Recon from Instagram, TikTok, X, YouTube or any app with a share sheet. |
+| **Watch** | Gemini watches it with your own Google account: frames and audio, in temporary chats. |
+| **Look up** | Each thing it names is checked against GitHub and Wikipedia, so you get a real link, not just a guess. |
+| **Show its working** | Each result says how it was found (spoken, on screen, or a guess) and how well it matched, with its sources. |
+
+See [`docs/plan.md`](docs/plan.md) for the full plan.
+
+> [!WARNING]
 > **Personal use.** Recon is a personal tool. To analyse a video it downloads a temporary copy, then deletes it when
 > the analysis finishes. Instagram, TikTok, X and other platforms may forbid downloading in their terms of service.
 > You are responsible for what you share with Recon. Only share content you're allowed to process.
@@ -11,18 +47,9 @@ Uses Gemini with your own Google account. See `docs/plan.md` for the full plan.
 > Videos and screenshots are sent to Gemini with your Google account, through its website rather than an official
 > API. Google's terms apply.
 
-## Which APK
-
-Release APKs keep the exact file names the Android build produces: `recon-<version>-<abi>-release.apk`.
-
-- `recon-X.Y.Z-arm64-v8a-release.apk`: almost every phone from 2017 on.
-- `recon-X.Y.Z-armeabi-v7a-release.apk`: older or Android Go phones.
-
-If installing says "App not installed" or "not compatible", try the other one. The in-app update check looks for exactly these names.
-
 ## Install
 
-1. On your phone, open the [Releases page](https://github.com/w0lzard/recon/releases) in the browser and download the APK (see Which APK).
+1. On your phone, open the [Releases page](https://github.com/w0lzard/Recon/releases) in the browser and download the APK (see [Which APK](#which-apk)).
 2. Open it from the download notification or the Files app.
 3. When Android says the app isn't allowed to install unknown apps, tap **Settings** and turn on **Allow from this source**
    for that browser or Files app. On most phones the path is Settings → Apps → Special app access → Install unknown apps;
@@ -31,7 +58,20 @@ If installing says "App not installed" or "not compatible", try the other one. T
 5. If Google Play Protect warns that the app is unrecognised, tap **More details → Install anyway**.
 6. Optionally turn **Allow from this source** off again afterwards.
 
-## Verify the download (optional)
+### Which APK
+
+Release APKs keep the exact file names the Android build produces: `recon-<version>-<abi>-release.apk`.
+
+| File | For |
+|---|---|
+| `recon-X.Y.Z-arm64-v8a-release.apk` | almost every phone from 2017 on |
+| `recon-X.Y.Z-armeabi-v7a-release.apk` | older or Android Go phones |
+
+If installing says "App not installed" or "not compatible", try the other one. The in-app update check looks for exactly these names.
+
+### Verify the download
+
+Optional, but it takes a minute.
 
 - **Checksum:** each release has `SHA256SUMS.txt`. Run `sha256sum -c SHA256SUMS.txt --ignore-missing` next to the APK.
 - **Signature:** `apksigner verify --print-certs recon-X.Y.Z-arm64-v8a-release.apk` must print this certificate SHA-256:
@@ -42,7 +82,7 @@ If installing says "App not installed" or "not compatible", try the other one. T
 
   Every Recon release is signed with this one key. A different fingerprint means the file is not from this project.
 
-## Updating
+### Updating
 
 Recon checks GitHub once a day and shows a banner on the home screen when a new version exists ("Download" or
 "What's new"; Settings → About → **Check for updates** checks right away). Download the APK and install it over the
@@ -53,28 +93,39 @@ existing app; your history and sign-in are kept. You can also track releases wit
 Recon uses Gemini with your Google account, the same way gemini.google.com does. On first start it shows Google's
 sign-in page; once you're signed in, Recon keeps the session cookies encrypted on the phone and only sends them to Google.
 
+> [!CAUTION]
 > **Account risk.** Recon talks to Gemini through its website, not an official API. Google doesn't support this and
 > may limit or suspend accounts that use it. Use an account you can afford to lose access to.
 
-If Google refuses to sign you in inside the app, tap **Can't sign in here? Paste cookies**: open gemini.google.com in a
-desktop browser, copy the `Cookie` request header of any request to gemini.google.com from the developer tools, and
-paste it. Gemini's own usage limits for your account apply; when one is reached, the job fails with a message and you
-can retry later. Jobs run in temporary chats, so they don't show up in your Gemini history.
+<details>
+<summary><b>Google won't let you sign in inside the app?</b></summary>
+
+<br>
+
+Tap **Can't sign in here? Paste cookies**: open gemini.google.com in a desktop browser, copy the `Cookie` request
+header of any request to gemini.google.com from the developer tools, and paste it. Gemini's own usage limits for your
+account apply; when one is reached, the job fails with a message and you can retry later. Jobs run in temporary chats,
+so they don't show up in your Gemini history.
+
+</details>
 
 ## Privacy
 
-- **Leaves the phone:** the video (or sampled frames and audio) goes to Gemini with your Google account. Names of
-  things found go to GitHub and Wikipedia to look them up. The app asks GitHub for its latest release once a day.
-- **Stays on the phone:** your history and your Gemini sign-in (encrypted with the Android Keystore). There is no Recon
-  server and no analytics.
-- **Google's retention:** Google may keep what you send to Gemini for up to 72 hours, even in temporary chats.
+| | |
+|---|---|
+| **Leaves the phone** | The video (or sampled frames and audio) goes to Gemini with your Google account. Names of things found go to GitHub and Wikipedia to look them up. The app asks GitHub for its latest release once a day. |
+| **Stays on the phone** | Your history and your Gemini sign-in (encrypted with the Android Keystore). There is no Recon server and no analytics. |
+| **Google's retention** | Google may keep what you send to Gemini for up to 72 hours, even in temporary chats. |
 
-## Uninstall
-
-Uninstall Recon like any app. That removes your history and your Gemini sign-in from the phone. To end the session
+**Uninstall** Recon like any app. That removes your history and your Gemini sign-in from the phone. To end the session
 on Google's side too, sign out of all sessions in your Google account's security settings.
 
 ## Building
+
+<details>
+<summary><b>Toolchain, tests and release signing</b></summary>
+
+<br>
 
 - **JDK:** pinned to **21** through Gradle toolchains: the Gradle daemon (`gradle/gradle-daemon-jvm.properties`), Kotlin compilation (`jvmToolchain(21)`) and unit tests all use it. The foojay resolver plugin downloads it if your machine doesn't have it. Bytecode targets Java 17.
 - **Android SDK:** `compileSdk`/`targetSdk` 37, `minSdk` 26. Put `sdk.dir` in `local.properties`.
@@ -86,3 +137,10 @@ on Google's side too, sign out of all sessions in your Google account's security
 
   These flags apply only to the test JVM (`tasks.withType<Test>` in `app/build.gradle.kts`), never to the app. Robolectric tests also use a plain `Application` (`app/src/test/resources/robolectric.properties`), because `ReconApp` starts Koin, which can only start once per JVM.
 - **Release signing:** `keystore.properties` (git-ignored), created once by `scripts/make-release-keystore.sh` (Task 14; run it yourself in a terminal, it prompts for the password). Without it, release APKs are debug-signed and named `recon-<version>-UNSIGNED-FOR-RELEASE-<abi>-release.apk`. Debug APKs are always `recon-<version>-<abi>-debug.apk`.
+
+</details>
+
+<div align="center">
+<br>
+<sub>Recon is a personal project. Not affiliated with Google, Instagram, TikTok or X.</sub>
+</div>

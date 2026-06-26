@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="recon_ink">#0E1110</color>
+    <color name="recon_plate">#161A18</color>
+    <!-- Splash: light default, dark under values-night. The icon plate stays dark in both (design 2d/2e). -->
+    <color name="splash_bg">#F4F5F2</color>
+    <color name="splash_plate">#0E1110</color>
+</resources>

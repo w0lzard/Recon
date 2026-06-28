@@ -77,3 +77,43 @@ data class HomeRow(val id: String, val state: String, val host: String, val summ
         }
     }
 }
+
+@Composable
+fun HomeScreen(rows: List<HomeRow>, onOpen: (String) -> Unit, onSettings: () -> Unit, banner: @Composable () -> Unit = {}) {
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().height(64.dp).padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Wordmark(Modifier.weight(1f))
+            IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, contentDescription = "Settings") }
+        }
+        banner()
+        if (rows.isEmpty()) {
+            Box(
+                Modifier.fillMaxSize().padding(16.dp).border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium).dotGrid(MaterialTheme.colorScheme.outlineVariant).padding(24.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Reticle(Modifier.size(48.dp), tick = MaterialTheme.colorScheme.onSurfaceVariant, dot = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Share a video link to Recon from any app", Modifier.background(MaterialTheme.colorScheme.background), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+                }
+            }
+            return
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        LazyColumn {
+            items(rows, key = { it.id }) { r ->
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 72.dp).clickable { onOpen(r.id) }.padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        if (r.summary != null) Text(r.summary, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium))
+                        Text(r.host, maxLines = 1, style = if (r.summary != null) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono, fontWeight = FontWeight.Medium))
+                        Text(r.time, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    }
+                    StatusChip(r.state, r.kind)
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+        }
+    }
+}

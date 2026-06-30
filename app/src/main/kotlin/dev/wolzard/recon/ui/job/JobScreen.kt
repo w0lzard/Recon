@@ -131,3 +131,48 @@ private fun Running(job: Job, onAction: (JobAction) -> Unit) {
     val current = steps.indexOfFirst { it.first == job.state }
     Column(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium)) {
         steps.forEachIndexed { i, (_, label) ->
+            if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+                Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    when {
+                        i < current -> Text("✓", color = MaterialTheme.colorScheme.primary)
+                        i == current -> Reticle(Modifier.size(18.dp))
+                        else -> Text("·")
+                    }
+                    Text(label, color = if (i > current) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface, style = if (i == current) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium)
+                }
+                // ponytail: the design's 1.6 s sweep is the stock indeterminate bar
+                if (i == current) LinearProgressIndicator(Modifier.padding(top = 12.dp).fillMaxWidth().height(2.dp), trackColor = MaterialTheme.colorScheme.outlineVariant)
+                else Spacer(Modifier.height(12.dp))
+            }
+        }
+    }
+    if (job.state == JobState.DOWNLOADING) job.progress?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth()) }
+}
+
+@Composable
+private fun Failed(job: Job, now: Long, onAction: (JobAction) -> Unit) {
+    val reason = job.failure ?: FailureReason.UNKNOWN
+    var help by rememberSaveable { mutableStateOf(false) }
+    StatusChip("Failed", ChipKind.Bad)
+    Text(JobCopy.failureMessage(reason, job.retryAtEpochMs, job.failureDetail), style = MaterialTheme.typography.titleLarge)
+    val retryEnabled = job.retryAtEpochMs?.let { now >= it } ?: true
+    val sharedFile = job.localUri != null
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        when (reason) {
+            FailureReason.UNSUPPORTED_LINK -> Unit
+            FailureReason.DOWNLOAD_FAILED -> {
+                OutlinedButton(shape = MaterialTheme.shapes.small, onClick = { help = true }) { Text("Share the video file instead") }
+                if (!sharedFile) Button(shape = MaterialTheme.shapes.small, onClick = { onAction(JobAction.Retry) }) { Text("Retry") }
+            }
+            FailureReason.VIDEO_UNREADABLE -> OutlinedButton(shape = MaterialTheme.shapes.small, onClick = { help = true }) { Text("Share a different file") }
+            FailureReason.API_KEY_MISSING, FailureReason.API_KEY_INVALID -> Button(shape = MaterialTheme.shapes.small, onClick = { onAction(JobAction.SignIn) }) { Text("Sign in") }
+            else -> if (!sharedFile) Button(shape = MaterialTheme.shapes.small, onClick = { onAction(JobAction.Retry) }, enabled = retryEnabled) { Text("Retry") }
+        }
+    }
+    if (sharedFile && reason != FailureReason.UNSUPPORTED_LINK) Text("Share the video again to try once more; Recon's copy is gone.", style = MaterialTheme.typography.bodySmall)
+    if (help) AlertDialog(
+        onDismissRequest = { help = false },
+        confirmButton = { TextButton(onClick = { help = false }) { Text("OK") } },
+        title = { Text("Share the video file") },
+        text = { Text(JobCopy.SHARE_FILE_HELP) },

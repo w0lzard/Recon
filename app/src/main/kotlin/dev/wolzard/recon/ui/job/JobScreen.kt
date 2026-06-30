@@ -87,3 +87,47 @@ sealed interface JobAction {
     data object TrySharper : JobAction
     data object SignIn : JobAction
     data object OpenSettings : JobAction
+    data object Cancel : JobAction
+    data object Back : JobAction
+    data class Pick(val findingIndex: Int, val repo: GhRepo?) : JobAction   // null = "None of these"
+    data class Open(val url: String) : JobAction
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+/** Stateless: everything comes from [job]/[result]; [now] decides whether Retry is enabled yet. */
+@Composable
+fun JobScreen(job: Job, result: JobResult?, now: Long, onAction: (JobAction) -> Unit) {
+    Column(Modifier.fillMaxSize()) {
+        TopAppBar(
+            title = { Text(HomeRow.from(job).host, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono, fontWeight = FontWeight.Medium)) },
+            navigationIcon = { IconButton(onClick = { onAction(JobAction.Back) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+            windowInsets = WindowInsets(0), // MainActivity's Scaffold already pads for the status bar
+        )
+        Column(
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            when {
+                job.state == JobState.FAILED -> Failed(job, now, onAction)
+                job.state == JobState.DONE && result != null -> Done(result, onAction)
+                else -> Running(job, onAction)
+            }
+        }
+    }
+}
+
+@Composable
+private fun Running(job: Job, onAction: (JobAction) -> Unit) {
+    if (job.state == JobState.WAITING_QUOTA) {
+        StatusChip("Waiting for quota", ChipKind.Warn)
+        Text("Waiting for your free AI quota", style = MaterialTheme.typography.titleLarge)
+        Text("Link: ${HomeRow.from(job).host}")
+        Text("Quota resets at ${job.retryAtEpochMs?.let(JobCopy::time) ?: "the next daily reset"}; this video starts then.")
+        OutlinedButton(shape = MaterialTheme.shapes.small, onClick = { onAction(JobAction.Cancel) }) { Text("Cancel") }
+        return
+    }
+    val steps = listOf(JobState.QUEUED to "Queued", JobState.DOWNLOADING to "Downloading", JobState.ANALYSING to "Analysing", JobState.RESEARCHING to "Looking things up")
+    val current = steps.indexOfFirst { it.first == job.state }
+    Column(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium)) {
+        steps.forEachIndexed { i, (_, label) ->

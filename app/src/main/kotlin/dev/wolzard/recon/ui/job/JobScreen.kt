@@ -176,3 +176,47 @@ private fun Failed(job: Job, now: Long, onAction: (JobAction) -> Unit) {
         confirmButton = { TextButton(onClick = { help = false }) { Text("OK") } },
         title = { Text("Share the video file") },
         text = { Text(JobCopy.SHARE_FILE_HELP) },
+    )
+}
+
+@Composable
+private fun Done(result: JobResult, onAction: (JobAction) -> Unit) {
+    SectionLabel("SUMMARY")
+    Text(result.analysis.summary, style = MaterialTheme.typography.bodyLarge)
+    result.degraded.forEach { (id, retryAt) ->
+        val text = JobCopy.degradedBanner(id, retryAt) ?: return@forEach
+        OutlinedCard(border = BorderStroke(1.dp, MaterialTheme.colorScheme.status.unverified)) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(text)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    when (id) {
+                        "budget" -> Button(shape = MaterialTheme.shapes.small, onClick = { onAction(JobAction.LookUp) }) { Text("Look up") }
+                        "github" -> {
+                            OutlinedButton(shape = MaterialTheme.shapes.small, onClick = { onAction(JobAction.OpenSettings) }) { Text("Add GitHub token") }
+                            Button(shape = MaterialTheme.shapes.small, onClick = { onAction(JobAction.CheckAgain) }) { Text("Check again") }
+                        }
+                        else -> Button(shape = MaterialTheme.shapes.small, onClick = { onAction(JobAction.CheckAgain) }) { Text("Check again") }
+                    }
+                }
+            }
+        }
+    }
+    val sharperOffered = result.path != "youtube-url" && result.analysis.entities.all { it.evidence == Evidence.INFERRED }
+    if (result.findings.isEmpty()) Box(
+        Modifier.fillMaxWidth().heightIn(min = 200.dp).border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium).dotGrid(MaterialTheme.colorScheme.outlineVariant).padding(24.dp),
+        contentAlignment = Alignment.Center,
+    ) { Text(JobCopy.NOTHING_FOUND, Modifier.background(MaterialTheme.colorScheme.background), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center) }
+    else SectionLabel("ENTITIES FOUND · ${result.findings.size}")
+    result.findings.forEachIndexed { i, f -> FindingCard(i, f, onAction) }
+    if (sharperOffered) OutlinedCard(Modifier.fillMaxWidth(), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Text hard to read?", style = MaterialTheme.typography.labelLarge)
+            Text("Run again with more frames at higher resolution.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedButton(onClick = { onAction(JobAction.TrySharper) }, Modifier.fillMaxWidth().height(48.dp), shape = MaterialTheme.shapes.small) { Text("Try sharper video") }
+        }
+    }
+
+    if (result.sources.isNotEmpty()) {
+        SectionLabel("Sources")
+        Column {
+            result.sources.forEachIndexed { i, src ->

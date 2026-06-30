@@ -220,3 +220,48 @@ private fun Done(result: JobResult, onAction: (JobAction) -> Unit) {
         SectionLabel("Sources")
         Column {
             result.sources.forEachIndexed { i, src ->
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button) { onAction(JobAction.Open(src.uri)) },
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text("${i + 1}", Modifier.width(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    Text(src.title, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+        }
+    }
+    result.searchSuggestionsHtml?.let { SearchSuggestions(it) }
+    OnScreenText(result.analysis.onScreenText)
+    val models = listOfNotNull(result.models["analyse"]?.let { "Analysed by $it" }, result.models["research"]?.let { "researched by $it" })
+    if (models.isNotEmpty()) Text(models.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+}
+
+@Composable
+private fun OnScreenText(lines: List<String>) {
+    if (lines.isEmpty()) return
+    var open by rememberSaveable { mutableStateOf(false) }
+    TextButton(onClick = { open = !open }) { Text(if (open) "Hide on-screen text" else "Show on-screen text") }
+    if (open) lines.forEach { Text("“$it”", style = MaterialTheme.typography.bodySmall) }
+}
+
+@Composable
+private fun FindingCard(index: Int, f: Finding, onAction: (JobAction) -> Unit) {
+    OutlinedCard(Modifier.fillMaxWidth(), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            val verdictKind = when (f.verdict) {
+                Verdict.DISPUTED -> ChipKind.Bad
+                Verdict.CONFIRMED -> ChipKind.Ok
+                else -> ChipKind.Unclear
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(icon(f.entity.type), contentDescription = f.entity.type.wire, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(f.entity.type.wire.uppercase(), Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                StatusChip(JobCopy.verdict(f.verdict), verdictKind)
+            }
+            Text(f.title, style = MaterialTheme.typography.titleMedium)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                StatusChip(f.entity.evidence.wire.replaceFirstChar(Char::uppercase), ChipKind.Neutral)
+                if (f.entity.evidence == Evidence.INFERRED) StatusChip("Guess", ChipKind.Warn)
+                StatusChip(JobCopy.basis(f.basis), ChipKind.Neutral)
+                f.stars?.let { StatusChip("★ $it", ChipKind.Neutral) }

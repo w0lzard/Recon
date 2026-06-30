@@ -265,3 +265,47 @@ private fun FindingCard(index: Int, f: Finding, onAction: (JobAction) -> Unit) {
                 if (f.entity.evidence == Evidence.INFERRED) StatusChip("Guess", ChipKind.Warn)
                 StatusChip(JobCopy.basis(f.basis), ChipKind.Neutral)
                 f.stars?.let { StatusChip("★ $it", ChipKind.Neutral) }
+            }
+            if (f.candidates.isNotEmpty()) Candidates(index, f.candidates, onAction)
+            if (f.whatItIs.isNotBlank()) Text(f.whatItIs, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            f.keyFacts.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium) }
+            if (f.howToTry.isNotBlank()) Text("${JobCopy.howToTryLabel(f.entity.type)}: ${f.howToTry}", style = MaterialTheme.typography.bodyMedium)
+            if (f.whyInVideo.isNotBlank()) Text(f.whyInVideo, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            f.primaryLink?.takeIf { it.startsWith("https://") }?.let { link ->
+                OutlinedButton(shape = MaterialTheme.shapes.small, onClick = { onAction(JobAction.Open(link)) }) { Text(if (link.startsWith("https://github.com/")) "Open on GitHub" else "Open on Wikipedia") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Candidates(index: Int, repos: List<GhRepo>, onAction: (JobAction) -> Unit) {
+    val line = MaterialTheme.colorScheme.outlineVariant
+    Column(Modifier.fillMaxWidth().border(1.dp, line, MaterialTheme.shapes.small).clip(MaterialTheme.shapes.small)) {
+        Text("Which repo did the video mean?", Modifier.padding(horizontal = 12.dp, vertical = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+        repos.forEach { r ->
+            HorizontalDivider(color = line)
+            Column(Modifier.fillMaxWidth().heightIn(min = 52.dp).clickable(role = Role.Button) { onAction(JobAction.Pick(index, r)) }.padding(horizontal = 12.dp, vertical = 6.dp), verticalArrangement = Arrangement.Center) {
+                Text(r.fullName, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono, fontWeight = FontWeight.Medium))
+                Text(listOfNotNull("★ ${r.stars}", r.description).joinToString(" · "), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        HorizontalDivider(color = line)
+        TextButton(onClick = { onAction(JobAction.Pick(index, null)) }) { Text("None of these") }
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String) = Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+
+private fun icon(t: EntityType): ImageVector = when (t) {
+    EntityType.REPO -> Icons.Filled.Build
+    EntityType.APP -> Icons.Filled.Phone
+    EntityType.PRODUCT -> Icons.Filled.ShoppingCart
+    EntityType.BOOK -> Icons.Filled.List
+    EntityType.PERSON -> Icons.Filled.Person
+    EntityType.PLACE -> Icons.Filled.Place
+    EntityType.RECIPE -> Icons.Filled.Favorite
+    EntityType.CLAIM -> Icons.Filled.Warning
+    EntityType.OTHER -> Icons.Filled.Info
+}

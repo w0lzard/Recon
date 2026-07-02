@@ -59,3 +59,34 @@ fun SettingsScreen(vm: SettingsViewModel, onNotice: () -> Unit = {}, onSignIn: (
             value = token, onValueChange = { token = it }, singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
             label = { Text(if (state.hasGitHubToken) "Token saved; enter a new one to replace" else "Token") },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(shape = MaterialTheme.shapes.small, onClick = { vm.saveGitHubToken(token); token = "" }, enabled = token.isNotBlank()) { Text("Save token") }
+            if (state.hasGitHubToken) OutlinedButton(shape = MaterialTheme.shapes.small, onClick = { vm.saveGitHubToken(null) }) { Text("Remove token") }
+        }
+
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Text("Privacy", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+        Text(
+            "Videos, or frames and audio, go to Gemini with your Google account, in temporary chats. Names of things found go to " +
+                "GitHub and Wikipedia. Your history and sign-in stay on this phone. ${SetupCopy.DATA_NOTE}",
+            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
+        )
+
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Text("About", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+        Text("Recon ${BuildConfig.VERSION_NAME}")
+        OutlinedButton(shape = MaterialTheme.shapes.small, onClick = vm::checkForUpdates, enabled = !state.checkingUpdate) {
+            Text(if (state.checkingUpdate) "Checking…" else "Check for updates")
+        }
+        when (val u = state.update) {
+            is UpdateResult.Newer -> UpdateBanner(u.info, onOpen = ctx::openInBrowser, onDismiss = null)
+            UpdateResult.UpToDate -> Text("Up to date")
+            UpdateResult.Failed -> Text("Couldn't check. Try again later.")
+            null -> Unit
+        }
+        TextButton(onClick = { ctx.openCustomTab("https://github.com/${BuildConfig.RELEASES_REPO}/releases") }) { Text("Releases on GitHub") }
+        TextButton(onClick = onNotice) { Text("Personal-use notice") }
+    }
+}

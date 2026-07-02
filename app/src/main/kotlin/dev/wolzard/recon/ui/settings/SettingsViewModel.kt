@@ -26,3 +26,30 @@ class SettingsViewModel(
     private val _state = MutableStateFlow(SettingsState())
     val state: StateFlow<SettingsState> = _state.asStateFlow()
 
+    init { refresh() }
+
+    fun refresh() {
+        _state.update {
+            it.copy(
+                signedIn = secrets.get(Secret.GEMINI_COOKIES) != null,
+                hasGitHubToken = secrets.get(Secret.GITHUB_TOKEN) != null,
+            )
+        }
+    }
+
+    /** Forgets the saved Google cookies; the WebView's own copy is cleared by the screen. */
+    fun signOut() { secrets.put(Secret.GEMINI_COOKIES, null); refresh() }
+
+    fun saveGitHubToken(token: String?) { secrets.put(Secret.GITHUB_TOKEN, token?.trim()?.ifEmpty { null }); refresh() }
+
+    /** About → "Check for updates": forced, result shown inline. */
+    fun checkForUpdates() {
+        val u = updates ?: return
+        _state.update { it.copy(checkingUpdate = true, update = null) }
+        viewModelScope.launch {
+            val r = u.checkNow()
+            if (r is UpdateResult.Newer) u.check() // refresh Home's banner from the stored result
+            _state.update { it.copy(checkingUpdate = false, update = r) }
+        }
+    }
+}

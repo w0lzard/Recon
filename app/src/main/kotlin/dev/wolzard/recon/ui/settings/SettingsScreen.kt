@@ -29,3 +29,33 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.wolzard.recon.BuildConfig
 import dev.wolzard.recon.data.update.UpdateResult
 import dev.wolzard.recon.ui.common.openCustomTab
+import dev.wolzard.recon.ui.common.openInBrowser
+import dev.wolzard.recon.ui.home.UpdateBanner
+import dev.wolzard.recon.ui.setup.SetupCopy
+
+@Composable
+fun SettingsScreen(vm: SettingsViewModel, onNotice: () -> Unit = {}, onSignIn: () -> Unit) {
+    val state by vm.state.collectAsStateWithLifecycle()
+    val ctx = LocalContext.current
+    var token by remember { mutableStateOf("") }
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("Settings", style = MaterialTheme.typography.titleLarge)
+
+        Text("Gemini account", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+        Text(if (state.signedIn) "Signed in (stored encrypted on this phone)." else "Not signed in.")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(shape = MaterialTheme.shapes.small, onClick = onSignIn) { Text(if (state.signedIn) "Sign in again" else "Sign in") }
+            if (state.signedIn) OutlinedButton(shape = MaterialTheme.shapes.small, onClick = { CookieManager.getInstance().removeAllCookies(null); vm.signOut() }) { Text("Sign out") }
+        }
+        Text(SetupCopy.ACCOUNT_RISK, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Text("GitHub token (optional)", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+        Text("Raises GitHub's lookup limit. A token with no scopes is enough.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+        OutlinedTextField(
+            value = token, onValueChange = { token = it }, singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            label = { Text(if (state.hasGitHubToken) "Token saved; enter a new one to replace" else "Token") },

@@ -62,3 +62,35 @@ fun SignInScreen(vm: SignInViewModel, onDone: () -> Unit) {
         }
         state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         if (paste) {
+            Text(SetupCopy.PASTE_HELP, style = MaterialTheme.typography.bodyMedium)
+            OutlinedTextField(
+                value = pasted, onValueChange = { pasted = it }, label = { Text("Cookie header") },
+                visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.small,
+            )
+            Button(onClick = { vm.onCookies(pasted) }, Modifier.fillMaxWidth().height(48.dp), enabled = pasted.isNotBlank() && !state.checking, shape = MaterialTheme.shapes.small) { Text("Use these cookies") }
+            TextButton(onClick = { paste = false }) { Text("Sign in here instead") }
+        } else {
+            SignInWebView(Modifier.fillMaxWidth().height(560.dp).clip(MaterialTheme.shapes.medium).border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium), vm::onCookies)
+            TextButton(onClick = { paste = true }) { Text("Can't sign in here? Paste cookies") }
+        }
+    }
+}
+
+@SuppressLint("SetJavaScriptEnabled") // Google's sign-in page needs JavaScript
+@Composable
+private fun SignInWebView(modifier: Modifier, onCookies: (String) -> Unit) {
+    AndroidView(modifier = modifier, factory = { ctx ->
+        WebView(ctx).apply {
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            webViewClient = object : WebViewClient() {
+                override fun onPageFinished(view: WebView, url: String) {
+                    if (!url.startsWith("https://gemini.google.com/")) return
+                    CookieManager.getInstance().getCookie("https://gemini.google.com")
+                        ?.takeIf { it.contains("__Secure-1PSID=") }?.let(onCookies)
+                }
+            }
+            loadUrl(SetupCopy.SIGN_IN_URL)
+        }
+    })
+}

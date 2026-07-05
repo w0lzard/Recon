@@ -37,3 +37,42 @@ val Mono = FontFamily.Monospace
 private val Sans = FontFamily.SansSerif
 
 private val Dark = darkColorScheme(
+    background = Ink, surface = Ink, onBackground = Color(0xFFE8ECE9), onSurface = Color(0xFFE8ECE9),
+    surfaceContainer = Color(0xFF161A18), surfaceContainerHigh = Color(0xFF1F2421),
+    outlineVariant = Color(0xFF2C322F), outline = Color(0xFF2C322F), onSurfaceVariant = Color(0xFF9BA39E),
+    primary = Lime, onPrimary = Ink, error = DarkStatus.bad, onError = Ink,
+)
+
+private val Light = lightColorScheme(
+    background = Color(0xFFF4F5F2), surface = Color(0xFFF4F5F2), onBackground = Color(0xFF141816), onSurface = Color(0xFF141816),
+    surfaceContainer = Color.White, surfaceContainerHigh = Color(0xFFECEEEA),
+    outlineVariant = Color(0xFFD5D9D4), outline = Color(0xFFD5D9D4), onSurfaceVariant = Color(0xFF545C57),
+    primary = Lime, onPrimary = Ink, error = LightStatus.bad, onError = Color.White,
+)
+
+private fun sans(w: FontWeight, size: Int, line: Int) = TextStyle(fontFamily = Sans, fontWeight = w, fontSize = size.sp, lineHeight = line.sp)
+
+private val ReconTypography = Typography(
+    titleLarge = sans(FontWeight.SemiBold, 22, 28),
+    titleMedium = sans(FontWeight.SemiBold, 17, 22),
+    bodyLarge = sans(FontWeight.Normal, 15, 23),
+    bodyMedium = sans(FontWeight.Normal, 14, 20),
+    labelLarge = sans(FontWeight.SemiBold, 15, 20),
+    bodySmall = TextStyle(fontFamily = Mono, fontWeight = FontWeight.Normal, fontSize = 12.sp, lineHeight = 16.sp),
+    labelSmall = TextStyle(fontFamily = Mono, fontWeight = FontWeight.Medium, fontSize = 11.sp, lineHeight = 16.sp, letterSpacing = 0.1.em),
+)
+
+private val ReconShapes = Shapes(
+    extraSmall = RoundedCornerShape(6.dp), small = RoundedCornerShape(8.dp),
+    medium = RoundedCornerShape(12.dp), large = RoundedCornerShape(12.dp),
+)
+
+val ColorScheme.status: StatusColors @Composable get() = LocalStatusColors.current
+
+// ponytail: dynamic colour dropped on purpose; the design is a fixed palette.
+@Composable
+fun ReconTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
+    CompositionLocalProvider(LocalStatusColors provides if (dark) DarkStatus else LightStatus) {
+        MaterialTheme(colorScheme = if (dark) Dark else Light, typography = ReconTypography, shapes = ReconShapes, content = content)
+    }
+}

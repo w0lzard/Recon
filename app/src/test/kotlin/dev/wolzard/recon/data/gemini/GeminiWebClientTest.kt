@@ -67,3 +67,38 @@ class GeminiWebClientTest {
         assertTrue(form, form.contains("say hi"))
     }
 
+    @Test fun `upload sends push id without cookies and the id goes into the prompt's file list`() = runTest {
+        val f = File.createTempFile("video", ".mp4").apply { writeBytes(byteArrayOf(1, 2, 3)); deleteOnExit() }
+        server.enqueue(ok(appPage))
+        server.enqueue(ok("/contrib_service/ttl_1d/abc\n"))
+        server.enqueue(ok(frame("[${replyPart("{}")}]")))
+        val c = client()
+
+        val id = c.upload(f, "video/mp4")
+        c.generate("look", listOf(id to f.name))
+
+        server.takeRequest()
+        val up = server.takeRequest()
+        assertEquals("feeds/push1", up.headers["Push-ID"])
+        assertEquals("bard-storage", up.headers["X-Tenant-Id"])
+        assertEquals(null, up.headers["Cookie"])
+        assertEquals("/contrib_service/ttl_1d/abc", id)
+        val form = URLDecoder.decode(server.takeRequest().body!!.utf8(), "UTF-8")
+        assertTrue(form, form.contains("/contrib_service/ttl_1d/abc") && form.contains(f.name))
+    }
+
+    @Test fun `signed-out page rotates cookies once, saves the new one and retries`() = runTest {
+        server.enqueue(ok("<html>no token</html>"))
+        server.enqueue(MockResponse.Builder().body("").addHeader("Set-Cookie", "__Secure-1PSIDTS=new; Domain=.google.com; Secure").build())
+        server.enqueue(ok(appPage))
+        server.enqueue(ok(frame("[${replyPart("ok")}]")))
+
+        assertEquals("ok", client().generate("p"))
+
+        server.takeRequest()
+        assertEquals("/rotate", server.takeRequest().url.encodedPath)
+        assertEquals("__Secure-1PSID=sid; __Secure-1PSIDTS=new", server.takeRequest().headers["Cookie"])
+        assertEquals("__Secure-1PSID=sid; __Secure-1PSIDTS=new", secrets.map[Secret.GEMINI_COOKIES])
+    }
+
+    @Test fun `still signed out after rotation is API_KEY_INVALID, no cookies is API_KEY_MISSING`() = runTest {

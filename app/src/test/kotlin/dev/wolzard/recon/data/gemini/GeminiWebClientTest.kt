@@ -102,3 +102,37 @@ class GeminiWebClientTest {
     }
 
     @Test fun `still signed out after rotation is API_KEY_INVALID, no cookies is API_KEY_MISSING`() = runTest {
+        repeat(3) { server.enqueue(ok("<html>no token</html>")) }
+        assertFails(FailureReason.API_KEY_INVALID) { client().generate("p") }
+        secrets.map.clear()
+        assertFails(FailureReason.API_KEY_MISSING) { client().generate("p") }
+    }
+
+    @Test fun `usage-limit code 1037 is QUOTA_EXCEEDED`() = runTest {
+        server.enqueue(ok(appPage))
+        server.enqueue(ok(frame("""[["wrb.fr",null,null,null,null,[3,null,[[null,[1037]]]]]]""")))
+        assertFails(FailureReason.QUOTA_EXCEEDED) { client().generate("p") }
+    }
+
+    @Test fun `a failed generate re-reads the page once before giving up`() = runTest {
+        server.enqueue(ok(appPage))
+        server.enqueue(MockResponse.Builder().code(400).build())
+        server.enqueue(ok(appPage))
+        server.enqueue(ok(frame("[${replyPart("second")}]")))
+        assertEquals("second", client().generate("p"))
+    }
+
+    @Test fun `reply without text is MODEL_OUTPUT_INVALID`() = runTest {
+        server.enqueue(ok(appPage))
+        server.enqueue(ok(frame("""[["wrb.fr",null,null]]""")))
+        assertFails(FailureReason.MODEL_OUTPUT_INVALID) { client().generate("p") }
+    }
+
+    @Test fun `mergeCookies replaces by name and keeps order`() {
+        assertEquals("a=1; b=9; c=3", GeminiWebClient.mergeCookies("a=1; b=2", listOf("b=9; Path=/", "c=3; Secure")))
+    }
+
+    private suspend fun assertFails(reason: FailureReason, block: suspend () -> Unit) {
+        try { block(); fail("expected $reason") } catch (e: AnalyzerException) { assertEquals(reason, e.reason) }
+    }
+}

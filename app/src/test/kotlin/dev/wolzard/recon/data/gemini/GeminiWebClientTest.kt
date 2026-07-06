@@ -32,3 +32,38 @@ class GeminiWebClientTest {
     @After fun stop() = server.close()
 
     private fun client(): GeminiWebClient {
+        val base = server.url("").toString().trimEnd('/')
+        return GeminiWebClient(OkHttpClient(), secrets, appUrl = base, uploadUrl = "$base/upload", rotateUrl = "$base/rotate")
+    }
+
+    private val appPage = """<script>WIZ_global_data = {"SNlM0e":"tok123","cfb2h":"boq_build","FdrFJe":"-42","TuX5cc":"en","qKIAYe":"feeds/push1"}</script>"""
+
+    /** One length-prefixed frame: the length counts from the newline after the number. */
+    private fun frame(json: String) = "${("\n" + json).length}\n$json"
+
+    /** A StreamGenerate part carrying [text] in candidate 0, the way the web app streams it. */
+    private fun replyPart(text: String): String {
+        val inner = JsonArray(listOf(JsonNull, JsonArray(listOf(JsonPrimitive("c_1"), JsonPrimitive("r_1"))), JsonNull, JsonNull,
+            JsonArray(listOf(JsonArray(listOf(JsonPrimitive("rc_1"), JsonArray(listOf(JsonPrimitive(text)))))))))
+        return JsonArray(listOf(JsonPrimitive("wrb.fr"), JsonNull, JsonPrimitive(inner.toString()))).toString()
+    }
+
+    private fun ok(body: String) = MockResponse.Builder().body(body).build()
+
+    @Test fun `generate posts the token and prompt and returns the last cumulative text`() = runTest {
+        server.enqueue(ok(appPage))
+        server.enqueue(ok(")]}'\n\n" + frame("[${replyPart("Hel")}]") + "\n" + frame("[${replyPart("Hello ✓ 😀 world")}]")))
+
+        assertEquals("Hello ✓ 😀 world", client().generate("say hi"))
+
+        val init = server.takeRequest()
+        assertEquals("/app", init.url.encodedPath)
+        assertEquals("__Secure-1PSID=sid; __Secure-1PSIDTS=old", init.headers["Cookie"])
+        val gen = server.takeRequest()
+        assertEquals("boq_build", gen.url.queryParameter("bl"))
+        assertEquals("-42", gen.url.queryParameter("f.sid"))
+        val form = URLDecoder.decode(gen.body!!.utf8(), "UTF-8")
+        assertTrue(form, form.startsWith("at=tok123&f.req="))
+        assertTrue(form, form.contains("say hi"))
+    }
+

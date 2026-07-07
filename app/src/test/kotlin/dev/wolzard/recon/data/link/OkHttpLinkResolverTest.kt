@@ -24,3 +24,28 @@ class OkHttpLinkResolverTest {
         server.enqueue(redirect("/b"))
         server.enqueue(redirect(server.url("/c").toString()))
         server.enqueue(MockResponse.Builder().code(200).build())
+        assertEquals(server.url("/c").toString(), resolver.resolve(server.url("/a").toString()))
+        assertEquals("HEAD", server.takeRequest().method)
+    }
+
+    @Test fun headRejectedFallsBackToGet() = runTest {
+        server.enqueue(MockResponse.Builder().code(405).build())
+        server.enqueue(redirect("/final"))
+        server.enqueue(MockResponse.Builder().code(200).build())
+        assertEquals(server.url("/final").toString(), resolver.resolve(server.url("/s").toString()))
+        assertEquals(listOf("HEAD", "GET", "GET"), List(3) { server.takeRequest().method })
+    }
+
+    @Test fun timeoutGivesInput() = runTest {
+        val slow = MockResponse.Builder().code(200).headersDelay(2, TimeUnit.SECONDS).build()
+        server.enqueue(slow); server.enqueue(slow)
+        val input = server.url("/slow").toString()
+        assertEquals(input, resolver.resolve(input))
+    }
+
+    @Test fun moreThanFiveRedirectsGivesInput() = runTest {
+        repeat(12) { server.enqueue(redirect("/r$it")) }
+        val input = server.url("/start").toString()
+        assertEquals(input, resolver.resolve(input))
+    }
+}

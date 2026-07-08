@@ -65,3 +65,37 @@ class ContentUriFetcherTest {
         )) {
             try {
                 f.fetch(src, tmp.newFolder()); org.junit.Assert.fail(src)
+            } catch (e: dev.wolzard.recon.core.model.AnalyzerException) {
+                assertEquals(dev.wolzard.recon.core.model.FailureReason.DOWNLOAD_FAILED, e.reason)
+            }
+        }
+        assertTrue("nothing may be opened: $opened", opened.isEmpty())
+    }
+
+    @Test fun contentUrisAndFilesInsideTheSharedRootAreAllowed() = runTest {
+        val shared = tmp.newFolder("shared")
+        val copy = java.io.File(shared, "job1.mp4").apply { writeBytes(ByteArray(4)) }
+        val opened = mutableListOf<String>()
+        val f = fetcherWithRoot(shared, opened)
+        f.fetch("content://com.whatsapp.provider.media/item/1", tmp.newFolder())
+        f.fetch(copy.path, tmp.newFolder())
+        f.fetch("file://${copy.path}", tmp.newFolder())
+        assertEquals(listOf("content://com.whatsapp.provider.media/item/1", copy.canonicalPath, copy.canonicalPath), opened)
+    }
+
+    @Test fun withoutAllowedRootOnlyContentUris() = runTest {
+        val opened = mutableListOf<String>()
+        val f = ContentUriFetcher(open = { opened += it; ByteArrayInputStream(ByteArray(1)) }, describe = { null to null }, allowedLocalRoot = null)
+        try { f.fetch("/sdcard/x.mp4", tmp.newFolder()); org.junit.Assert.fail() } catch (_: dev.wolzard.recon.core.model.AnalyzerException) { }
+        assertTrue(opened.isEmpty())
+    }
+
+    @Test fun oversizedCopyIsRefusedAndRemoved() = runTest {
+        val f = ContentUriFetcher(open = { ByteArrayInputStream(ByteArray(10_000)) }, describe = { null to null }, allowedLocalRoot = null, maxBytes = 4_096)
+        val dir = tmp.newFolder()
+        try { f.fetch("content://x/1", dir); org.junit.Assert.fail() } catch (e: dev.wolzard.recon.core.model.AnalyzerException) {
+            assertEquals(dev.wolzard.recon.core.model.FailureReason.DOWNLOAD_FAILED, e.reason)
+        }
+        assertTrue(dir.listFiles()!!.isEmpty())
+    }
+}

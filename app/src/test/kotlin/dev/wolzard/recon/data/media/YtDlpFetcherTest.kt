@@ -35,3 +35,39 @@ class YtDlpFetcherTest {
     @Test fun buildArgsIsTheExactS3List() {
         val d = File("/cache/jobs/1")
         assertEquals(
+            listOf(
+                "-f", "b[height<=854][width<=854]/b[height<=1280][width<=1280]/w",
+                "--no-playlist",
+                "-o", "/cache/jobs/1/video.%(ext)s",
+                "--print", "after_move:%(format_id)s|%(filepath)s", "--no-simulate",
+            ),
+            YtDlpFetcher.buildArgs(d),
+        )
+    }
+
+    @Test fun youtubeFallbackIsAvc1FirstNeverAv1() {
+        val video = YtDlpFetcher.youTubeVideoArgs(File("/d"), FetchQuality.DEFAULT, avoid = null)
+        val f = video[video.indexOf("-f") + 1]
+        assertTrue(f.contains("[vcodec^=avc1]"))
+        assertTrue(f.contains("[vcodec!^=av01]"))
+        assertEquals("bv*[vcodec^=avc1][height<=854][width<=854]/bv*[vcodec!^=av01][height<=854][width<=854]", f)
+        val audio = YtDlpFetcher.youTubeAudioArgs(File("/d"))
+        assertEquals("ba[ext=m4a]", audio[audio.indexOf("-f") + 1])
+        assertTrue(audio.contains("/d/audio.%(ext)s"))
+    }
+
+    @Test fun otherFormatRetryExcludesTheFailedFormat() {
+        val args = YtDlpFetcher.buildArgs(File("/d"), FetchQuality.OTHER_FORMAT, avoid = "397")
+        assertEquals(
+            "bv*[vcodec^=avc1][height<=854][width<=854][format_id!=397]/b[height<=854][width<=854][format_id!=397]/w[format_id!=397]",
+            args[args.indexOf("-f") + 1],
+        )
+    }
+
+    @Test fun sharperUsesThe720pCap() {
+        val args = YtDlpFetcher.buildArgs(File("/d"), FetchQuality.SHARPER, avoid = null)
+        assertEquals("b[height<=1280][width<=1280]/w", args[args.indexOf("-f") + 1])
+        val yt = YtDlpFetcher.youTubeVideoArgs(File("/d"), FetchQuality.SHARPER, avoid = null)
+        assertEquals("bv*[vcodec^=avc1][height<=1280][width<=1280]/bv*[vcodec!^=av01][height<=1280][width<=1280]", yt[yt.indexOf("-f") + 1])
+    }
+

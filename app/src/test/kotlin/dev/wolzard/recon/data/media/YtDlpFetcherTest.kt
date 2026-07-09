@@ -71,3 +71,40 @@ class YtDlpFetcherTest {
         assertEquals("bv*[vcodec^=avc1][height<=1280][width<=1280]/bv*[vcodec!^=av01][height<=1280][width<=1280]", yt[yt.indexOf("-f") + 1])
     }
 
+    @Test fun nonYouTubeIsOneMuxedFile() = runTest {
+        val runner = FakeRunner()
+        val m = YtDlpFetcher(runner).fetch("https://www.instagram.com/reel/x/", dest())
+        assertEquals(1, runner.calls.size)
+        assertEquals("video.mp4", m.video.name)
+        assertNull(m.audio)
+        assertEquals("18", m.formatId)
+    }
+
+    @Test fun youtubeIsTwoFilesVideoThenAudio() = runTest {
+        val runner = FakeRunner(formatId = "135")
+        val m = YtDlpFetcher(runner).fetch("https://youtu.be/Psy_4mEWNDI", dest())
+        assertEquals(2, runner.calls.size)
+        assertEquals("video.mp4", m.video.name)
+        assertEquals("audio.m4a", m.audio!!.name)
+        assertEquals("135", m.formatId)
+    }
+
+    @Test fun ytDlpErrorIsDownloadFailedWithLastStderrLine() = runTest {
+        val runner = FakeRunner(fail = "WARNING: ffmpeg-location … does not exist!\nERROR: [Instagram] x: Requested content is not available, rate-limit reached or login required\n")
+        try {
+            YtDlpFetcher(runner).fetch("https://www.instagram.com/reel/x/", dest()); fail()
+        } catch (e: AnalyzerException) {
+            assertEquals(FailureReason.DOWNLOAD_FAILED, e.reason)
+            assertEquals("ERROR: [Instagram] x: Requested content is not available, rate-limit reached or login required", e.message)
+        }
+    }
+
+    @Test fun networkErrorsMapToNetwork() = runTest {
+        val runner = FakeRunner(fail = "ERROR: [download] Got error: [Errno 7] No address associated with hostname. Giving up after 10 retries")
+        try {
+            YtDlpFetcher(runner).fetch("https://www.instagram.com/reel/x/", dest()); fail()
+        } catch (e: AnalyzerException) {
+            assertEquals(FailureReason.NETWORK, e.reason)
+        }
+    }
+}

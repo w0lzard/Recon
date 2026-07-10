@@ -121,3 +121,44 @@ class UpdateCheckerTest {
         server.enqueue(release(tag = "v0.1.0"))
         assertEquals(UpdateResult.UpToDate, checker().checkNow())
         server.enqueue(MockResponse.Builder().code(500).build())
+        assertEquals(UpdateResult.Failed, checker().checkNow())
+    }
+
+    // --- throttling
+
+    @Test fun secondCallWithin24hMakesNoRequestAndReturnsLastResult() = runTest {
+        server.enqueue(release())
+        val first = checker().check()
+        now += 23 * 3_600_000L
+        assertEquals(first, checker().check())
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test fun forceAndExpiryMakeRequests() = runTest {
+        server.enqueue(release()); server.enqueue(release()); server.enqueue(release())
+        checker().check()
+        checker().check(force = true)
+        now += 24 * 3_600_000L + 1
+        checker().check()
+        assertEquals(3, server.requestCount)
+    }
+
+    @Test fun cachedResultIsDroppedOnceInstalled() = runTest {
+        server.enqueue(release())
+        checker().check()
+        assertNull(checker(current = "0.2.0").check())
+    }
+
+    // --- dismiss
+
+    @Test fun dismissHidesThatVersionOnly() = runTest {
+        server.enqueue(release())
+        val c = checker()
+        c.check()
+        c.dismiss("0.2.0")
+        assertNull(c.available.value)
+        assertNull(checker().check())
+        server.enqueue(release(tag = "v0.3.0", assets = arrayOf()))
+        assertEquals("0.3.0", checker().check(force = true)!!.version)
+    }
+}

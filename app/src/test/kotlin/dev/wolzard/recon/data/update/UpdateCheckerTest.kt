@@ -80,3 +80,44 @@ class UpdateCheckerTest {
             "javascript:alert(1)",
             "file:///sdcard/a.apk",
         ).forEach { bad ->
+            prefs.edit().clear().commit()
+            server.enqueue(release(assets = arrayOf(asset("recon-0.2.0-arm64-v8a-release.apk", bad))))
+            assertEquals(bad, page, checker().check()!!.apkUrl)
+        }
+    }
+
+    @Test fun nonGithubReleasePageFallsBackToReleasesList() = runTest {
+        server.enqueue(release(htmlUrl = "https://evil.example/r"))
+        assertEquals("https://github.com/w0lzard/recon/releases", checker(listOf("x86")).check()!!.releasePageUrl)
+    }
+
+    // --- results
+
+    @Test fun sameOrOlderTagIsNull() = runTest {
+        server.enqueue(release(tag = "v0.1.0"))
+        assertNull(checker().check())
+        server.enqueue(release(tag = "v0.0.9"))
+        assertNull(checker().check(force = true))
+    }
+
+    @Test fun unparseableTagIsNull() = runTest {
+        server.enqueue(release(tag = "latest"))
+        assertNull(checker().check())
+    }
+
+    @Test fun errorsAreNull() = runTest {
+        server.enqueue(MockResponse.Builder().code(404).build())
+        assertNull(checker().check(force = true))
+        server.enqueue(MockResponse.Builder().code(403).build())
+        assertNull(checker().check(force = true))
+        server.enqueue(MockResponse.Builder().body("not json").build())
+        assertNull(checker().check(force = true))
+        val c = checker()
+        server.close() // connection refused = IOException
+        assertNull(c.check(force = true))
+    }
+
+    @Test fun nowDistinguishesUpToDateAndFailed() = runTest {
+        server.enqueue(release(tag = "v0.1.0"))
+        assertEquals(UpdateResult.UpToDate, checker().checkNow())
+        server.enqueue(MockResponse.Builder().code(500).build())

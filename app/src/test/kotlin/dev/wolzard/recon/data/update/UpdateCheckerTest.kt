@@ -39,3 +39,44 @@ class UpdateCheckerTest {
     private fun url(name: String) = "https://github.com/w0lzard/recon/releases/download/v0.2.0/$name"
 
     // --- ABI asset matching, one per shipped ABI path
+
+    @Test fun arm64PhonePicksArm64() = runTest {
+        server.enqueue(release())
+        assertEquals(UpdateInfo("0.2.0", url("recon-0.2.0-arm64-v8a-release.apk"), page), checker().check())
+        val req = server.takeRequest()
+        assertEquals("/repos/w0lzard/recon/releases/latest", req.url.encodedPath)
+        assertEquals("Recon", req.headers["User-Agent"])
+    }
+
+    @Test fun v7aPhonePicksV7a() = runTest {
+        server.enqueue(release())
+        assertEquals(url("recon-0.2.0-armeabi-v7a-release.apk"), checker(listOf("armeabi-v7a", "armeabi")).check()!!.apkUrl)
+    }
+
+    @Test fun x86WithArmTranslationPicksArm64() = runTest {
+        server.enqueue(release())
+        assertEquals(url("recon-0.2.0-arm64-v8a-release.apk"), checker(listOf("x86_64", "arm64-v8a")).check()!!.apkUrl)
+    }
+
+    @Test fun noShippedAbiGivesReleasePage() = runTest {
+        server.enqueue(release())
+        assertEquals(page, checker(listOf("x86_64", "x86")).check()!!.apkUrl)
+    }
+
+    @Test fun unsignedAssetNeverMatches() = runTest {
+        server.enqueue(release(assets = arrayOf(asset("recon-0.2.0-UNSIGNED-FOR-RELEASE-arm64-v8a-release.apk"))))
+        assertEquals(page, checker().check()!!.apkUrl)
+    }
+
+    // --- links: only https github.com
+
+    @Test fun nonGithubAssetUrlGivesReleasePage() = runTest {
+        listOf(
+            "http://github.com/w0lzard/recon/releases/download/v0.2.0/a.apk",
+            "https://evil.example/recon-0.2.0-arm64-v8a-release.apk",
+            "https://github.com.evil.example/a.apk",
+            "https://github.com@evil.example/a.apk",
+            "https://objects.github.com.evil/a.apk",
+            "javascript:alert(1)",
+            "file:///sdcard/a.apk",
+        ).forEach { bad ->

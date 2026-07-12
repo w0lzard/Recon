@@ -122,3 +122,44 @@ class JobScreenTest {
         compose.onNodeWithText("Not checked").assertExists()
         compose.onNodeWithText("The video says Taj Mahal.").assertExists()
     }
+
+    @Test fun aiKnowledgeIsLabelledUnverifiedNeverConfirmedOrSupported() {
+        show(job(JobState.DONE), result(listOf(
+            finding(entity(EntityType.CLAIM, "Water while standing hurts knees"), Verdict.UNCLEAR, Basis.AI_KNOWLEDGE),
+            finding(entity(EntityType.BOOK, "Atomic Habits"), Verdict.BEST_MATCH, Basis.AI_KNOWLEDGE),
+        )))
+        compose.onAllNodesWithText("Unverified, from AI knowledge").assertCountEquals(2)
+        compose.onNodeWithText("Confirmed").assertDoesNotExist()
+        compose.onNodeWithText("Supported").assertDoesNotExist()
+    }
+
+    // --- r2 candidates picker
+
+    @Test fun candidatesPickerShowsRowsAndPicksOne() {
+        val repos = listOf(
+            GhRepo("HEJustinSun/my-girlfriend-jingtian-latex", "https://github.com/HEJustinSun/my-girlfriend-jingtian-latex", "LaTeX", 3),
+            GhRepo("fuzzland/girlfriend", "https://github.com/fuzzland/girlfriend", null, 1),
+            GhRepo("habi/latex", "https://github.com/habi/latex", null, 1),
+        )
+        show(job(JobState.DONE), result(listOf(finding(entity(EntityType.REPO, "he-justinsun-s-girlfriend-jinchin-latex", Evidence.SPOKEN), Verdict.BEST_MATCH, Basis.GITHUB_API, candidates = repos))))
+        compose.onNodeWithText("Which repo did the video mean?").assertExists()
+        repos.forEach { compose.onNodeWithText(it.fullName).assertExists() }
+        compose.onNodeWithText("None of these").assertExists()
+        compose.onNodeWithText("fuzzland/girlfriend").performScrollTo().performClick()
+        assertEquals(listOf<JobAction>(JobAction.Pick(0, repos[1])), actions)
+    }
+
+    // --- done layout
+
+    @Test fun noEntitiesSaysNothingToLookUpAndOffersSharper() {
+        show(job(JobState.DONE), result(emptyList()))
+        compose.onNodeWithText("Nothing specific to look up in this video").assertExists()
+        compose.onNodeWithText("Try sharper video").assertExists()
+    }
+
+    @Test fun youtubeUrlRouteNeverOffersSharper() {
+        show(job(JobState.DONE), result(emptyList(), path = "youtube-url"))
+        compose.onNodeWithText("Try sharper video").assertDoesNotExist()
+    }
+
+    @Test fun sourcesAndSuggestionsOnlyWhenGrounded() {

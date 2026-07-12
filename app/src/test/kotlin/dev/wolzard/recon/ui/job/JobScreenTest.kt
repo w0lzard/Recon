@@ -163,3 +163,44 @@ class JobScreenTest {
     }
 
     @Test fun sourcesAndSuggestionsOnlyWhenGrounded() {
+        val f = finding(entity(EntityType.CLAIM, "c"), Verdict.DISPUTED, Basis.WEB_SOURCES)
+        show(job(JobState.DONE), result(listOf(f), sources = listOf(Source("WHO fact sheet", "https://who.int/x")), html = "<div>chips</div>"))
+        compose.onNodeWithText("WHO fact sheet").performScrollTo().assertExists()
+        compose.onNodeWithTag("search-suggestions").assertExists()
+    }
+
+    @Test fun noSuggestionsViewWithoutHtml() {
+        show(job(JobState.DONE), result(listOf(finding(entity(EntityType.APP, "X"), Verdict.BEST_MATCH, Basis.AI_KNOWLEDGE))))
+        compose.onNodeWithTag("search-suggestions").assertDoesNotExist()
+        compose.onNodeWithText("Sources").assertDoesNotExist()
+    }
+
+    @Test fun answeringModelsAreShown() {
+        show(job(JobState.DONE), result(listOf(finding(entity(EntityType.APP, "X"), Verdict.BEST_MATCH, Basis.AI_KNOWLEDGE))))
+        compose.onNodeWithText("gemini-3.8-flash", substring = true).assertExists()
+    }
+
+    // --- running states
+
+    @Test fun waitingQuotaSaysWhenItStarts() {
+        show(job(JobState.WAITING_QUOTA, retryAt = now + 60_000))
+        compose.onNodeWithText("Waiting for your free AI quota").assertExists()
+        compose.onNodeWithText("Link: instagram.com").assertExists()
+        compose.onNodeWithText("Quota resets at ${JobCopy.time(now + 60_000)}", substring = true).assertExists()
+        compose.onNodeWithText("Cancel").performClick()
+        assertEquals(listOf<JobAction>(JobAction.Cancel), actions)
+    }
+
+    @Test fun topBarShowsHostAndBack() {
+        show(job(JobState.ANALYSING))
+        compose.onNodeWithText("instagram.com").assertExists()
+        compose.onNodeWithContentDescription("Back").performClick()
+        assertEquals(listOf<JobAction>(JobAction.Back), actions)
+    }
+
+    @Test fun downloadingShowsSteps() {
+        show(job(JobState.DOWNLOADING))
+        compose.onNodeWithText("Downloading").assertExists()
+        compose.onNodeWithText("Analysing").assertExists()
+    }
+}

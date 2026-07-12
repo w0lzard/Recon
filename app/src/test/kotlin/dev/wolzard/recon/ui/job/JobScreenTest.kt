@@ -80,3 +80,45 @@ class JobScreenTest {
         val e = entity(EntityType.BOOK, "Atomic Habits")
         show(job(JobState.DONE), result(listOf(finding(e, Verdict.NOT_CHECKED, Basis.VIDEO_ONLY)), degraded = mapOf("knowledge" to null)))
         compose.onNodeWithText("Couldn't look things up", substring = true).assertExists()
+        compose.onNodeWithText("Check again").performClick()
+        assertEquals(listOf<JobAction>(JobAction.CheckAgain), actions)
+    }
+
+    @Test fun degradedGithubBanner() {
+        show(job(JobState.DONE), result(listOf(finding(entity(EntityType.REPO, "cli"), Verdict.NOT_CHECKED, Basis.VIDEO_ONLY)), degraded = mapOf("github" to null)))
+        compose.onNodeWithText("GitHub limit reached", substring = true).assertExists()
+        compose.onNodeWithText("Add GitHub token").assertExists()
+    }
+
+    @Test fun degradedBudgetBanner() {
+        show(job(JobState.DONE), result(listOf(finding(entity(EntityType.APP, "X"), Verdict.NOT_CHECKED, Basis.VIDEO_ONLY)), degraded = mapOf("budget" to null)))
+        compose.onNodeWithText("lookups were skipped to save your Gemini usage", substring = true).assertExists()
+        compose.onNodeWithText("Look up").performClick()
+        assertEquals(listOf<JobAction>(JobAction.LookUp), actions)
+    }
+
+    @Test fun wikipediaDegradedIsSilent() {
+        show(job(JobState.DONE), result(listOf(finding(entity(EntityType.APP, "X"), Verdict.BEST_MATCH, Basis.AI_KNOWLEDGE)), degraded = mapOf("wikipedia" to null)))
+        compose.onNodeWithText("Couldn't look things up", substring = true).assertDoesNotExist()
+    }
+
+    // --- verdicts, badges, basis
+
+    @Test fun disputedClaimNeverConfirmed() {
+        show(job(JobState.DONE), result(listOf(finding(entity(EntityType.CLAIM, "Chocolate causes acne"), Verdict.DISPUTED, Basis.WEB_SOURCES))))
+        compose.onNodeWithText("Disputed").assertExists()
+        compose.onNodeWithText("Chocolate causes acne").assertExists()
+        compose.onNodeWithText("Confirmed").assertDoesNotExist()
+    }
+
+    @Test fun inferredShowsGuessBadge() {
+        show(job(JobState.DONE), result(listOf(finding(entity(EntityType.PRODUCT, "Kirby", Evidence.INFERRED), Verdict.BEST_MATCH, Basis.AI_KNOWLEDGE))))
+        compose.onNodeWithText("Guess").assertExists()
+    }
+
+    @Test fun notCheckedShowsWhatTheVideoSaid() {
+        val e = entity(EntityType.PLACE, "Taj Mahal")
+        show(job(JobState.DONE), result(listOf(Finding(e, "none", Verdict.NOT_CHECKED, e.name, e.saidInVideo, emptyList(), "", "", null, null, Basis.VIDEO_ONLY))))
+        compose.onNodeWithText("Not checked").assertExists()
+        compose.onNodeWithText("The video says Taj Mahal.").assertExists()
+    }

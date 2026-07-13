@@ -62,3 +62,35 @@ class JobViewModelTest {
     }
 
     @Test fun noneOfTheseIsNotFound() = runBlocking {
+        val id = jobWithPicker()
+        JobActions(store) { i, a -> queued += i to a }.pick(id, 0, null)
+        val f = result(store.get(id)!!.resultJson).findings.single()
+        assertEquals(Verdict.NOT_FOUND, f.verdict)
+        assertNull(f.primaryLink)
+    }
+
+    @Test fun retryRequeuesAndClearsFailure() = runBlocking {
+        val id = store.create("https://youtu.be/x", null)
+        store.update(id) { it.copy(state = JobState.FAILED, failure = FailureReason.NETWORK, retryAtEpochMs = 5) }
+        JobActions(store) { i, a -> queued += i to a }.requeue(id, UserAction.RUN)
+        val j = store.get(id)!!
+        assertEquals(JobState.QUEUED, j.state)
+        assertNull(j.failure)
+        assertEquals(listOf(id to UserAction.RUN), queued)
+    }
+
+    @Test fun cancelRemovesOnlyWaitingJobs() = runBlocking {
+        val cancelled = mutableListOf<String>()
+        val actions = JobActions(store, { cancelled += it.id }) { i, a -> queued += i to a }
+        val waiting = store.create("https://youtu.be/w", null)
+        store.update(waiting) { it.copy(state = JobState.WAITING_QUOTA, retryAtEpochMs = 5) }
+        val running = store.create("https://youtu.be/r", null)
+        store.update(running) { it.copy(state = JobState.ANALYSING) }
+
+        assertTrue(actions.cancel(waiting))
+        assertNull(store.get(waiting))
+        assertEquals(false, actions.cancel(running))
+        assertEquals(JobState.ANALYSING, store.get(running)!!.state)
+        assertEquals(listOf(waiting), cancelled)
+    }
+}

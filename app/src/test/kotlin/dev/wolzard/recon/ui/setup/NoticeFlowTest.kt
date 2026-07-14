@@ -37,3 +37,43 @@ import org.junit.runner.RunWith
 class NoticeFlowTest {
     @get:Rule val compose = createComposeRule()
     private val ctx = ApplicationProvider.getApplicationContext<Context>()
+    private val prefs = ctx.getSharedPreferences("notice-test", Context.MODE_PRIVATE)
+    private lateinit var db: ReconDb
+    private lateinit var store: RoomJobStore
+    private lateinit var intake: ShareIntake
+
+    @Before fun setUp() {
+        prefs.edit().clear().commit()
+        WorkManagerTestInitHelper.initializeTestWorkManager(ctx)
+        db = Room.inMemoryDatabaseBuilder(ctx, ReconDb::class.java).allowMainThreadQueries().build()
+        store = RoomJobStore(db)
+        intake = ShareIntake(ctx, store, ContentUriFetcher(ctx))
+    }
+    @After fun close() = db.close()
+
+    private fun share(text: String) = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
+    private fun jobs() = runBlocking { store.observeAll().first() }
+
+    // --- gating
+
+    @Test fun freshInstallShowsNoticeBeforeSignIn() {
+        assertTrue(Notice(prefs).needed)
+        assertEquals(NoticeRoute, startDestination(noticeNeeded = true, signedIn = false))
+        assertEquals(NoticeRoute, startDestination(noticeNeeded = true, signedIn = true))
+    }
+
+    @Test fun afterAcceptNextLaunchSkipsIt() {
+        Notice(prefs).accept()
+        assertFalse(Notice(prefs).needed)
+        assertEquals(SignIn, startDestination(noticeNeeded = false, signedIn = false))
+        assertEquals(Home, startDestination(noticeNeeded = false, signedIn = true))
+    }
+
+    @Test fun bumpingNoticeVersionShowsItAgain() {
+        Notice(prefs).accept()
+        assertTrue(Notice(prefs, version = NOTICE_VERSION + 1).needed)
+    }
+
+    @Test fun screenShowsTextAndOnlyIUnderstand() {
+        var accepted = false
+        compose.setContent { NoticeScreen { accepted = true } }

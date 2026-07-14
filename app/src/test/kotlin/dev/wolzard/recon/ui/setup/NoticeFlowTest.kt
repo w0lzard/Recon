@@ -77,3 +77,42 @@ class NoticeFlowTest {
     @Test fun screenShowsTextAndOnlyIUnderstand() {
         var accepted = false
         compose.setContent { NoticeScreen { accepted = true } }
+        compose.onNodeWithText("Recon is a personal tool", substring = true).assertExists()
+        compose.onNodeWithText("Google's terms apply", substring = true).assertExists()
+        compose.onAllNodes(hasClickAction()).assertCountEquals(1)
+        compose.onNodeWithText("I understand").performClick()
+        assertTrue(accepted)
+    }
+
+    // --- pending share
+
+    @Test fun shareBeforeAcceptCreatesNoJobUntilAccept() = runBlocking {
+        val gate = ShareGate(Notice(prefs), intake::accept)
+        assertNull(gate.share(share("look https://www.instagram.com/reel/abc/")))
+        assertTrue(jobs().isEmpty())
+
+        val id = gate.accepted()!!
+        assertEquals("look https://www.instagram.com/reel/abc/", store.get(id)!!.sharedText)
+        assertNull(gate.accepted()) // released once
+        assertEquals(1, jobs().size)
+    }
+
+    @Test fun afterAcceptSharesGoStraightThrough() = runBlocking {
+        Notice(prefs).accept()
+        val gate = ShareGate(Notice(prefs), intake::accept)
+        assertTrue(gate.share(share("https://youtu.be/a")) != null)
+    }
+
+    @Test fun heldShareIsValidatedOnlyWhenReleased() = runBlocking {
+        val gate = ShareGate(Notice(prefs), intake::accept)
+        gate.share(share("javascript:alert(1) file:///data/data/dev.wolzard.recon/databases/recon.db intent://x#Intent;end"))
+        val id = gate.accepted()
+        // Released through the same intake as any share: no web link survives, so RunJob fails it as UNSUPPORTED_LINK.
+        val job = store.get(id!!)!!
+        assertNull(job.url)
+        assertNull(LinkRouter.extractUrl(job.sharedText))
+        // A non-share intent held before accept is dropped by the intake.
+        gate.share(Intent(Intent.ACTION_VIEW))
+        assertNull(gate.accepted())
+    }
+}

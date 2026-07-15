@@ -74,3 +74,41 @@ class JobWorkerTest {
         val job = store.get(id)!!
         assertEquals(JobState.FAILED, job.state)
         assertEquals(FailureReason.UNKNOWN, job.failure)
+    }
+
+    @Test fun startupSweepDeletesOrphanDirsAndKeepsThisJobsDir() = runBlocking {
+        val id = store.create("https://youtu.be/x", null)
+        val orphan = File(ctx.cacheDir, "jobs/orphan-job").apply { mkdirs(); File(this, "video.mp4").writeText("x") }
+        val own = File(ctx.cacheDir, "jobs/$id").apply { mkdirs() }
+        behaviour = { assertTrue(own.exists()); store.update(it) { j -> j.copy(state = JobState.DONE) } }
+        worker(id).doWork()
+        assertFalse(orphan.exists())
+    }
+
+    @Test fun waitingQuotaJobIsReenqueuedWithDelayUntilRetryAt() = runBlocking {
+        val id = store.create("https://youtu.be/x", null)
+        behaviour = { store.update(it) { j -> j.copy(state = JobState.WAITING_QUOTA, retryAtEpochMs = now + 60_000) } }
+        worker(id).doWork()
+        val info = WorkManager.getInstance(ctx).getWorkInfosForUniqueWork(JobQueue.waitName(id)).get().single()
+        assertEquals(60_000L, info.initialDelayMillis)
+    }
+
+    @Test fun textShareCreatesJobAndEnqueuesWork() = runBlocking {
+        val intake = ShareIntake(ctx, store, ContentUriFetcher(ctx))
+        val id = intake.accept(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "look https://youtu.be/abc"))!!
+        assertEquals("look https://youtu.be/abc", store.get(id)!!.sharedText)
+        val infos = WorkManager.getInstance(ctx).getWorkInfosForUniqueWork(JobQueue.NAME).get()
+        assertEquals(1, infos.size)
+        assertTrue(infos.single().tags.contains(JobQueue.tag(id)))
+    }
+
+    @Test fun nonShareIntentIsIgnored() = runBlocking {
+        assertEquals(null, ShareIntake(ctx, store, ContentUriFetcher(ctx)).accept(Intent(Intent.ACTION_MAIN)))
+    }
+
+    @Test @Config(qualifiers = "hi") fun languageIsTheDeviceLocale() {
+        val lang = deviceLanguage()
+        assertEquals("hi", lang.tag)
+        assertEquals(java.util.Locale.forLanguageTag("hi").displayLanguage, lang.display)
+    }
+}

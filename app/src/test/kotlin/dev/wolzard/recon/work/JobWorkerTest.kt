@@ -36,3 +36,41 @@ class JobWorkerTest {
     private lateinit var db: ReconDb
     private lateinit var store: JobStore
     private val seenStates = mutableListOf<JobState>()
+    private var behaviour: suspend (String) -> Unit = { id -> store.update(id) { it.copy(state = JobState.DONE) } }
+    private val now = 1_000_000L
+
+    @Before fun setUp() {
+        WorkManagerTestInitHelper.initializeTestWorkManager(ctx)
+        db = Room.inMemoryDatabaseBuilder(ctx, ReconDb::class.java).allowMainThreadQueries().build()
+        store = RoomJobStore(db, clock = { now })
+        startKoin {
+            modules(module {
+                single { store }
+                single<JobRunner> { JobRunner { id, _ -> seenStates += store.get(id)!!.state; behaviour(id) } }
+                single { Notifier(ctx) }
+                single<() -> Long> { { now } }
+            })
+        }
+    }
+
+    @After fun tearDown() { stopKoin(); db.close() }
+
+    private fun worker(id: String, action: UserAction = UserAction.RUN) =
+        TestListenableWorkerBuilder<JobWorker>(ctx).setInputData(JobQueue.input(id, action)).build()
+
+    @Test fun jobLeftRunningIsResetToQueuedThenRunToDone() = runBlocking {
+        val id = store.create("https://youtu.be/x", null)
+        store.update(id) { it.copy(state = JobState.ANALYSING) }
+        val result = worker(id).doWork()
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertEquals(listOf(JobState.QUEUED), seenStates)
+        assertEquals(JobState.DONE, store.get(id)!!.state)
+    }
+
+    @Test fun runnerExceptionIsFailedUnknownAndWorkerFailure() = runBlocking {
+        val id = store.create("https://youtu.be/x", null)
+        behaviour = { throw IllegalStateException("boom") }
+        assertEquals(ListenableWorker.Result.failure(), worker(id).doWork())
+        val job = store.get(id)!!
+        assertEquals(JobState.FAILED, job.state)
+        assertEquals(FailureReason.UNKNOWN, job.failure)

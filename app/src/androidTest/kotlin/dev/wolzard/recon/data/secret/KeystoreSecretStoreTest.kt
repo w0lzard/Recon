@@ -22,3 +22,27 @@ class KeystoreSecretStoreTest {
 
     @Test fun roundTrip() {
         store.put(Secret.GEMINI_COOKIES, secret)
+        assertEquals(secret, store.get(Secret.GEMINI_COOKIES))
+        assertNull(store.get(Secret.GITHUB_TOKEN))
+    }
+
+    @Test fun putNullDeletes() {
+        store.put(Secret.GITHUB_TOKEN, "ghp_x")
+        store.put(Secret.GITHUB_TOKEN, null)
+        assertNull(store.get(Secret.GITHUB_TOKEN))
+        assertFalse(prefs.contains(Secret.GITHUB_TOKEN.name))
+    }
+
+    @Test fun storedValueIsNotPlaintext() {
+        store.put(Secret.GEMINI_COOKIES, secret)
+        val raw = prefs.getString(Secret.GEMINI_COOKIES.name, null)!!
+        assertFalse(raw.contains(secret))
+        assertFalse(raw.contains("AIza"))
+    }
+
+    @Test fun corruptedValueGivesNullAndIsDeleted() {
+        prefs.edit().putString(Secret.GEMINI_COOKIES.name, "bm90IGNpcGhlcnRleHQ=").commit()
+        assertNull(store.get(Secret.GEMINI_COOKIES))
+        assertFalse(prefs.contains(Secret.GEMINI_COOKIES.name))
+    }
+}

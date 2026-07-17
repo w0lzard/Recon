@@ -79,3 +79,43 @@ class ScreenshotsTest {
 
     @Test fun homeEmpty() = shot("home_empty") { HomeScreen(emptyList(), {}, {}) }
 
+    @Test fun jobDone() = shot("job_done") {
+        JobScreen(job(JobState.DONE), result(listOf(
+            finding(EntityType.BOOK, "Atomic Habits", Verdict.CONFIRMED, Basis.WIKIPEDIA, link = "https://en.wikipedia.org/wiki/Atomic_Habits"),
+            finding(EntityType.PLACE, "Hampi", Verdict.SUPPORTED, Basis.WEB_SOURCES, Evidence.INFERRED),
+        ), listOf(Source("Atomic Habits - Wikipedia", "https://en.wikipedia.org/wiki/Atomic_Habits"))), now) {}
+    }
+
+    @Test fun jobRunning() = shot("job_running") { JobScreen(job(JobState.ANALYSING), null, now) {} }
+
+    @Test fun unverified() = shot("job_unverified") {
+        JobScreen(job(JobState.DONE), result(listOf(finding(EntityType.PRODUCT, "Some gadget", Verdict.UNCLEAR, Basis.AI_KNOWLEDGE))), now) {}
+    }
+
+    @Test fun noEntity() = shot("job_no_entity") { JobScreen(job(JobState.DONE), result(emptyList()), now) {} }
+
+    @Test fun candidatePicker() = shot("job_candidates", scrollTo = "None of these") {
+        val repos = listOf(
+            GhRepo("example/fast-notes", "https://github.com/example/fast-notes", "Markdown notes app", 1200),
+            GhRepo("other/notes-fast", "https://github.com/other/notes-fast", null, 40),
+            GhRepo("third/fastnote", "https://github.com/third/fastnote", "CLI notes", 3),
+        )
+        JobScreen(job(JobState.DONE), result(listOf(finding(EntityType.REPO, "fast notes", Verdict.BEST_MATCH, Basis.GITHUB_API, Evidence.SPOKEN, candidates = repos))), now) {}
+    }
+
+    @Test fun quotaWaiting() = shot("job_quota_waiting") { JobScreen(job(JobState.WAITING_QUOTA, retryAt = now + 2 * 3_600_000), null, now) {} }
+
+    @Test fun signIn() {
+        val vm = SignInViewModel(koin.get()) {}
+        shot("sign_in") { SignInScreen(vm) {} }
+    }
+
+    @Test fun settings() {
+        val vm = SettingsViewModel(koin.get(), koin.get())
+        shot("settings") { SettingsScreen(vm) {} }
+    }
+
+    @Test fun notice() = shot("first_run_notice") { NoticeScreen {} }
+
+    private val koin get() = GlobalContext.get()
+}

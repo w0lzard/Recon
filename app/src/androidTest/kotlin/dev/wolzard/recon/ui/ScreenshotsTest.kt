@@ -1,0 +1,40 @@
+package dev.wolzard.recon.ui
+
+import android.graphics.Bitmap
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performScrollTo
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import dev.wolzard.recon.core.model.AnalysisResult
+import dev.wolzard.recon.core.model.Basis
+import dev.wolzard.recon.core.model.Entity
+import dev.wolzard.recon.core.model.EntityType
+import dev.wolzard.recon.core.model.Evidence
+import dev.wolzard.recon.core.model.Finding
+import dev.wolzard.recon.core.model.GhRepo
+import dev.wolzard.recon.core.model.Job
+import dev.wolzard.recon.core.model.JobResult
+import dev.wolzard.recon.core.model.JobState
+import dev.wolzard.recon.core.model.Source
+import dev.wolzard.recon.core.model.Verdict
+import dev.wolzard.recon.ui.home.HomeRow
+import dev.wolzard.recon.ui.home.HomeScreen
+import dev.wolzard.recon.ui.job.JobScreen
+import dev.wolzard.recon.ui.settings.SettingsScreen
+import dev.wolzard.recon.ui.settings.SettingsViewModel
+import dev.wolzard.recon.ui.setup.SignInScreen
+import dev.wolzard.recon.ui.setup.SignInViewModel
+import dev.wolzard.recon.ui.setup.NoticeScreen
+import dev.wolzard.recon.ui.theme.ReconTheme
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.koin.core.context.GlobalContext
+import java.io.File
+
+/**

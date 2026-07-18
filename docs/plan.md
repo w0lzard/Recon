@@ -130,3 +130,47 @@ Inputs and conditions no single task's happy-path tests cover but a real user wi
 | Quota | Per user, so it scales with users at no cost |
 | Users it can't serve | Under 18, or AI Studio unavailable in their region. They get a clear `REGION_UNSUPPORTED` message; there is no workaround. |
 
+**Guided key-setup screen (Task 5):**
+1. Plain-language explainer: "Recon uses Google's Gemini AI. Google gives you a free key. Recon stores it encrypted on this phone and only sends it to Google."
+2. Requirements: Google account, age 18+, a country where Google AI Studio is available.
+3. "Open Google AI Studio" opens `https://aistudio.google.com/apikey` in a Custom Tab.
+4. Instructions with screenshots: Create API key → Copy.
+5. On return, if the clipboard holds text matching `^AIza[0-9A-Za-z_-]{35}$`, offer "Paste key". Manual paste field always available.
+6. Validate with `GET v1beta/models` (1 cheap call). Show "Key works" or the specific error (invalid key, region not supported, network). Then run the grounding capability test (1 call, D20) and show whether web search is available. If it isn't, answers are labelled "Unverified, from AI knowledge".
+7. Notes shown once: free-tier usage may be used by Google to improve its products, and "use a key from a project without billing enabled, so you can never be charged".
+8. Billing note (no prices quoted): "Enabling billing on your own Google Cloud project raises these limits. You pay Google directly. See Google's pricing page." It links to `https://ai.google.dev/gemini-api/docs/pricing` in a Custom Tab. Recon never handles billing.
+9. After the key works: list models (`GET v1beta/models`) and store the ranked list (D11). Show **"Jobs left today"**. Each job takes ≤ 2 calls (D9), so the count is the sum over ranked models of `⌊(learned limit − used) / 2⌋`. It is shown only for models whose limit Google has reported in an error. Otherwise it reads "Jobs left today: not known yet (Google reports the limit when it's reached). Used today: N calls."
+
+---
+
+## Distribution (D15)
+
+Recon is distributed only as signed APKs on GitHub Releases and installed by sideloading. It is never published on Google Play.
+
+**Risks:**
+- **Platform terms.** Recon runs yt-dlp to download videos from Instagram, TikTok, X and others, and those platforms forbid automated downloading in their terms of service. Recon is positioned as a personal-use tool, and the first-run notice (T16) says so.
+- **Android developer verification.** Google is rolling out a requirement that apps installed on certified Android devices, sideloaded ones included, come from a verified developer, enforced region by region. The announced timeline started with a few countries in September 2026, with wider rollout from 2027. **India's status must be checked before the first public release** (R8, T17).
+- **Signing key loss.** Android only installs an update over an existing app if it is signed with the same key. Losing the keystore forces every user to uninstall, which wipes their history. Hence T14.
+
+**Plan:**
+1. **Release keystore** created once, backed up offline, and its certificate fingerprint published (T14).
+2. **Releases:** tag `vX.Y.Z` → GitHub Release with one APK per ABI, uploaded under the **exact AGP output names** `recon-X.Y.Z-arm64-v8a-release.apk` and `recon-X.Y.Z-armeabi-v7a-release.apk` (pattern `<archivesName>-<abi>-<buildType>.apk`, with `archivesName = recon-<versionName>`; never renamed by hand), plus `SHA256SUMS.txt` (T17). Without `keystore.properties` the name carries `-UNSIGNED-FOR-RELEASE` after the version, so it can't match the update check.
+3. **Update check** (T15): at most daily, the app asks the GitHub Releases API for the latest release. If it is newer, it shows a banner linking to the APK for the phone's ABI, which downloads in the browser. **In-app install is deferred**: it would need `REQUEST_INSTALL_PACKAGES`, a `PackageInstaller` session, and download handling, and the browser already does the job. Revisit if users report trouble updating. Obtainium works as an alternative with no extra code.
+4. **README install guide** for unknown sources (T17).
+5. **First-run personal-use notice** about platform terms (T16).
+6. **In-app mitigations:** YouTube links are never downloaded on the main path; they go to Gemini as a URL. Downloaded media is deleted after analysis.
+7. **yt-dlp self-update at app start stays** (T7). It is what keeps downloads working between Recon releases.
+8. **F-Droid: not targeted.** Runtime code download and the dependence on Google services would need anti-feature flags, and the build reproducibility of youtubedl-android's native Python is unverified.
+
+---
+
+## Target device profile and low-end gate (hard requirement)
+
+Low-end support is a hard requirement, not a provisional budget. The numbers below are initial targets, to be tuned once S3 has run, but the gate itself is not optional.
+
+**Target device profile:**
+
+| | Target |
+|---|---|
+| RAM | 3 GB total |
+| CPU | 2 cores minimum (AVD), typical low-end ARM SoC |

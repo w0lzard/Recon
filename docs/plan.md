@@ -263,3 +263,47 @@ sealed interface AnalysisInput {
     @SerialName("repo") REPO, @SerialName("app") APP, @SerialName("product") PRODUCT,
     @SerialName("book") BOOK, @SerialName("person") PERSON, @SerialName("place") PLACE,
     @SerialName("recipe") RECIPE, @SerialName("claim") CLAIM, @SerialName("other") OTHER,
+}
+@Serializable enum class Evidence {
+    @SerialName("spoken") SPOKEN, @SerialName("on-screen") ON_SCREEN, @SerialName("inferred") INFERRED
+}
+@Serializable data class Entity(
+    val type: EntityType,
+    val name: String,          // repo: repo name; claim: the claim as one sentence
+    val qualifier: String?,    // repo: owner; book: author; product/app: brand/developer; place: city/country; else null
+    val evidence: Evidence,
+    val saidInVideo: String,   // one sentence: what the video says about it (device language)
+)
+
+// model/AnalysisResult.kt — exactly the model JSON contract
+@Serializable data class AnalysisResult(
+    val entities: List<Entity> = emptyList(),   // most important first, ≤ 8
+    val summary: String,
+    val confidence: Double,                     // 0.0..1.0 that entities[0] is the video's main subject
+    val onScreenText: List<String> = emptyList(),
+)
+
+// model/Finding.kt
+enum class Verdict { CONFIRMED, BEST_MATCH, NOT_FOUND, NOT_CHECKED, SUPPORTED, DISPUTED, UNCLEAR }
+@Serializable data class Finding(
+    val entity: Entity,
+    val researcher: String,        // "github" | "wikipedia" | "web" | "knowledge" | "none"
+    val verdict: Verdict,          // claims use SUPPORTED/DISPUTED/UNCLEAR; others CONFIRMED/BEST_MATCH/NOT_FOUND/NOT_CHECKED
+    val title: String,             // canonical name found (repo: "owner/name")
+    val whatItIs: String,
+    val keyFacts: List<String>,    // ≤ 5
+    val howToTry: String,          // type-specific "next step"; may be ""
+    val whyInVideo: String,
+    val primaryLink: String?,      // API data only: GitHub html_url or Wikipedia page URL, or null
+    val stars: Int? = null,        // repos only
+    val basis: Basis,              // what the verdict rests on; drives the UI label
+    val candidates: List<GhRepo> = emptyList(),   // repos: 2–3 fuzzy GitHub matches for the user to pick (T9); empty otherwise
+)
+enum class Basis { GITHUB_API, WIKIPEDIA, WEB_SOURCES, AI_KNOWLEDGE /* "Unverified, from AI knowledge" */, VIDEO_ONLY }
+@Serializable data class Source(val title: String, val uri: String)   // from groundingMetadata.groundingChunks[].web
+
+// model/JobResult.kt — persisted as JSON in JobEntity.resultJson
+@Serializable data class JobResult(
+    val analysis: AnalysisResult,
+    val findings: List<Finding>,
+    val sources: List<Source>,             // per job (D17)

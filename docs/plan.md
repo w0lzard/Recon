@@ -174,3 +174,48 @@ Low-end support is a hard requirement, not a provisional budget. The numbers bel
 |---|---|
 | RAM | 3 GB total |
 | CPU | 2 cores minimum (AVD), typical low-end ARM SoC |
+| Android | API 26 (Android 8.0) and up: `minSdk 26` |
+| ABIs | `armeabi-v7a` and `arm64-v8a` release APKs. An `x86_64` split is built for debug only, so the gate AVD can run natively; it is never released. |
+| Network | Assume slow mobile data: everything streams, nothing large is re-sent |
+
+**Download and processing policy:**
+1. yt-dlp format `b[height<=854][width<=854]/b[height<=1280][width<=1280]/w`. The long-edge cap means ≈ 480p in either orientation; `height` alone is the long edge on vertical video. The format is a muxed file at most 480p, falling back to 720p, then the smallest muxed file. YouTube has no muxed formats, so see the pre-spike findings for the YouTube fallback. No merging, so no ffmpeg (D5). For the YouTube download fallback, video is picked h264 first (`[vcodec^=avc1]`) and never AV1, which API 26 can't decode. 720p is used only through the user-triggered "Try sharper video" (D21).
+2. YouTube URLs are sent straight to Gemini as a URL, with no download. Download is only the fallback when the URL route fails.
+3. One job at a time (D6).
+4. Uploads stream from disk with a file-backed `RequestBody`. No whole-file byte arrays.
+5. Frames: one `Bitmap` alive at a time. Each is recycled right after its dHash and JPEG are written. On API 26 (no `getScaledFrameAtTime`), the full frame from `getFrameAtTime` is scaled, then the source is recycled before the next frame. That is ~8 MB peak per 1080p frame.
+6. Temp files are cleaned up on every exit path:
+   - `RunJob` deletes `cacheDir/jobs/<id>/` in a `finally` block, so DONE, FAILED and cancellation are all covered.
+   - The `JobWorker` startup sweep deletes job dirs left behind by process death (T12).
+   - Retry re-downloads link jobs. Shared-file jobs are told "Share the file again", since the copy is gone.
+
+**Low-end gate (part of M1 exit, measured on the release build):**
+
+| Check | Target | How |
+|---|---|---|
+| Peak memory during a job (release build, full pipeline incl. Gemini upload; the S3 AVD 93 MB is a debug, R8-off, no-Gemini **lower bound**) | ≤ ~300 MB total PSS, app process **plus** the yt-dlp Python child process (separate PID, same UID) | `spikes/meminfo.sh` samples `adb shell dumpsys meminfo <pid>` for both PIDs every 1 s through a full job and records the max of the sum |
+| APK size | Recorded per ABI (arm64-v8a, armeabi-v7a). The budget is set from S3 + 5 MB (H7). | `ls -l` of release outputs, in Perf results |
+| Successful job on the AVD | 30 s IG reel and a YouTube Short both reach DONE | AVD: API 26, x86_64 image, 3 GB RAM (`hw.ramSize=3072`), 2 cores (`hw.cpu.ncore=2`), debug x86_64 split with R8 enabled (`minifyEnabled` in a `benchmark`-style build type) |
+| Successful job on a real ≤ 3 GB phone | Same two jobs reach DONE | **Required.** The gate stays open until a physical phone with ≤ 3 GB RAM has run a job. AVD results are emulator, indicative only. |
+| No OOM / ANR | 10 consecutive jobs on the AVD | logcat check |
+
+**Spike device:** Nothing Phone (2), used to check function only. All its numbers are labelled **high-end, not representative**. Low-end numbers come from the gate AVD and any real ≤ 3 GB phone.
+
+---
+
+## Gradle module layout
+
+```
+Recon/
+├── settings.gradle.kts            include(":core", ":app")
+├── gradle/libs.versions.toml
+├── core/                          kotlin("jvm") — no Android deps, fast JVM tests
+│   └── src/main/kotlin/dev/wolzard/recon/core/
+│       ├── model/                 AnalysisInput, AnalysisResult, Entity, EntityType, Evidence,
+│       │                          Finding, Verdict, Source, JobState, FailureReason, JobResult
+│       ├── port/                  VideoAnalyzer, LanguageModel, Researcher, MediaFetcher,
+│       │                          FrameSampler, GitHubClient, JobStore, SecretStore, LinkResolver
+│       ├── link/LinkRouter.kt     extractUrl + classify (pure)
+│       ├── json/ResultParser.kt   lenient parse + validation of model JSON
+│       ├── prompt/Prompts.kt      prompt text + JSON schemas
+│       ├── research/ResearchChain.kt, GitHubResearcher.kt, WebSearchResearcher.kt

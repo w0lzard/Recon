@@ -307,3 +307,47 @@ enum class Basis { GITHUB_API, WIKIPEDIA, WEB_SOURCES, AI_KNOWLEDGE /* "Unverifi
     val analysis: AnalysisResult,
     val findings: List<Finding>,
     val sources: List<Source>,             // per job (D17)
+    val searchSuggestionsHtml: String?,    // groundingMetadata.searchEntryPoint.renderedContent
+    val path: String,                      // "youtube-url" | "A" | "B"
+    val models: Map<String, String> = emptyMap(),   // "analyse"/"research" → model id that answered (shown in UI)
+    val degraded: Map<String, Long?>,      // researcher id or "budget" → retryAt epoch ms (null = unknown), e.g. {"knowledge": 1759...}
+)
+
+// model/JobState.kt
+enum class JobState { QUEUED, WAITING_QUOTA, DOWNLOADING, ANALYSING, RESEARCHING, DONE, FAILED }
+enum class FailureReason {
+    UNSUPPORTED_LINK, DOWNLOAD_FAILED, VIDEO_UNREADABLE, QUOTA_EXCEEDED,
+    API_KEY_MISSING, API_KEY_INVALID, REGION_UNSUPPORTED, NETWORK, MODEL_OUTPUT_INVALID, MODEL_BUSY, UNKNOWN,
+}
+```
+
+`WAITING_QUOTA`: no attempt is made while every model's quota is known to be used up. The job waits until the earliest stored `retryAt`, then runs once. `MODEL_BUSY` means both models returned 503 for the same call. `VERIFYING` is renamed `RESEARCHING` because it now covers web research as well. `NEEDS_RELOGIN` is removed along with the web backend (D4).
+
+**Room `JobEntity`:** `id: String (UUID)`, `sharedText: String`, `url: String?`, `localUri: String?`, `state: JobState`, `failure: FailureReason?`, `failureDetail: String?`, `retryAtEpochMs: Long?`, `progress: Float?`, `analysisJson: String?`, `resultJson: String?`, `createdAt: Long`, `updatedAt: Long`.
+`JobStore` port: `observeAll(): Flow<List<Job>>`, `observe(id): Flow<Job?>`, `get(id): Job?`, `create(sharedText: String, localUri: String?): String`, `update(id: String, transform: (Job) -> Job)`, `findRunning(): List<Job>`.
+
+---
+
+## Ports (interfaces in `:core`)
+
+```kotlin
+interface VideoAnalyzer {
+    val supportsYouTubeUrl: Boolean
+    /** One logical call (D9). @throws AnalyzerException */
+    suspend fun analyze(input: AnalysisInput, language: String): Analysis
+}
+data class Analysis(val result: AnalysisResult, val model: String)   // model = the one that answered (JobResult.models)
+
+interface LanguageModel {
+    /** @param schema JSON schema sent as responseSchema; null = none. @throws AnalyzerException */
+    suspend fun generate(prompt: String, schema: String?, googleSearch: Boolean): ModelAnswer
+}
+data class ModelAnswer(val text: String, val sources: List<Source>, val searchSuggestionsHtml: String?, val model: String)
+class GroundingUnavailable : Exception()   // D20 signature on a grounded call
+
+class AnalyzerException(
+    val reason: FailureReason, val retryAtEpochMs: Long? = null,
+    message: String? = null, cause: Throwable? = null,
+) : Exception(message, cause)
+
+interface Researcher {

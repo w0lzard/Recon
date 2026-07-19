@@ -219,3 +219,47 @@ Recon/
 │       ├── json/ResultParser.kt   lenient parse + validation of model JSON
 │       ├── prompt/Prompts.kt      prompt text + JSON schemas
 │       ├── research/ResearchChain.kt, GitHubResearcher.kt, WebSearchResearcher.kt
+│       └── job/RunJob.kt          the pipeline (state transitions, A→B fallback, error mapping)
+└── app/                           com.android.application
+    └── src/main/kotlin/dev/wolzard/recon/
+        ├── ReconApp.kt            Application: Koin, yt-dlp init, update work
+        ├── MainActivity.kt        single activity, share intents, NavHost
+        ├── di/AppModule.kt
+        ├── data/
+        │   ├── db/                ReconDb, JobEntity, JobDao, RoomJobStore
+        │   ├── secret/KeystoreSecretStore.kt
+        │   ├── gemini/GeminiApiBackend.kt (VideoAnalyzer + LanguageModel), GeminiFiles.kt, GeminiErrors.kt
+        │   ├── github/OkHttpGitHubClient.kt
+        │   ├── media/YtDlpFetcher.kt, ContentUriFetcher.kt, AndroidFrameSampler.kt, DHash.kt
+        │   └── link/OkHttpLinkResolver.kt
+        ├── work/JobWorker.kt, YtDlpUpdateWorker.kt, Notifier.kt
+        └── ui/
+            ├── theme/
+            ├── home/              history list
+            ├── job/               progress, findings, sources, failure actions, SearchSuggestions.kt
+            ├── setup/KeySetupScreen.kt, KeySetupViewModel.kt
+            └── settings/
+```
+
+The researchers live in `:core` because they depend only on ports (`GitHubClient`, `LanguageModel`), which keeps them JVM-testable with fakes.
+
+**Release config (`app/build.gradle.kts`):** `isMinifyEnabled = true`, `isShrinkResources = true`, `splits.abi { isEnable = true; reset(); include("arm64-v8a", "armeabi-v7a"); isUniversalApk = false }`, `packaging.jniLibs.useLegacyPackaging = true` (youtubedl-android extracts its native Python). Release signing from `keystore.properties` (git-ignored, created in T14). Without it, release builds fall back to the debug key and are named `*-UNSIGNED-FOR-RELEASE.apk`.
+
+---
+
+## Data models (`:core`)
+
+```kotlin
+// model/AnalysisInput.kt
+sealed interface AnalysisInput {
+    data class YouTubeUrl(val url: String) : AnalysisInput
+    data class VideoFile(val file: File, val mimeType: String) : AnalysisInput      // Path A
+    data class FramesAndAudio(val frames: List<Frame>, val audio: File?) : AnalysisInput  // Path B: ≤ 20 JPEGs ≤ 768 px, .m4a or null
+    data class Frame(val file: File, val timestampMs: Long)
+}
+
+// model/Entity.kt
+@Serializable enum class EntityType {
+    @SerialName("repo") REPO, @SerialName("app") APP, @SerialName("product") PRODUCT,
+    @SerialName("book") BOOK, @SerialName("person") PERSON, @SerialName("place") PLACE,
+    @SerialName("recipe") RECIPE, @SerialName("claim") CLAIM, @SerialName("other") OTHER,

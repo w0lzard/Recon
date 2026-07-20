@@ -395,3 +395,47 @@ interface QuotaStore {
     fun status(model: String): ModelQuota                              // attempts since last reset, learned limit or null, retryAt or null
     fun available(model: String, now: Long): Boolean                   // false only while a learned retryAt is in the future
 }
+data class ModelQuota(val usedToday: Int, val limit: Long?, val retryAtEpochMs: Long?)
+enum class GroundingCapability { AVAILABLE, UNAVAILABLE, UNKNOWN }   // D20, stored in prefs
+enum class Secret { GEMINI_API_KEY, GITHUB_TOKEN }
+```
+
+`GeminiApiBackend` implements both `VideoAnalyzer` and `LanguageModel`. Tests use fakes as the second implementation.
+
+**Researchers** (D13). Only the last one makes an AI call.
+- `GitHubResearcher` accepts `REPO`. It makes **no AI call**.
+  - Owner known: `repo()` → `CONFIRMED`, `basis = GITHUB_API`.
+  - Otherwise (owner null or 404), it runs a **fuzzy search from the spoken name**:
+    - Tokens: split qualifier + name on `-_./ ` and on camelCase only when both halves have ≥ 3 chars (`LaTeX`, `HeJiansun` stay whole). Drop tokens < 3 chars.
+    - Queries: all tokens ANDed first. If that gives < 3 hits, one query with the tokens ORed, longest first, ≤ 5 terms. That is ≤ 2 `search()` calls per repo. GitHub search ANDs terms, so a single garbled token zeroes the full query (r2: `justinsun girlfriend jinchin latex` → 0). The OR query, checked against the live API on 2026-10-08, returns `HEJustinSun/my-girlfriend-jingtian-latex` first for **both** S2 garblings. The planned pair-of-3-longest-tokens rule would have missed the second garbling, because `latex` is not among its 3 longest tokens.
+    - Ranking: the union of hits is scored by similarity of `full_name` to `qualifier/name`, using normalised Levenshtein plus token overlap.
+  - Results:
+    - One exact case-insensitive name match → `BEST_MATCH` with link.
+    - Otherwise the top 2–3 above a minimum similarity → one finding with `verdict = BEST_MATCH`, `candidates` = those repos, and `primaryLink = null` until the user picks one in the UI (T13). Picking makes no AI call: it fills title, link, stars and description from `GhRepo`.
+    - No candidate → not returned, so it falls through.
+  - Resolved repos (≤ 3) get README excerpts (8,000 chars), which are handed to the AI researcher for the explanation text.
+  - `primaryLink` must start with `https://github.com/`. `GitHubRateLimited`/IOException → `ResearchUnavailable(resetEpochMs)`.
+- `WikipediaResearcher` (was H4, now MVP) makes **no AI call**.
+  - Accepts `PERSON, PLACE, BOOK, PRODUCT, APP, OTHER`. Never claims or recipes.
+  - Keyless REST in the device language with English fallback: `/w/rest.php/v1/search/page?q=<qualifier name>&limit=3`, then `/api/rest_v1/page/summary/{title}`.
+  - Title equal (case-insensitive, ignoring parenthesised disambiguators) and qualifier found in the extract → `CONFIRMED`. Close title → `BEST_MATCH`. Disambiguation pages and no hit → not returned.
+  - Finding: `whatItIs` = the first two sentences of the extract, `primaryLink` = `content_urls.mobile.page` (must be `https://*.wikipedia.org/`), `basis = WIKIPEDIA`.
+  - The AI researcher may still add `howToTry`/`whyInVideo` text for these. Their verdict and link stay from Wikipedia.
+- AI researcher: exactly one of the two below, picked by `GroundingCapability` (D20). It makes **one** `generate(...)` call for up to 6 entities: everything unresolved, plus text-only items for resolved repos and Wikipedia hits. Per-item JSON is keyed by `index` (D16). `QUOTA_EXCEEDED`/`NETWORK`/`MODEL_BUSY` → `ResearchUnavailable`.
+  - `KnowledgeResearcher` (**default**): `generate(Prompts.knowledge(ctx, items), schema = null, googleSearch = false)`. Verdict cap: non-claims → `BEST_MATCH` or `NOT_FOUND`; claims → `UNCLEAR` only, and `whatItIs` says what the evidence is generally understood to show. `basis = AI_KNOWLEDGE`, no links, no sources.
+  - `WebSearchResearcher` (optional, only when `AVAILABLE`): `generate(Prompts.research(ctx, items), schema = null, googleSearch = true)`. Verdicts as before. `CONFIRMED`/`SUPPORTED` need ≥ 1 source. Sources and the suggestions HTML come from grounding metadata only. `basis = WEB_SOURCES`. A response with the `UNAVAILABLE` signature sets the capability to `UNAVAILABLE` and throws `ResearchUnavailable(null)`.
+- `ResearchChain.run(entities, ctx, budgetLeft: Boolean): ResearchOutcome(findings, sources, searchSuggestionsHtml, degraded)`:
+  - Takes `entities.take(6)` and runs the keyless researchers in order, passing the remaining accepted entities. When `budgetLeft`, it then runs the AI researcher once. Without budget, AI-only items get `degraded["budget"]`.
+  - `ResearchUnavailable` is caught into `degraded[id] = retryAt`.
+  - Leftovers become `Finding(verdict = NOT_CHECKED, researcher = "none", basis = VIDEO_ONLY, title = name, whatItIs = saidInVideo, …)`.
+  - Findings come out in the original entity order.
+
+**Pipeline (`RunJob`)**:
+
+```
+budget = CallBudget(max = 2)                     (D9; a new budget per user action)
+all models quota-reached (QuotaStore)?   → WAITING_QUOTA until earliest retryAt, then run once
+analysisJson present (Retry after research problem)? → skip to RESEARCHING
+route(sharedText/localUri)
+ ├─ no URL & no file                      → FAILED(UNSUPPORTED_LINK)
+ ├─ YouTube & analyzer.supportsYouTubeUrl → ANALYSING: analyze(YouTubeUrl)

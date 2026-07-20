@@ -439,3 +439,47 @@ analysisJson present (Retry after research problem)? → skip to RESEARCHING
 route(sharedText/localUri)
  ├─ no URL & no file                      → FAILED(UNSUPPORTED_LINK)
  ├─ YouTube & analyzer.supportsYouTubeUrl → ANALYSING: analyze(YouTubeUrl)
+ │      └─ on failure (not QUOTA/KEY/REGION) → download path
+ └─ else → DOWNLOADING: fetch() → ANALYSING:
+         ├─ Path A if file ≤ 50 MB: analyze(VideoFile), 150 s timeout
+         └─ Path B on A failure/timeout/oversize (not QUOTA/KEY/REGION/BUSY): sample() → 0 frames? one other-format re-download (T7/T8) → analyze(FramesAndAudio), 120 s timeout
+       (each analyze() = 1 call from budget; primary model, fallback model once on 503)
+save analysisJson
+→ entities empty → DONE (valid "nothing to look up", no research call)
+→ RESEARCHING: ResearchChain.run(entities, ctx, budgetLeft = budget.remaining > 0)
+→ DONE(JobResult)
+```
+
+QUOTA, key and region failures are not retried on another path because the second path would hit the same wall. A 429 on the primary model marks it reached in `QuotaStore`; the same call is then sent once to the fallback model only if that model is still `available`. This is a model switch, not a retry, and it uses the same budget slot. Research problems never fail a job. They mark it `degraded`, and the UI offers "Check again" which re-runs from RESEARCHING using the saved `analysisJson`.
+
+---
+
+## State machine
+
+```
+QUEUED ──► DOWNLOADING ──► ANALYSING ──► RESEARCHING ──► DONE
+   │            │              │              │
+   └────────────┴──────────────┴──────────────┴──► FAILED(reason)
+
+QUEUED ──► WAITING_QUOTA ──► QUEUED   every model's quota reached; resumes once at retryAt
+QUEUED ──► ANALYSING              YouTube-URL route
+QUEUED ──► RESEARCHING            analysisJson already saved
+User "Retry" on FAILED, "Check again"/"Look up" on a degraded DONE, or "Try sharper video" (D21) ──► QUEUED (same id; link jobs re-download, shared-file jobs ask to share again)
+```
+
+Rules:
+- Only `RunJob` writes `state`. The UI only reads it.
+- `JobWorker` start: any job Room shows in DOWNLOADING/ANALYSING/RESEARCHING (a previous run died) is reset to QUEUED and run again.
+- Uncaught exception → FAILED(UNKNOWN) with the exception class in `failureDetail`. A job is never left in a running state.
+- Working dir is `cacheDir/jobs/<id>/`. It is deleted in `RunJob`'s `finally` on every exit path (DONE, FAILED, cancellation). Dirs orphaned by process death are swept at `JobWorker` start (T12).
+
+**Failure table** (message + action is the UI contract, Task 13):
+
+| Reason | Source | Message | Action |
+|---|---|---|---|
+| `UNSUPPORTED_LINK` | no URL in share | "Recon couldn't find a link in what you shared." | — |
+| `DOWNLOAD_FAILED` | yt-dlp error / private / login needed | "Couldn't download this video (it may be private or need login)." | "Share the video file instead" (help sheet), Retry |
+| `VIDEO_UNREADABLE` | sampler can't decode | "This video file couldn't be read." | Share a different file |
+| `QUOTA_EXCEEDED` | Gemini 429 during analysis on both models (rare: normally the job waits in `WAITING_QUOTA` instead) | "Your free Gemini quota is used up. Try again after HH:MM." (time from `RetryInfo`; "later today" if unknown) | Retry (enabled after `retryAt`) |
+| `API_KEY_MISSING` | no key | "Set up your free Gemini key to start." | Set up key |
+| `API_KEY_INVALID` | 400 API_KEY_INVALID / 403 | "Your Gemini key isn't working." | Set up key |

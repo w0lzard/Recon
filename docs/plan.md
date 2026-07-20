@@ -483,3 +483,48 @@ Rules:
 | `QUOTA_EXCEEDED` | Gemini 429 during analysis on both models (rare: normally the job waits in `WAITING_QUOTA` instead) | "Your free Gemini quota is used up. Try again after HH:MM." (time from `RetryInfo`; "later today" if unknown) | Retry (enabled after `retryAt`) |
 | `API_KEY_MISSING` | no key | "Set up your free Gemini key to start." | Set up key |
 | `API_KEY_INVALID` | 400 API_KEY_INVALID / 403 | "Your Gemini key isn't working." | Set up key |
+| `REGION_UNSUPPORTED` | 400 FAILED_PRECONDITION "User location is not supported" | "Google's free Gemini API isn't available in your region." | Learn more (README section) |
+| `NETWORK` | IOException, timeouts after both paths | "No connection or the request timed out." | Retry |
+| `MODEL_OUTPUT_INVALID` | JSON unusable (not re-asked, D9) | "The AI gave an unreadable answer." | Retry |
+| `MODEL_BUSY` | 503 on the primary model and then on the fallback model | "Google's AI is busy right now. Try again in a few minutes." | Retry |
+| `UNKNOWN` | anything else | "Something went wrong (detail)." | Retry |
+
+**Quota display (T5, T13):** Home, key setup and Settings show **"Jobs left today: J"** (derived as in Access model step 9, only from learned limits), plus per model "AI calls used today: N" and "of L" once L has been learned from an error, and "resets at HH:MM" when known. The job screen shows which model answered (`JobResult.models`). When every model is reached, Home shows a **"Daily AI quota reached, new videos will wait until HH:MM"** banner and new jobs go to `WAITING_QUOTA`. No number is shown that Google did not report.
+
+**Degraded banners on DONE** (job succeeds, research partial):
+
+| Degraded | Banner | Action |
+|---|---|---|
+| `knowledge` / `web` | "Couldn't look things up (quota, busy or connection). Items show only what the video said." + "after HH:MM" if known | Check again |
+| `budget` | "Analysis needed a second try, so lookups were skipped to save your free quota." | Look up (re-runs research only, 1 call) |
+| `wikipedia` | none; silent (the AI researcher covers it) | — |
+| `github` | "GitHub limit reached. Repos were looked up on the web instead (or not checked)." | Add GitHub token (Settings), Check again |
+
+---
+
+## Prompts and JSON schemas (`core/prompt/Prompts.kt`)
+
+### Analyse prompt — `Prompts.analyze(language)`
+
+```text
+You are analysing a short social-media video for a viewer who wants to know what it is about and to look up the specific things it mentions.
+
+Use BOTH sources together: what is said aloud (speech, voice-over) and what is shown (on-screen text, captions, code, product shots, labels, maps, browser tabs, logos).
+
+The input is either the full video, or frames taken about every 2 seconds in chronological order plus the audio track.
+
+Return:
+1. entities — the specific things a viewer might want to look up, most important first, at most 8. Each has:
+   - type: one of repo, app, product, book, person, place, recipe, claim, other.
+     repo = a code repository (GitHub etc.); app = software or website; product = physical or commercial product;
+     claim = a factual assertion the video presents as true (health, science, money, history, news) that a viewer could check.
+   - name: the exact name. For repo, the repository name only. For claim, the claim restated as one neutral sentence.
+   - qualifier: what disambiguates it — repo: owner (as in github.com/<owner>/<name>); book: author; app/product: maker or brand; place: city and country. null if unknown. Never invent one.
+   - evidence: "on-screen" if the name is visibly shown, "spoken" if said aloud but not shown, "inferred" if you deduce it from a description, logo or appearance.
+   - saidInVideo: one sentence on what the video says about it.
+   Skip generic things (e.g. "a phone", "coffee") unless the video is specifically about them.
+   An empty list is a correct, complete answer. Return an empty list if nothing specific is mentioned, or if you are not sure an item is really named or shown in the video. Do not guess an entity from a character, toy or style alone.
+2. summary — 2 to 4 sentences: what the video is about and what it claims.
+3. confidence — 0.0 to 1.0: how sure you are that the first entity is the video's main subject. 0.0 if there are no entities.
+4. onScreenText — up to 20 short verbatim snippets of relevant on-screen text (names, URLs, commands, captions, prices). Keep the original language. Skip decorative text.
+

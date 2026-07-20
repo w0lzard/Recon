@@ -351,3 +351,47 @@ class AnalyzerException(
 ) : Exception(message, cause)
 
 interface Researcher {
+    val id: String                                   // "github" | "wikipedia" | "web" | "knowledge"
+    fun accepts(type: EntityType): Boolean
+    /**
+     * Returns findings only for entities it resolved; the rest pass to the next researcher.
+     * @throws ResearchUnavailable when it can't run at all (quota, rate limit, offline).
+     */
+    suspend fun research(entities: List<Entity>, ctx: ResearchContext): ResearchOutput
+}
+data class ResearchContext(val summary: String, val language: String)
+data class ResearchOutput(val findings: List<Finding>, val sources: List<Source> = emptyList(), val searchSuggestionsHtml: String? = null)
+class ResearchUnavailable(val retryAtEpochMs: Long?, cause: Throwable? = null) : Exception(cause)
+
+interface MediaFetcher {                              // YtDlpFetcher, ContentUriFetcher
+    /** Streams media into [destDir]. @throws AnalyzerException(DOWNLOAD_FAILED|NETWORK) */
+    suspend fun fetch(source: String, destDir: File, onProgress: (Float) -> Unit): File
+}
+
+interface FrameSampler {
+    /** ≤ 20 frames every max(2 s, duration/20), near-duplicates skipped, + audio track copy. */
+    suspend fun sample(video: File, outDir: File): AnalysisInput.FramesAndAudio
+}
+
+interface LinkResolver { suspend fun resolve(url: String): String }
+
+interface GitHubClient {
+    suspend fun repo(owner: String, name: String): GhRepo?      // null = 404. @throws GitHubRateLimited, IOException
+    suspend fun readme(owner: String, name: String): String?
+    suspend fun search(query: String): List<GhRepo>               // `q=<query> in:name`, ≤ 10 results
+}
+@Serializable data class GhRepo(
+    @SerialName("full_name") val fullName: String, @SerialName("html_url") val htmlUrl: String,
+    val description: String?, @SerialName("stargazers_count") val stars: Int,
+)
+class GitHubRateLimited(val resetEpochMs: Long) : Exception()
+
+interface SecretStore { fun get(key: Secret): String?; fun put(key: Secret, value: String?) }
+
+/** Per-model quota knowledge, learned only from errors and local counting (D9). Persisted in prefs `quota`. */
+interface QuotaStore {
+    fun recordAttempt(model: String)                                   // every HTTP attempt, incl. 503s (they count on the free tier)
+    fun recordLimit(model: String, limit: Long?, retryAtEpochMs: Long?) // from a 429 with QuotaFailure/RetryInfo
+    fun status(model: String): ModelQuota                              // attempts since last reset, learned limit or null, retryAt or null
+    fun available(model: String, now: Long): Boolean                   // false only while a learned retryAt is in the future
+}

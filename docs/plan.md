@@ -660,3 +660,47 @@ Respond only with a JSON object exactly in this shape, no other text:
 |---|---|---|
 | **yt-dlp** (youtubedl-android) | Extractor broken by a site change | `YtDlpUpdateWorker` updates at app start (network-constrained, ≤ once per 24 h, non-blocking). If the update fails, the bundled version is used. |
 | | Login needed (Instagram often) / private | `DOWNLOAD_FAILED` → "Share the video file instead". The `video/*` share path bypasses yt-dlp. |
+| | Native Python fails to init on a device | Link shares get `DOWNLOAD_FAILED` with the file-share action. YouTube URL route still works. |
+| **Gemini API** (analysis) | Quota (429) | Mark the model reached in `QuotaStore` (limit from `QuotaFailure`, `retryAt` from `RetryInfo`), switch once to the fallback model if it is available, else `QUOTA_EXCEEDED`. Later jobs go to `WAITING_QUOTA`. |
+| | 503 overloaded (S2: 16/21 on 3.6-flash) | One attempt on `FALLBACK_MODEL`, then `MODEL_BUSY`. No backoff loop. |
+| | Key missing/invalid | Key-setup screen |
+| | Region unsupported | `REGION_UNSUPPORTED` message. No in-app workaround (BYOK only). |
+| | Path A upload/processing fails or times out | Automatic Path B |
+| | YouTube URL rejected (private, age-gated, daily YouTube limit) | Download via yt-dlp → Path A → Path B |
+| | Model deprecated (404 "no longer available to new users") | `PRIMARY_MODEL`/`FALLBACK_MODEL` constants (D11). Re-run the S2 model listing. |
+| **Google Search grounding** (optional researcher, D20) | Unavailable on the free tier (S1 + diagnostic: zero grounding quota) | Default is `KnowledgeResearcher` + `WikipediaResearcher`. Grounded research is used only after a successful capability test. A runtime `UNAVAILABLE` signature switches the key back to knowledge for later jobs. |
+| | Quota / network | Job DONE, `degraded["web"]`, "Check again". |
+| **Gemini knowledge research** (default researcher) | Quota / busy / network | Job DONE with GitHub/Wikipedia findings kept, the rest `NOT_CHECKED`, `degraded["knowledge"]`, "Check again". |
+| **Wikipedia REST** | Offline / no hit / disambiguation page | Not returned; falls through to the AI researcher. No banner. |
+| | `responseSchema` + `google_search` not supported together | Prompt-embedded shape + lenient parser (D16) |
+| | No grounding metadata returned | Findings shown without sources, and the verdict is shown as "Not checked" rather than a confirmed one: `CONFIRMED`/`SUPPORTED` require at least one source, otherwise they are downgraded to `BEST_MATCH`/`UNCLEAR`. |
+| **GitHub REST** | 60 req/h limit | Optional token → 5,000/h. On rate limit → `ResearchUnavailable` → repos fall through to web search. |
+| | Repo 404, owner unknown, or garbled spoken name | Fuzzy token-subset search (≤ 4 queries): exact name → BEST_MATCH; otherwise the top 2–3 candidates for the user to pick; none → falls through. |
+| | Offline | Falls through to web (likely also offline) → NOT_CHECKED |
+| | README missing | Explain from description only |
+| **GitHub Releases** (distribution) | Repo/account unavailable | Release APKs are also attached to tags and can be mirrored. Out of scope beyond keeping the signing key backed up. |
+
+Budget per job: AI calls ≤ 2 (D9), each with ≤ 2 HTTP attempts (primary, then fallback on 503). GitHub calls ≤ 3 × (repo + readme) + 2 searches per unresolved repo. Unauthenticated search is limited to 10/min; on a rate limit → `ResearchUnavailable`. Wikipedia: ≤ 2 requests per entity.
+
+---
+
+## Milestones
+
+### M0 — Spikes (timeboxed, throwaway, results recorded below)
+
+| Spike | Timebox | Order |
+|---|---|---|
+| S2 Path A vs B via Gemini API, now with general entities + 10-reel hit rate | 3 h, laptop + curl | 1st |
+| S1 Google Search grounding as researcher, resolution hit rate on the same 10 | 2 h, laptop + curl | 2nd (needs S2's model id and entities) |
+| S3 youtubedl-android on a real device | 3 h, throwaway app on `spike/ytdlp` | 3rd |
+
+**S2 — Path A vs Path B for one 30 s reel**
+- Test inputs: (r1) a reel showing a GitHub URL on screen, (r2) a reel naming a repo aloud only, (r3) a YouTube Short URL, (r4) a recipe or product reel, (r5) a non-English reel (e.g. Hindi) that makes a health claim.
+- Path A: Files API resumable upload → poll `ACTIVE` → `generateContent` with the analyse prompt + schema. Path B: `ffmpeg -i r.mp4 -vf "fps=1/2,scale=768:-2" f_%02d.jpg` and `ffmpeg -i r.mp4 -vn -c:a copy a.m4a`, with frames as `inline_data` and audio via the Files API. YouTube: `file_data.file_uri = <URL>`.
+- **Pass (per path):**
+  - r1/r2: the correct repo is entity #1 with the right owner/name.
+  - r4: the dish or product is entity #1, with the right type.
+  - r5: the claim is extracted as type `claim`, and the summary is in the requested language.
+  - All inputs: schema-valid JSON, wall time < 60 s.
+- **Hit-rate set (10 mixed reels):** `spikes/inputs/manifest.tsv` with columns `id, source (ig/yt/tiktok/x), url, expected_type, expected_entity, notes`. It holds r1–r5 plus 5 more, covering at least repo ×2, app/product ×2, recipe, place, book or person, claim ×2, and one reel with nothing specific (expected empty). `expected_entity` is the ground truth labelled by the owner before running.
+  - **Extraction hit (S2):** the expected entity appears in `entities` with the right type and a name or qualifier that unambiguously identifies it. An empty-expected reel hits if it returns no entities or only `other` ones.

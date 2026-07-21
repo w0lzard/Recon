@@ -704,3 +704,47 @@ Budget per job: AI calls ≤ 2 (D9), each with ≤ 2 HTTP attempts (primary, the
   - All inputs: schema-valid JSON, wall time < 60 s.
 - **Hit-rate set (10 mixed reels):** `spikes/inputs/manifest.tsv` with columns `id, source (ig/yt/tiktok/x), url, expected_type, expected_entity, notes`. It holds r1–r5 plus 5 more, covering at least repo ×2, app/product ×2, recipe, place, book or person, claim ×2, and one reel with nothing specific (expected empty). `expected_entity` is the ground truth labelled by the owner before running.
   - **Extraction hit (S2):** the expected entity appears in `entities` with the right type and a name or qualifier that unambiguously identifies it. An empty-expected reel hits if it returns no entities or only `other` ones.
+  - **Resolution hit (S1):** the finding for that entity has the correct title, a `CONFIRMED`/`BEST_MATCH` verdict (claims: a verdict a reasonable reader would accept from the sources), and ≥ 1 relevant source.
+  - **Targets:** extraction ≥ 8/10 on the better path, resolution ≥ 7/10. Below target → revise the prompts and rerun once, then record and report.
+- Outcome sets the default path order. If B passes and A fails, Path B becomes primary (edit Pipeline first).
+- **480p readability check:** for r1 (URL on screen) and every reel with on-screen names, run Path A on the ≤ 480p download, and also on a 720p version where the source has one. Compare `onScreenText` and the extracted entity. Pass = the same entity identified at 480p, with the URL/name text matching the 720p read. If 480p loses the text, record which reels. The fix is either 720p for Path A only, or Path B frames at 768 px from a 720p source; the decision goes in D5 and the policy section.
+- Record: model id (D11), latency, tokens (`usageMetadata`), correctness per input, 480p vs 720p text match.
+
+**S1 — Google Search grounding as researcher** (replaces the old Gemini-web spike, D4)
+- Feed S2's entities for r1, r4 and r5 into the web research prompt with `tools: [{google_search: {}}]`, using a free-tier key from the throwaway account.
+- Try once with `responseSchema` set and once without (D16).
+- **Pass:**
+  - The free tier allows grounded calls, and the daily limit is recorded.
+  - The response includes `groundingMetadata.groundingChunks` with web URIs and `searchEntryPoint.renderedContent`.
+  - The r5 health claim comes back `disputed` or `unclear` with sources.
+  - The recipe returns ingredients.
+  - The JSON parses with the lenient rules.
+- **Fail:** grounding unavailable on the free tier. Then the default researcher becomes ungrounded model knowledge, with all verdicts capped at `BEST_MATCH`/`UNCLEAR` and labelled "From AI knowledge, not checked online", and H4 (Wikipedia) moves into the MVP. Edit D13 and the fallback table before Task 10.
+- Record: grounded free-tier RPD/RPM, whether `responseSchema` + tool works, source URI format (redirect links?), latency, tokens.
+
+**S3 — youtubedl-android on a real device**
+- Throwaway app with `io.github.junkfood02.youtubedl-android:library` (maintained fork; check Maven Central for current coordinates), `useLegacyPackaging = true`, ABI splits, no ffmpeg artifact. Run `init` → `updateYoutubeDL(STABLE)` → `-f "b[height<=854][width<=854]/b[height<=1280][width<=1280]/w" -o <cacheDir>/%(id)s.%(ext)s --no-playlist` for a public Instagram reel and a YouTube Short.
+- Devices: Nothing Phone (2) for function (numbers labelled **high-end, not representative**), then the gate AVD (API 26, 3 GB, 2 cores, x86_64 debug split) for low-end numbers.
+- **armeabi-v7a check:** check `adb shell getprop ro.product.cpu.abilist32`. If the phone supports 32-bit, install the v7a APK with `adb install --abi armeabi-v7a` and repeat both downloads. If not (or for a second data point), note it and rely on the APK-size number, then validate on a real 32-bit phone before release.
+- **Cost to record:** APK size per ABI with and without youtubedl-android (an empty-app baseline from the same project), and RAM PSS of the app process plus the Python child during a download (`spikes/meminfo.sh`).
+- **Pass:** both download in < 60 s on Wi-Fi and play with audio, on arm64 and on armeabi-v7a (or v7a recorded as not testable on the phone). App + Python child PSS peak ≤ ~300 MB on the AVD.
+- **Fail (IG):** file-share becomes the documented primary path for IG, and evaluate H6. **Fail (needs merge):** revisit D5 and record the ffmpeg APK delta.
+- Record: release APK size per ABI (and the youtubedl-android delta), init time, update success, download times, format and resolution picked, PSS peak (app + child) per device, labelled high-end/AVD.
+
+### M1 — MVP (v1, sideload)
+
+Tasks 1–17. Exit criteria on the release build: function on the Nothing Phone (2); the low-end gate (Exit 9) on the gate AVD and a real ≤ 3 GB phone (required).
+- Exit 1: a fresh install goes through key setup.
+- Exit 2: an IG repo reel gives a confirmed GitHub card.
+- Exit 3: a recipe reel gives an ingredients card labelled "Unverified, from AI knowledge" (default). With a key whose capability test is `AVAILABLE`, it instead shows sources and the Search Suggestions widget.
+- Exit 4: a claim reel (r9) gives an `Unclear` verdict labelled "Unverified, from AI knowledge" and never "Supported"/"Confirmed". With grounding available it gives Disputed/Unclear with sources.
+- Exit 4a: r10 gives DONE "Nothing specific to look up" with 1 AI call. r2 gives a GitHub candidate list containing `HEJustinSun/my-girlfriend-jingtian-latex`. No job makes more than 2 AI calls (call log).
+- Exit 5: every failure-table row, every degraded banner, `WAITING_QUOTA` and the quota-reached banner are reachable in tests.
+- Exit 6: a fresh install shows the personal-use notice before key setup.
+- Exit 7: an older build sees the update banner and updates over itself, keeping its data.
+- Exit 8: the keystore restore drill passes and the India developer-verification check is recorded.
+- Exit 9: the **low-end gate** passes (see Target device profile and low-end gate): PSS ≤ ~300 MB (app + child), APK sizes recorded per ABI, both jobs DONE on the 3 GB / 2-core API 26 AVD with the release build and full pipeline, **and** on a real ≤ 3 GB phone (required; open until one has run).
+- Exit 10: APKs, checksums and the README install guide are published to a GitHub Release.
+
+### M2 — Hardening
+

@@ -748,3 +748,47 @@ Tasks 1–17. Exit criteria on the release build: function on the Nothing Phone 
 
 ### M2 — Hardening
 
+| # | Item | Done when |
+|---|---|---|
+| H1 | Quota UX polish: live countdown on Retry/Check again and the quota banner. The core quota UX (display, `WAITING_QUOTA`, fallback model) moved into the MVP (D9, T6, T11, T13). Backoff loops are dropped by decision. | UI test on countdown |
+| H3 | Tighten the low-end targets from M1 gate data (sampling < 10 s for a 60 s video on the AVD, PSS margin) | Perf results updated |
+| H4 | ~~`WikipediaResearcher`~~ **moved into the MVP (T10, D13)** on 2026-10-08. | — |
+| H5 | Cancel running job | UI test |
+| H6 | Instagram cookies for yt-dlp (only if S3 shows IG needs login) | IG reel downloads |
+| H7 | APK size budget: release arm64 ≤ S3 baseline + 5 MB | Gradle check fails over budget |
+| H8 | R8 regression: full job on a release build | Manual checklist ticked |
+| H9 | Per-entity source attribution via `groundingSupports` (grounded researcher only) | Each finding lists its own sources |
+| H11 | Re-run the grounding capability test automatically (at most weekly) for keys that were `UNAVAILABLE`, in case Google adds free-tier grounding | Capability flips to `AVAILABLE` without user action |
+| H10 | In-app APK install (`REQUEST_INSTALL_PACKAGES` + `PackageInstaller`), only if users report trouble updating via the browser link (D15) | Install-over-existing test on device |
+
+### M3 — Later (not planned in detail)
+
+- Parked: Gemini web backend (see Parked section).
+
+---
+
+## MVP tasks
+
+Each task is TDD: write the listed tests first, see them fail, implement, see them pass, commit. JVM tests: `./gradlew :core:test :app:testDebugUnitTest`. Instrumented: `./gradlew :app:connectedDebugAndroidTest`.
+
+### Task 1: Project skeleton + release config
+**Files:** `settings.gradle.kts`, `build.gradle.kts`, `gradle/libs.versions.toml`, `core/build.gradle.kts`, `app/build.gradle.kts`, `app/proguard-rules.pro`, `AndroidManifest.xml`, `ReconApp.kt`, `MainActivity.kt`, `di/AppModule.kt`, `ui/theme/*`, `.gitignore` (`.env`, `keystore.properties`, `*.jks`, `spikes/inputs/`), `app/src/test/.../KoinGraphTest.kt`
+**Produces:** buildable `:core` + `:app`, `minSdk 26`, Koin started, empty NavHost, release ABI splits arm64-v8a + armeabi-v7a, an x86_64 split for debug and the gate build type only, release signing read from `keystore.properties` if present (debug-key fallback until T14).
+**Tests:** `appModule.verify()` passes.
+**Done when:** `./gradlew assembleRelease` produces two ABI APKs.
+
+### Task 2: Core models + `ResultParser` + prompts
+**Files:** `core/model/*`, `core/json/ResultParser.kt`, `core/prompt/Prompts.kt`, `core/src/test/.../ResultParserTest.kt`, `PromptsTest.kt`
+**Produces:** `ResultParser.parseAnalysis(raw: String): AnalysisResult` and `parseResearch(raw: String, items: List<ResearchItem>, cap: VerdictCap): List<Finding>`. `ResearchItem(entity, reference: String?, fixed: Finding?)` covers GitHub/Wikipedia-resolved items, whose verdict and link are kept. `VerdictCap { WEB, KNOWLEDGE }`. Both parsers throw `AnalyzerException(MODEL_OUTPUT_INVALID)` on unusable input. Prompts: `Prompts.analyze(language)`, `ANALYZE_SCHEMA`, `research(ctx, items)`, `knowledge(ctx, items)`. `parseRepoExplanations`/`EXPLAIN_SCHEMA` are dropped (D9).
+**Tests:**
+- Fences, prose and fields (Review Focus #3 parsing): valid JSON round-trips. Fenced and prose-prefixed input parses. Unknown fields are ignored. Missing `summary` throws. Garbage throws.
+- Types and values: `type: "podcast"` → `OTHER`. Confidence 1.7 → 1.0.
+- Repo validation: invalid owner → null. Repo name `github.com/a/b` → qualifier a, name b. Repo name with spaces → retyped `OTHER`.
+- Limits: duplicate entities collapse. 12 entities → 8.
+- `parseResearch`: index out of range dropped; duplicate index → first wins; claim with `"confirmed"` → `UNCLEAR`; product with `"disputed"` → `BEST_MATCH`; URL inside `whatItIs` stripped; missing item → not returned.
+- `VerdictCap.KNOWLEDGE`: `confirmed` → `BEST_MATCH`, `supported`/`disputed` → `UNCLEAR`, every finding has `basis = AI_KNOWLEDGE`. A fixed GitHub item keeps `CONFIRMED`, its link and `basis = GITHUB_API`, and takes only the text fields.
+- **r10 fixture ("no entity" is valid):** `{"entities":[],"summary":"…slime…","confidence":0.0,"onScreenText":[]}` (from S2 Path B r10) parses to an `AnalysisResult` with no entities and does not throw. The analyse prompt contains "An empty list is a correct, complete answer".
+- Prompts: rendered text contains every entity's index and `saidInVideo`; `knowledge()` contains "You have NO web access" and every `Reference` block. Schemas parse as JSON.
+
+### Task 3: `LinkRouter` + `OkHttpLinkResolver`
+**Files:** `core/link/LinkRouter.kt`, `app/data/link/OkHttpLinkResolver.kt`, tests (MockWebServer for resolver)

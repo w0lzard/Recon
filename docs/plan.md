@@ -880,3 +880,48 @@ Each task is TDD: write the listed tests first, see them fail, implement, see th
   - `TRY_SHARPER` on a downloaded job → fetcher called with the 720p selector. Not offered for the YouTube-URL route.
   - File > 50 MB → A skipped.
 - Research handling:
+  - No entities → DONE, research not called (Review Focus #2). The **r10 fixture** (empty entities from the analyzer) → DONE "nothing to look up", 1 AI call in total.
+  - Degraded web → DONE with `degraded`.
+  - Saved `analysisJson` → analysis not called, starts at RESEARCHING.
+- Errors and cleanup: RuntimeException → FAILED(UNKNOWN). Work dir deleted on DONE, on FAILED, and when the coroutine is cancelled mid-download (`finally`).
+
+### Task 12: `JobWorker`, share intake, notifications
+**Files:** `app/work/JobWorker.kt`, `Notifier.kt`, `MainActivity.kt`, `AndroidManifest.xml`, `JobWorkerTest.kt` (Robolectric + `TestListenableWorkerBuilder`)
+**Produces:**
+- Manifest: `ACTION_SEND` filters for `text/plain` and `video/*`, `singleTop`.
+- Intake: text → `create(sharedText)`. Video → copy immediately via `ContentUriFetcher` (the URI grant is temporary), then `create(localUri)`. Then `enqueueUniqueWork("recon", APPEND_OR_REPLACE, …setExpedited(RUN_AS_NON_EXPEDITED_WORK_REQUEST))` and navigate to the job.
+- Worker start sweep: delete every `cacheDir/jobs/<id>/` whose job is not currently running.
+- `WAITING_QUOTA`: the worker re-enqueues the job as unique one-time work with `setInitialDelay(retryAt - now)` and no network calls. The job runs once at that time.
+- Worker: `setForeground` with a `dataSync` notification, runs `RunJob` with `language = Locale.getDefault().displayLanguage`, and posts a DONE/FAILED notification with a deep link.
+- Permissions: `INTERNET`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_DATA_SYNC`, `POST_NOTIFICATIONS` (asked on first share; the job runs regardless), and the WorkManager `SystemForegroundService` with `foregroundServiceType="dataSync"`.
+**Tests (Review Focus #5):** job left in ANALYSING + worker restart → QUEUED → DONE. A `WAITING_QUOTA` job is enqueued with an initial delay equal to retryAt − now. Worker exception → FAILED(UNKNOWN), `Result.failure()`. Text share → job + work enqueued. The language passed to `RunJob` equals the device locale (set Robolectric locale `hi`). Startup sweep deletes an orphaned job dir and keeps the running job's dir.
+
+### Task 13: UI — Home, Job, navigation
+**Files:** `ui/home/*`, `ui/job/*` (incl. `SearchSuggestions.kt`), NavHost routes (`@Serializable object Home`, `data class JobRoute(val id: String)`, `object Settings`, `object KeySetup`), `JobScreenTest.kt` (Compose UI, Robolectric)
+**Produces:**
+- Home: history list (state chip, host, summary first line, time), empty state "Share a video link to Recon from any app", and a Settings icon.
+- Job, running: progress steps.
+- Job, DONE:
+  - Summary first, then one card per finding.
+  - Card contents: type icon, title, verdict badge, Evidence badge, a "Guess" badge if INFERRED, and a basis label ("From GitHub" / "From Wikipedia" / "From web sources" / **"Unverified, from AI knowledge"** / "Only what the video said"). Then `whatItIs`, `keyFacts`, `howToTry` (labelled per type: Install / Get it / Read / Visit / Ingredients & steps), `whyInVideo`, and the `primaryLink` button if present.
+  - Repo with `candidates`: "Which repo did the video mean?" with 2–3 rows (full name, ★, description) and "None of these". Picking one updates the finding (no AI call). "None of these" sets `NOT_FOUND`.
+  - "Try sharper video" button (D21) on a downloaded-path DONE with no entities or only `INFERRED` ones.
+- Quota UI: Home shows "AI calls used today: N (of L)" from `QuotaStore`, with L only if learned, and the quota-reached banner. A `WAITING_QUOTA` job shows "Waiting for your free AI quota, will start at HH:MM".
+  - Verdict badges: Confirmed / Best match / Not found / Not checked / Supported / Disputed (error colour) / Unclear.
+  - Below the cards: a Sources list (titles, open in Custom Tab) and the Search Suggestions widget, both only when grounded; then on-screen text (collapsible).
+- `SearchSuggestions`: `AndroidView(WebView)` loading `searchSuggestionsHtml` via `loadDataWithBaseURL(null, html, "text/html", "utf-8", null)`. JavaScript off unless S1 shows the widget needs it. Link taps open externally.
+- Job, FAILED and degraded: FAILED shows the failure-table message + action. A degraded DONE shows its banner + action.
+**Tests (Review Focus #2, #4):**
+- Failure and degraded states: one test per failure row (message + action label) and per degraded banner.
+- Verdicts and badges: DISPUTED card shows "Disputed" and the claim text, never "Confirmed". INFERRED shows "Guess". NOT_CHECKED shows "Not checked" + `saidInVideo`. An `AI_KNOWLEDGE` finding shows "Unverified, from AI knowledge" and never shows "Confirmed" or "Supported".
+- Candidates (r2): a finding with 3 candidates shows 3 rows + "None of these". Picking row 2 shows that repo's link.
+- Quota: the reached banner shows retry time. Without a learned limit it shows "N used today" with no "of". The `WAITING_QUOTA` text.
+- DONE layout: no entities → "Nothing specific to look up in this video". Sources list rendered. Suggestions view present when HTML is non-null.
+
+### Task 14: Release keystore creation + backup
+**Files:** `keystore.properties` (git-ignored, never committed), `app/build.gradle.kts` (signing config), `README.md` ("Verify the download" section with the fingerprint), this file (fingerprint in Decisions log as D18).
+**Steps:**
+1. Create the keystore outside the repo, once:
+   ```bash
+   mkdir -p ~/.android-keys
+   keytool -genkeypair -v -keystore ~/.android-keys/recon-release.jks -alias recon \

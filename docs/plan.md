@@ -836,3 +836,47 @@ Each task is TDD: write the listed tests first, see them fail, implement, see th
 **Produces:** `YtDlpFetcher` with S3's args (`-f "b[height<=854][width<=854]/b[height<=1280][width<=1280]/w" --no-playlist -o <destDir>/video.%(ext)s`) and a progress callback. YouTube fallback (no muxed formats, so no merge): video `bv*[vcodec^=avc1][height<=854][width<=854]/bv*[vcodec!^=av01][height<=854][width<=854]` plus audio `ba[ext=m4a]` as two separate files. h264 comes first and AV1 is never picked, because API 26 has no AV1 decoder (S3 emulator run: AV1 gave 0 frames on 5/10 manifest videos, h264 gave 19). A zero-frame retry re-downloads once with `bv*[vcodec^=avc1][height<=854][width<=854]/b[height<=854][width<=854]/w` excluding the format id that failed. `YoutubeDLException` → DOWNLOAD_FAILED with the last stderr line. `ContentUriFetcher` streams via an 8 KB buffer. `YtDlpUpdateWorker`: unique periodic 24 h, CONNECTED, first run at app start, failure logged only. **Found on the API 26 AVD (2026-10-08):** an update replaces the yt-dlp zip in place, and a download running at the same time fails with `ZipImportError: bad local file header`. One lock (`YtDlp`) therefore serialises init, update and downloads. Separately, the library's bundled yt-dlp (2025.11.12) is already more than 90 days old, so a fresh install runs one update before its first download (failure → bundled version).
 **Tests:** `buildArgs(url, destDir)` returns the exact list. The YouTube fallback args contain `[vcodec^=avc1]` and `[vcodec!^=av01]`. `ContentUriFetcher` copies a 5 MB stream in chunks (counting stream). `@LargeTest` manual: downloads the S3 Short.
 
+### Task 8: `AndroidFrameSampler` (Path B)
+**Files:** `app/data/media/AndroidFrameSampler.kt`, `DHash.kt`, `DHashTest.kt`, `FrameSamplerTest.kt` (androidTest) + `assets/sample_10s.mp4`
+**Produces:** timestamps every `max(2000, durationMs/20)` ms, ≤ 20. API ≥ 27: `getScaledFrameAtTime(t, OPTION_CLOSEST_SYNC, 768, 768)`. API 26: `getFrameAtTime(t, OPTION_CLOSEST_SYNC)` → `Bitmap.createScaledBitmap` to ≤ 768 px → recycle the source immediately. Then compute a 64-bit dHash. Skip the frame if its Hamming distance to the last kept frame is ≤ 6, else write JPEG q=80 and call `recycle()` immediately. Audio: copy the first `audio/` track to `audio.m4a` with `MediaExtractor`/`MediaMuxer`. No audio track → null. Undecodable → VIDEO_UNREADABLE. **Zero frames kept is never a success.** `RunJob` treats it as a failure: it retries once by re-downloading in another format (T7 zero-frame retry; shared files have no other format, so they fail straight away). If that also gives 0 frames, the job is FAILED with VIDEO_UNREADABLE and never DONE. In S3 the spike reported DONE with 0 frames for AV1, and that must not happen in the app.
+**Tests (Review Focus #5):** dHash identical images → 0, inverted → > 32. `timestamps(1_200_000)` → 20, evenly spaced. `timestamps(30_000)` → 15 at 2 s. RunJob unit test: a sampler returning 0 frames triggers one retry with another format, then FAILED(VIDEO_UNREADABLE), never DONE. Instrumented: 1..5 frames ≤ 768 px, audio > 0 bytes.
+
+### Task 9: `OkHttpGitHubClient` + `GitHubResearcher`
+**Files:** `app/data/github/OkHttpGitHubClient.kt`, `core/research/GitHubResearcher.kt`, tests (MockWebServer for client; fake client + fake `LanguageModel` for researcher)
+**Produces:** client with `Authorization: Bearer` only if a token is set, `X-GitHub-Api-Version`, `User-Agent: Recon`, `search(query)` = `GET /search/repositories?q=<query> in:name&per_page=10`, and README via `Accept: application/vnd.github.raw` truncated to 8,000 chars. Researcher as described under Ports: no AI call, fuzzy token-subset search, and `candidates` for the user to pick. `RepoMatcher` (pure, in `:core`) holds tokenising, query generation and ranking.
+**Tests (Review Focus #3):**
+- Resolution: owner known and found → CONFIRMED with link and stars. 404 + search exact-name hit → BEST_MATCH. Owner null → search. 5 repos → ≤ 3 resolved, the others not returned. No candidate above the minimum similarity → not returned (falls through).
+- **r2 fixture (fuzzy, spoken name):** entity `repo` name `he-justinsun-s-girlfriend-jinchin-latex` (the S2 YT-URL output), qualifier null. Fake search returns 0 for the AND query and, for the OR query, the 10 hits the real GitHub API returned on 2026-10-08. Expected: queries are exactly `[AND, OR]`, and the finding has `candidates` of size 1–3 with `HEJustinSun/my-girlfriend-jingtian-latex` first and `primaryLink = null` before a pick. The second S2 garbling `HeJiansun/My-girlfriend-Jingjing-LaTeX` gives the same first candidate.
+- `RepoMatcher`: tokens drop < 3 chars and split camelCase (both halves ≥ 3). ≤ 2 queries. Ranking puts the exact name first.
+- Pick: choosing candidate 2 sets title/link/stars from that `GhRepo` with **0 AI calls**.
+- Failures: rate limit → `ResearchUnavailable(resetEpochMs)`. `htmlUrl` not on `https://github.com/` → rejected.
+- No `LanguageModel` is injected into `GitHubResearcher`: it makes 0 AI calls. Resolved repos carry their README excerpt to the AI researcher, and with no budget `whatItIs` stays the GitHub description.
+
+### Task 10: `KnowledgeResearcher` + `WikipediaResearcher` + optional `WebSearchResearcher` + `ResearchChain`
+**Files:** `core/research/KnowledgeResearcher.kt`, `core/research/WebSearchResearcher.kt`, `app/data/wiki/OkHttpWikipediaClient.kt`, `core/research/WikipediaResearcher.kt`, `core/research/ResearchChain.kt`, tests (fakes; MockWebServer for the Wikipedia client)
+**Produces:** as described under Ports (D13, D20). Exactly one AI researcher per chain, picked by `GroundingCapability`. Verdict rules: knowledge is capped at `BEST_MATCH`/`UNCLEAR` with `basis = AI_KNOWLEDGE`. On web, `CONFIRMED`/`SUPPORTED` with zero sources are downgraded to `BEST_MATCH`/`UNCLEAR`.
+**Tests (Review Focus #3, #4):**
+- `KnowledgeResearcher` (default): one `generate` call with `googleSearch = false` for 6 items. The r9 claim fixture answering `"disputed"` → `UNCLEAR` + `AI_KNOWLEDGE`. A product answering `"confirmed"` → `BEST_MATCH`. No links and no sources. Quota → `ResearchUnavailable(retryAt)`.
+- `WebSearchResearcher` (optional): one `generate` call with `googleSearch = true`. The claim fixture `"disputed"` + 2 sources → `DISPUTED`. `"supported"` + 0 sources → `UNCLEAR`. The S1 429 signature → capability set `UNAVAILABLE` + `ResearchUnavailable`.
+- `WikipediaResearcher`: `Taj Mahal` / `Agra, India` (r6) → `CONFIRMED` with the `https://en.m.wikipedia.org/...` link and 0 AI calls. A disambiguation page → not returned. A claim is never accepted. A non-wikipedia.org URL → link dropped.
+- Chain selection: capability AVAILABLE → web researcher used, else knowledge. `budgetLeft = false` → 0 AI calls, AI-only items `NOT_CHECKED` + `degraded["budget"]`, Wikipedia/GitHub findings kept.
+- Fall-through: repo entity unresolved by GitHub → sent to the AI researcher. GitHub unavailable → all repos to the AI researcher, with `degraded["github"]` set. A GitHub-resolved repo goes to the AI call as a text-only item with its README reference.
+- Degraded AI researcher: unresolved items → `NOT_CHECKED` with `whatItIs = saidInVideo`, `degraded["knowledge"]` (or `["web"]`) = retryAt, and Wikipedia/GitHub findings are kept.
+- Order and limits: output order = input order. 9 entities → only the first 6 researched, the rest `NOT_CHECKED`. Empty input → no calls. **At most 1 AI call per chain run** (counted by a fake `LanguageModel`).
+
+### Task 11: `RunJob` pipeline
+**Files:** `core/job/RunJob.kt`, `RunJobTest.kt` (all ports faked)
+**Produces:** `class RunJob(store, resolver, fetchers: Fetchers(ytDlp, contentUri), sampler, analyzer: VideoAnalyzer, research: ResearchChain, quota: QuotaStore, language: () -> String, clock, timeouts: Timeouts = Timeouts()) { suspend operator fun invoke(jobId: String, action: UserAction = UserAction.RUN) }`, implementing the Pipeline and State machine sections, with `CallBudget(max = 2)` per invocation (D9) and the D21 "Try sharper video" action.
+**Tests:**
+- Routes and fallbacks:
+  - YouTube → no download, states QUEUED→ANALYSING→RESEARCHING→DONE.
+  - YouTube NETWORK → download path.
+  - A throws → B → DONE `path = "B"`. A timeout → B.
+  - A QUOTA → FAILED(QUOTA) and B not called.
+  - Both models quota-reached before start → `WAITING_QUOTA` with retryAt, and 0 analyzer calls.
+  - A fails after its call → B analyses (call 2) → DONE with `degraded["budget"]` and 0 research AI calls.
+  - **Budget:** across every route test, analyzer calls + AI research calls ≤ 2.
+  - Sampler returns 0 frames → one other-format re-download → still 0 → FAILED(VIDEO_UNREADABLE), never DONE.
+  - `TRY_SHARPER` on a downloaded job → fetcher called with the 720p selector. Not offered for the YouTube-URL route.
+  - File > 50 MB → A skipped.
+- Research handling:

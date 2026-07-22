@@ -792,3 +792,47 @@ Each task is TDD: write the listed tests first, see them fail, implement, see th
 
 ### Task 3: `LinkRouter` + `OkHttpLinkResolver`
 **Files:** `core/link/LinkRouter.kt`, `app/data/link/OkHttpLinkResolver.kt`, tests (MockWebServer for resolver)
+**Produces:** `LinkRouter.extractUrl(text: String): String?` and `LinkRouter.classify(url: String): Route` (`sealed interface Route { data class YouTube(val url: String); data class Other(val url: String) }`). YouTube hosts: `youtube.com` with `www.`/`m.`/`music.`, and `youtu.be`. Hosts outside the known-platform list (youtube, youtu.be, instagram.com, tiktok.com, vm.tiktok.com, x.com, twitter.com, facebook.com, fb.watch, reddit.com) are resolved first. `resolve`: HEAD, then GET on failure, ≤ 5 redirects, 5 s timeout, original URL on failure.
+**Tests (Review Focus #1):** `"check this https://youtu.be/abc?si=x)."` → `https://youtu.be/abc?si=x`. Two URLs → first. No URL → null. A schemeless URL → null. `m.youtube.com/shorts/x` → YouTube. `bit.ly` → resolved then classified. Resolver: 301→301→200 gives the final URL, timeout gives the input.
+
+### Task 4: Room `JobStore`
+**Files:** `app/data/db/*`, `core/port/JobStore.kt`, `RoomJobStoreTest.kt` (Robolectric, in-memory)
+**Tests:** create → `observeAll` newest-first. `update` changes the state and `updatedAt`. `analysisJson` and `resultJson` round-trip. `findRunning()` returns DOWNLOADING/ANALYSING/RESEARCHING jobs only.
+
+### Task 5: `KeystoreSecretStore` + guided key setup + Settings
+**Files:** `app/data/secret/KeystoreSecretStore.kt`, `ui/setup/KeySetupScreen.kt`, `KeySetupViewModel.kt`, `ui/settings/*`, `KeystoreSecretStoreTest.kt` (androidTest), `KeySetupViewModelTest.kt`
+**Produces:**
+- `SecretStore` (D3): AES/GCM key `recon_secrets` in `AndroidKeyStore`, stored as base64(iv‖ciphertext) in prefs `secrets`. Decrypt failure → null and the value is deleted.
+- Key-setup flow per the Access model section. Validation calls `LanguageModel`-independent `GeminiApiBackend.validateKey(key): KeyCheck` (`Ok | Invalid | RegionUnsupported | Network`). After `Ok`, it runs `testGrounding()` once (D20) and stores `GroundingCapability`. The setup screen then says "Web search: available", or "Web search isn't available on your free key; answers will be marked Unverified".
+- First launch with no key routes to setup. Sharing with no key creates the job, which fails `API_KEY_MISSING` with a "Set up key" action.
+- Settings: change or remove the key, GitHub token (optional), "Test web search" (re-runs `testGrounding()`, costs 1 call), AI calls used today per model (from `QuotaStore`), a privacy note, and "About" (version, GitHub Releases link).
+**Tests:**
+- `SecretStore`: round-trip. put(null) deletes. Raw prefs value ≠ plaintext. Corrupted value → null.
+- Clipboard and validation (ViewModel with fake checker): clipboard `AIza` + 35 valid chars → paste offered. Other clipboard text → not offered. Each `KeyCheck` result → its message. Key saved only on `Ok`. Each `GroundingCapability` → its message, and `UNAVAILABLE` does not block setup.
+
+### Task 6: `GeminiApiBackend`
+**Files:** `app/data/gemini/GeminiApiBackend.kt`, `GeminiFiles.kt`, `GeminiErrors.kt`, `GeminiApiBackendTest.kt` (MockWebServer)
+**Produces:** a `VideoAnalyzer` + `LanguageModel` implementation, `validateKey`, `listModels()` + `ModelRanker` (D11), `testGrounding` (D20) and `PrefsQuotaStore`. The base URL is injectable for tests. Models: the ranked list from `ModelPrefs`, with the last-resort defaults only if it is empty. A model is skipped while `QuotaStore.available` is false. **Verify the listing endpoint against the real API in this task** (manual check, result into Spike results).
+- Upload: resumable protocol (`start`, then `upload, finalize`) with a file-backed `RequestBody`. Poll `GET v1beta/{name}` every 2 s until `ACTIVE` (`FAILED` → throw).
+- `analyze`: `generateContent` with `Prompts.analyze(language)` + `responseMimeType: application/json` + `responseSchema`. YouTube → `file_uri`. Path B: frames `inline_data` image/jpeg, audio via Files API. **No retry on a parse failure** (D9): it throws `MODEL_OUTPUT_INVALID`. Every HTTP attempt → `QuotaStore.recordAttempt(model)`.
+- `generate(prompt, schema, googleSearch)`: adds `tools: [{google_search: {}}]` when asked, and maps `groundingMetadata.groundingChunks[].web{uri,title}` → `Source` (https only, deduped by uri) and `searchEntryPoint.renderedContent` → `searchSuggestionsHtml`.
+- Errors:
+  - 429 with `QuotaFailure`/`RetryInfo` → `QuotaStore.recordLimit(model, quotaValue or the "limit: N" from the message or null, now + retryDelay or null)`. Then one attempt on the other model if it is available, else QUOTA_EXCEEDED(retryAt).
+  - 429 on a grounded call with neither detail → grounding `UNAVAILABLE` (D20). The model is not marked reached.
+  - 503 → one attempt on the other model, then MODEL_BUSY. No sleeps, no loops.
+  - 400 `API_KEY_INVALID` / 403 → API_KEY_INVALID. 400 `FAILED_PRECONDITION` with "location is not supported" → REGION_UNSUPPORTED. No key → API_KEY_MISSING before any request. IOException → NETWORK.
+**Tests:**
+- Upload: start then finalize, with the correct headers and the file bytes. Polls PROCESSING→ACTIVE.
+- Request shapes: YouTube sends `file_uri` without an upload. Path B has N `inline_data` + 1 `file_data`. `generate(googleSearch = true)` request contains `google_search`.
+- Grounding response mapping: an http source is dropped, duplicate uris are deduped, and the suggestions HTML is extracted. A response without `groundingMetadata` gives empty sources.
+- Errors: 429 `retryDelay: "37s"` + `QuotaFailure quotaValue 20` → retryAt ≈ now+37 s and limit 20 stored, with **the 20 coming only from the fixture**. Fixture with the real S1 body (429, only a `Help` link) on a grounded call → `UNAVAILABLE`, model not marked reached. 503 then 200 → the second request goes to `FALLBACK_MODEL`. 503, 503 → MODEL_BUSY after exactly 2 requests. Region error → REGION_UNSUPPORTED. Invalid JSON → MODEL_OUTPUT_INVALID after exactly 1 request. No key → 0 requests. A model whose retryAt is in the future gets 0 requests.
+- Model switching: daily-quota 429 on model 1 → exactly one request to model 2, and model 1 gets no further request until its retryAt. 429 on the last available model → QUOTA_EXCEEDED. The answering model id is returned with the result.
+- `ModelRanker`: from a fixture listing (`gemini-3.8-flash`, `gemini-3.5-flash`, `gemini-3.5-flash-lite`, `gemini-3-flash-preview`, `gemini-2.5-flash`, `gemini-3.1-flash-lite`, `nano-banana-pro-preview`) → `[3.8-flash, 3.5-flash, 2.5-flash, 3.5-flash-lite, 3.1-flash-lite]` (the preview and the non-gemini model are dropped). Empty listing → last-resort defaults. A 404 "no longer available" on a listed model (S1 diagnostic: `gemini-2.5-flash` is listed but closed to new keys) removes it from `ModelPrefs.ranked` and moves the call once to the next model.
+- `testGrounding`: 200 with `groundingMetadata` → AVAILABLE. The S1 429 body → UNAVAILABLE. 429 with `QuotaFailure` → UNKNOWN. 404 "no longer available" → UNKNOWN.
+- Manual `@LargeTest` (real key, 1 call): r10 through Path A with the new prompt returns no entities, or only `other`. The result goes in the Spike results.
+
+### Task 7: Media fetchers + yt-dlp update
+**Files:** `app/data/media/YtDlpFetcher.kt`, `ContentUriFetcher.kt`, `app/work/YtDlpUpdateWorker.kt`, `ReconApp.kt`, tests
+**Produces:** `YtDlpFetcher` with S3's args (`-f "b[height<=854][width<=854]/b[height<=1280][width<=1280]/w" --no-playlist -o <destDir>/video.%(ext)s`) and a progress callback. YouTube fallback (no muxed formats, so no merge): video `bv*[vcodec^=avc1][height<=854][width<=854]/bv*[vcodec!^=av01][height<=854][width<=854]` plus audio `ba[ext=m4a]` as two separate files. h264 comes first and AV1 is never picked, because API 26 has no AV1 decoder (S3 emulator run: AV1 gave 0 frames on 5/10 manifest videos, h264 gave 19). A zero-frame retry re-downloads once with `bv*[vcodec^=avc1][height<=854][width<=854]/b[height<=854][width<=854]/w` excluding the format id that failed. `YoutubeDLException` → DOWNLOAD_FAILED with the last stderr line. `ContentUriFetcher` streams via an 8 KB buffer. `YtDlpUpdateWorker`: unique periodic 24 h, CONNECTED, first run at app start, failure logged only. **Found on the API 26 AVD (2026-10-08):** an update replaces the yt-dlp zip in place, and a download running at the same time fails with `ZipImportError: bad local file header`. One lock (`YtDlp`) therefore serialises init, update and downloads. Separately, the library's bundled yt-dlp (2025.11.12) is already more than 90 days old, so a fresh install runs one update before its first download (failure → bundled version).
+**Tests:** `buildArgs(url, destDir)` returns the exact list. The YouTube fallback args contain `[vcodec^=avc1]` and `[vcodec!^=av01]`. `ContentUriFetcher` copies a 5 MB stream in chunks (counting stream). `@LargeTest` manual: downloads the S3 Short.
+

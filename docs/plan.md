@@ -1057,3 +1057,47 @@ The only button is "I understand". Until it is tapped, shared links are held. If
 | Async jobs with states, WorkManager, notify on completion | State machine, T11, T12 |
 | Room history | T4, T13 |
 | Encrypted API key (+ GitHub token) | T5 (D3) |
+| BYOK as the only access model, guided key setup, trade-offs; proxy dropped | Access model, D14, T5 |
+| Never on Play; GitHub Releases / sideload only | Distribution, D15, T17 |
+| Release keystore creation + backup | T14, D18, R15 |
+| GitHub Releases update check linking to the APK; in-app install deferred | T15, H10 |
+| README install guide for unknown sources | T17 |
+| First-run personal-use notice about platform terms | T16 |
+| Risk entry: developer-verification status for India before public release | R8, T17 step 5 |
+| yt-dlp self-update at app start kept | T7, Distribution plan item 7 |
+| Compose M3, single activity, Navigation Compose, DI, Coroutines/Flow | T1, T13 (D1) |
+| Actionable failure states | Failure table, degraded banners, T13 |
+| Small APK: R8, shrink, ABI splits, no models | T1, T17, H7 |
+| Low-end hard requirement: device profile (3 GB, API 26+, both ARM ABIs) | Target device profile section, T1, T8 |
+| Low-end gate: PSS ≤ ~300 MB, per-ABI APK size, job on 3 GB / 2-core AVD + real ≤ 3 GB phone (required) | M1 Exit 9, T17, Perf results |
+| Download policy: ≤ 480p, YouTube not downloaded, sequential, streamed uploads, per-frame recycle, cleanup on every exit path | Policy list, T6, T7, T8, T11, T12, D6 |
+| YouTube download fallback h264 only (`[vcodec^=avc1]`, no `av01`) | Policy list, D5, T7 |
+| Zero extracted frames = FAILED after one other-format retry, never DONE | T7, T8, T11 |
+| Gate memory re-measured on the release build with the full pipeline (93 MB AVD = lower bound) | Low-end gate table, Exit 9, T17 |
+| Spike 2: on-screen text readable at 480p | S2 480p readability check |
+| Spike 3: youtubedl-android on armeabi-v7a, APK + RAM cost | S3 |
+| Spike device Nothing Phone (2), labelled high-end | Target device profile section, S3, Spike results |
+| Throwaway Google account | Global Constraints, First-task checklist |
+| Spikes with pass/fail + results template | M0, Spike results |
+| Fallback for every external dependency | Dependencies table (yt-dlp, Gemini API incl. 503, knowledge research, optional Search grounding, Wikipedia, GitHub, GitHub Releases) |
+
+---
+
+## Risk register
+
+| # | Risk | Likelihood | Impact | Mitigation / trigger |
+|---|---|---|---|---|
+| R1 | Key setup is too hard for a general audience | High | High | Guided screen, clipboard detection, validation, README walkthrough. No proxy fallback (D14); accepted limit on reach. |
+| R2 | AI Studio unavailable in the user's region, or user under 18 | Medium | High for those users | Specific `REGION_UNSUPPORTED` message. Accepted: BYOK only. |
+| R3 | Search grounding missing or very limited on the free tier | **Happened** (S1 ×2 + diagnostic) | High | Applied: knowledge researcher capped at BEST_MATCH/UNCLEAR with the "Unverified" label, Wikipedia in the MVP, grounding opt-in by capability test (D13, D20). Residual: verdict quality without sources (R4). |
+| R4 | Wrong or harmful claim verdicts (health, finance) | Medium | High | Without grounding, claims are always `UNCLEAR` + "Unverified, from AI knowledge". Grounded sources required for SUPPORTED/CONFIRMED, conservative prompt wording, sources always shown, verdict wording "Supported/Disputed by sources", not "True/False". |
+| R5 | Model hallucinates entities | Medium | Medium | Verification step, "Guess" badge, links only from API data |
+| R6 | Prompt injection via video text, READMEs or web pages | Medium | Low | Display-only output, no model-supplied links, URL stripping, injection notes in prompts |
+| R7 | Platform ToS (Instagram, TikTok, X) against downloading | High | Medium | Never on Play. Personal-use notice on first run (T16). YouTube never downloaded on the main path. Media deleted after analysis. |
+| R8 | Google's Android developer verification blocks sideloaded installs of Recon in India | Medium (timeline per region) | High: users in India can't install | **Before the first public release, check Google's developer-verification status for India.** If enforced or scheduled: register the developer account and `dev.wolzard.recon` with the T14 certificate fingerprint before publishing. Checklist item in T17. Recheck before every release until registered. |
+| R9 | Instagram requires login for yt-dlp | High | Medium | File-share path, H6 |
+| R10 | yt-dlp breaks between app updates | Medium | Medium | Daily self-update, file-share fallback |
+| R11 | Free-tier quota or model changes | **High** (S2: 20 RPD/model incl. 503s; 2.5-flash already closed to new users) | High | Per-user quota (BYOK), 1–2 calls/job, limits learned from errors (no constants), fallback model, `WAITING_QUOTA` instead of failing, resume-from-research. ~5–10 jobs/day/user is the expected ceiling on the free tier. |
+| R12 | youtubedl-android bloats APK / RAM (the Python child counts toward the 300 MB) | Medium | High (hard requirement) | ABI splits, no ffmpeg, ≤ 480p, S3 numbers incl. child PSS, H7. If over the gate on the AVD: drop the yt-dlp update on low-RAM devices, or stop yt-dlp after each job. |
+| R17 | 480p loses small on-screen text (repo URLs) | Low (S2 rerun: 720p added no hits) | Medium | Default ≤ 480p; user-triggered "Try sharper video" at 720p (D21). |
+| R18 | No real ≤ 3 GB phone available; AVD (x86_64) differs from ARM low-end hardware | Medium | Medium | Gate on the AVD is required. A real ≤ 3 GB phone run is **required** (Exit 9 stays open until done). The Perf results say which ran. |

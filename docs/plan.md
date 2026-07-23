@@ -969,3 +969,47 @@ Each task is TDD: write the listed tests first, see them fail, implement, see th
   - Tests: one per ABI — `SUPPORTED_ABIS = [arm64-v8a, armeabi-v7a, armeabi]` picks `recon-0.2.0-arm64-v8a-release.apk`; `[armeabi-v7a, armeabi]` picks `recon-0.2.0-armeabi-v7a-release.apk`; `[x86_64, arm64-v8a]` (emulator/ChromeOS) picks the arm64 asset; an unsigned-named asset → release page. The fixture names are the ones `assembleRelease` produced on 2026-10-08.
   - `apkUrl` must start with `https://github.com/`, else falls back to the release page.
 - The check is triggered from `MainActivity.onCreate` in a lifecycle-scoped coroutine, not WorkManager. Home shows a banner "Recon X.Y.Z is available" with buttons "Download" (opens `apkUrl` in the browser) and "What's new" (release page). Dismiss hides the banner for that version.
+- Settings → About: "Check for updates" (force), with the result inline ("Up to date" / banner / "Couldn't check").
+- In-app install is deferred (D15, H10).
+**Tests:**
+- `Version`: `v1.10.0` > `v1.9.9`. `1.0.0-beta` < `1.0.0`. Garbage → null.
+- Checker results: newer tag → info with the arm64 asset URL. Same tag → null. 404/403/IOException → null.
+- Checker throttling and links: a second call within 24 h makes no request. `force` makes a request. No matching asset → release page URL. Non-github.com asset URL → release page URL.
+
+### Task 16: First-run personal-use notice
+**Files:** `ui/setup/NoticeScreen.kt`, NavHost start-destination logic in `MainActivity.kt`, `ui/settings/*` (link to re-read it), `NoticeFlowTest.kt` (Compose UI, Robolectric)
+**Produces:** a screen shown before key setup on first launch and whenever `NOTICE_VERSION` (constant, starts at 1) is higher than the accepted one stored in prefs. Text:
+> Recon is a personal tool. To analyse a video it downloads a temporary copy, then deletes it when the analysis finishes. Instagram, TikTok, X and other platforms may forbid downloading in their terms of service. You are responsible for what you share with Recon. Only share content you're allowed to process.
+>
+> Videos and screenshots are sent to Google's Gemini API with your own key. Google's terms apply.
+
+The only button is "I understand". Until it is tapped, shared links are held. If the app is opened via a share intent before acceptance, the notice shows first, then the share continues.
+**Tests:**
+- Gating: fresh install shows the notice before key setup. After accept, the next launch skips it. Bumping `NOTICE_VERSION` shows it again.
+- Pending share: a share intent arriving before acceptance creates no job until accept, then the job is created.
+
+### Task 17: README install guide, release verification, GitHub Release
+**Files:** `README.md`, `app/proguard-rules.pro` (only rules proven necessary), this file's "Perf results".
+**Produces — `README.md` sections:**
+1. **What Recon does** (3 lines) and the personal-use notice text from T16.
+2. **Which APK:** `arm64-v8a` for almost every phone from 2017 on. `armeabi-v7a` for older or Android Go phones. If installing says "App not installed" or "not compatible", try the other one.
+3. **Install (unknown sources):**
+   1. Download the APK from the Releases page in the phone's browser.
+   2. Open it from the download notification or the Files app.
+   3. When Android says the app isn't allowed to install unknown apps, tap **Settings** and turn on **Allow from this source** for that browser or Files app. The path is Settings → Apps → Special app access → Install unknown apps on most phones; the wording varies by brand (Samsung, Xiaomi, etc.).
+   4. Go back and tap **Install**.
+   5. If Google Play Protect warns that the app is unrecognised, tap **More details → Install anyway**.
+   6. Optionally turn the permission off again afterwards.
+4. **Verify the download (optional):** compare `sha256sum` with `SHA256SUMS.txt`, or use `apksigner verify --print-certs` against the fingerprint from T14.
+5. **Updating:** Recon shows a banner when a new version exists. Download and install it over the existing app; history and key are kept. Optionally track releases with Obtainium.
+6. **Set up your free Gemini key:** mirrors the key-setup screen, with the region and 18+ requirements and the no-billing advice.
+7. **Region not supported:** what it means, and that there is no workaround.
+8. **Privacy:** what leaves the phone (video or frames and audio to Google with the user's key, entity names to GitHub and Wikipedia), what stays (history, key), and the free-tier data-use note.
+9. **Uninstall:** removes history and key.
+
+**Release steps:**
+1. Build release with the T14 keystore. Install on the Nothing Phone (2), then run the gate build on the AVD.
+2. Run the M1 exit criteria.
+3. Add keep rules only for classes R8 broke (check logcat; youtubedl-android may need its Jackson models kept).
+4. Record sizes in Perf results.
+5. **R8 gate:** check Google's Android developer-verification status for India (and any other target region). If it is enforced or scheduled, register the developer account and `dev.wolzard.recon` with the D18 fingerprint first. Record the date and finding in the Decisions log.

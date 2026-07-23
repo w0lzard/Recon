@@ -1013,3 +1013,47 @@ The only button is "I understand". Until it is tapped, shared links are held. If
 3. Add keep rules only for classes R8 broke (check logcat; youtubedl-android may need its Jackson models kept).
 4. Record sizes in Perf results.
 5. **R8 gate:** check Google's Android developer-verification status for India (and any other target region). If it is enforced or scheduled, register the developer account and `dev.wolzard.recon` with the D18 fingerprint first. Record the date and finding in the Decisions log.
+6. `sha256sum recon-X.Y.Z-*-release.apk > SHA256SUMS.txt` (upload the files under their AGP names, unchanged).
+7. Tag `v0.1.0` and create the GitHub Release with both APKs (names per Distribution plan item 2) and the checksums file. Publishing is outward-facing, so confirm with the owner first.
+8. Update-path check:
+   1. Build a local release with `versionName = "0.0.9"`, signed with the same key, and install it.
+   2. Force a check in Settings and confirm the banner offers `v0.1.0` and links to the right ABI APK.
+   3. Download and install it over the old build, then confirm history and key are kept.
+
+**Done when:** the M1 exit criteria pass on the release build, the R8 gate is recorded, and the release is published.
+
+**R8 findings (2026-10-08, debug-signed release, arm64 APK on the API 30 arm-translation AVD, no key):**
+- Broken: `YoutubeDL.init` threw `ExceptionInInitializerError` ("class … is not a concrete class" in commons-compress
+  `ExtraFieldUtils.<clinit>`), so no download could run. Debug build on the same AVD: `yt-dlp update: DONE`. Fixed with
+  one keep rule (`ZipExtraField` implementations keep `<init>()`); release then logs `yt-dlp update: DONE`.
+- Working under R8: launch, notice → key setup, share → held → job created, Room, WorkManager, navigation, kotlinx
+  serialization of the job result path up to API_KEY_MISSING.
+- Not yet exercised under R8 (needs a key, ~2 free calls): an actual yt-dlp download + frame sampling, Gemini upload and
+  JSON parsing, GitHub/Wikipedia lookups. Do this in release step 2 (M1 exit criteria).
+
+---
+
+## Requirement → milestone map
+
+| Requirement | Where |
+|---|---|
+| Share from any app (`ACTION_SEND` text/plain, video/*) | T12 |
+| Extract first URL, resolve short links, YouTube → URL to model | T3, T11, S2 |
+| Non-YouTube via youtubedl-android, update at start | S3, T7 |
+| `VideoAnalyzer.analyze(input): AnalysisResult`, swappable backend behind ports | Ports, T6 |
+| GeminiApiBackend as default (and only v1) backend; `gemini-3.5-flash` primary, `gemini-3.8-flash` on 503/quota | S2, T6 (D4, D11) |
+| GeminiWebBackend experimental or removed; Spike 1 and milestones updated | D4, Parked section, S1 repurposed |
+| Path A for non-YouTube links + shared files, Path B fallback, YouTube URL direct; ≤ 480p h264 (720p only via user-triggered "Try sharper video") / Path B audio + ≤ 20 frames @ ~2 s, 768 px, dedupe | S2 (480p vs 720p), D21, T7, T8, T11, T13 |
+| Prompt combining spoken + on-screen, validated JSON | Prompts, T2, T6 |
+| "No entity found" is a valid output; prompt asks for an empty list when unsure (r10 test) | Analyse prompt, Review Focus #2, T2, T6 (manual r10), T11, T13, Exit 4a |
+| Typed entities (repo, app, product, book, person, place, recipe, claim, other) | D10, models, T2, S2 |
+| Pluggable `Researcher`: GitHub (fuzzy search from spoken names, 2–3 candidates to pick, r2 test), Wikipedia (MVP), knowledge researcher as default, grounded web optional by capability test | D13, D20, Ports, T5, T6, T9, T10, T13, S1 + diagnostic, Exit 4a |
+| Ungrounded answers labelled "Unverified, from AI knowledge", verdicts capped at Best match / Unclear | Global Constraints, D13, Knowledge prompt, T2, T10, T13, Exit 3–4 |
+| Grounding diagnostic (full 429 body, older model) recorded before Task 10 | Spike results → S1 diagnostic |
+| Model discovery + ranked preference (flash, then flash-lite), switch once on 503/daily-quota 429, answering model shown | D11, T5, T6, T13 |
+| Key setup: billing-raises-limits note with pricing link (no prices), jobs left today | Access model steps 8–9, T5 |
+| 1–2 AI calls per job, remaining-quota display, quota-reached state, second model on 503, no retry loops, no hard-coded limits | D9, D11, `QuotaStore`, Failure table (`MODEL_BUSY`), State machine (`WAITING_QUOTA`), T6, T11, T12, T13, H1, Exit 4a/5 |
+| Inferred items marked as guesses; claims get verdicts (capped to Unclear without grounding) | T2, T10, T13 |
+| Async jobs with states, WorkManager, notify on completion | State machine, T11, T12 |
+| Room history | T4, T13 |
+| Encrypted API key (+ GitHub token) | T5 (D3) |

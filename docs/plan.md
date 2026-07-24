@@ -1189,3 +1189,48 @@ Not in v1. Kept so the work isn't redone if it comes back.
 - **Path A vs B outcome:** same extraction on the overlap (r2–r8: 6/7 each); A costs ~3.5× fewer tokens. **Keep Path A primary, Path B fallback** (Pipeline unchanged). Download default **stays ≤ 480p** (provisional until the 720p comparison runs).
 - Follow-ups: rank `repo` above the `app` it belongs to in the analyse prompt (r1); spoken-only repo names (r2) are unreliable — they need the GitHub search fallback in T10, not better extraction.
 - YouTube `file_uri` variant (r2, r9): **NOT RUN** (429, 3.6-flash quota).
+
+### S1 — Google Search grounding — first run
+- Date: 2026-10-07. Model `gemini-3.6-flash` (and a probe on 3.5-flash).
+- Verdict: **FAIL, confirmed by the 2026-10-08 retest on 3.5-flash (see Reruns): grounding unavailable on this free-tier key.** Every call with `tools:[{google_search:{}}]` returned 429 `RESOURCE_EXHAUSTED` with no `quotaId` and no `retryDelay`, while ungrounded calls on the same model at the same time succeeded. Not a time-window limit. Retest once after the daily reset before acting.
+- [ ] Free tier allows grounded calls — **FAIL** (r4, r5, r8 + 2 probes all 429).
+- [ ] `groundingChunks` + `searchEntryPoint` — NOT REACHED.
+- [ ] Health claim `disputed`/`unclear` with sources — NOT REACHED.
+- [ ] Recipe returns ingredients — NOT REACHED.
+- [ ] `responseSchema` + tool (D16) — NOT REACHED.
+- If the retest also fails, per the plan: default researcher = ungrounded model knowledge, verdicts capped at `BEST_MATCH`/`UNCLEAR` with the "From AI knowledge, not checked online" label, H4 (Wikipedia) into MVP; edit D13 and the fallback table before Task 10. **Not applied yet.**
+
+### S1 diagnostic — grounded 429 body and an older model (2026-10-08, before Task 10)
+- Script: a one-off with one grounded call per model, no retries, and a trivial prompt ("Is it true that chocolate causes acne?"). Bodies are saved in `spikes/work/ground_diag_<model>.txt`; the key is not in them.
+
+| Model | Status | Full body (abridged only by removing the help URL text) | Reading |
+|---|---|---|---|
+| `gemini-3.5-flash` (11 of its daily requests used, ungrounded calls OK) | 429 `RESOURCE_EXHAUSTED` | `"You exceeded your current quota, please check your plan and billing details…"`, `details` = **only** `google.rpc.Help` (rate-limits link). **No `QuotaFailure`, no `RetryInfo`, no quota metric in the message.** Headers: no rate-limit headers. | Not the daily cap. A real daily-cap 429 (3.6-flash, same day) has `QuotaFailure` + the message "Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: …" + "retry in 14h8m". |
+| `gemini-2.5-flash` (older stable) | 404 `NOT_FOUND` | "This model models/gemini-2.5-flash is no longer available to new users. Please update your code to use models/gemini-3.8-flash…" | Older stable models are closed to new keys; cannot be used as a grounding workaround. |
+| `gemini-3.1-flash-lite` (oldest non-preview left, 0 calls that day) | 429 `RESOURCE_EXHAUSTED` | Same body as 3.5-flash: only `Help`, no `QuotaFailure`/`RetryInfo`. | A fresh model with unused quota rejects grounding the same way. |
+
+- **Conclusion:** grounding has **zero quota on this free-tier key**, and the error shape is a reliable signature: a 429 with no `QuotaFailure` and no `RetryInfo` on a grounded call. This is the D20 `UNAVAILABLE` rule and the T6 fixture. The decision (owner, 2026-10-08) stands: knowledge + Wikipedia by default, grounding opt-in by capability test.
+- Side finding for D11: old models return 404 "no longer available to new users", so the fallback model must be a current one (`gemini-3.8-flash`).
+
+### T6 live check — real Gemini API (2026-10-08, manual `GeminiLiveTest`)
+- Run with `GEMINI_LIVE=1 RECON_ROOT=$PWD ./gradlew :app:testDebugUnitTest --tests '*GeminiLiveTest*'`. It costs ~3 calls and reads the key from `.env` without printing it.
+- **Model listing (`GET v1beta/models`, paged): works.** Ranked (D11): `gemini-3.8-flash, gemini-3.7-flash, gemini-3.6-flash, gemini-3.5-flash, gemini-2.5-flash, gemini-3.5-flash-lite, gemini-3.1-flash-lite, gemini-2.5-flash-lite`. `gemini-2.5-flash` is listed but returns 404 to new keys (S1 diagnostic). The backend retires it on first use.
+- **r10 with the new analyse prompt (Path A, 480p file):** `gemini-3.8-flash`, 25.3 s, **0 entities** (S2 first run: Path A invented "Kirby"). Summary is correct ("metallic golden slime … like and subscribe"). **PASS (Exit 4a, R20).**
+- **Second-model check (one call each, single-model, no switching):**
+  - `gemini-3.8-flash`: **503 MODEL_BUSY** (5.4 s), right after it had answered r10.
+  - `gemini-3.7-flash`: **OK** (11.5 s). S2 had it "unavailable" on 2026-10-07.
+- Reading: the newest flash is the most overloaded, as with 3.6 yesterday. The one-switch rule (D9/D11) covers this, because a 503 on rank 1 moves to rank 2, and 3.7 answered. If 3.8 keeps 503-ing in real use, consider ranking by observed success later; that is not built now.
+
+### T13 device run — API 26 gate AVD (2026-10-08, emulator, indicative only; debug build)
+- Tests: unit 210 (1 live test skipped), instrumented 7/7 on API 26 (Keystore 4, FrameSampler 2, yt-dlp S3 Short download 1).
+- Key setup with the real key: "Key works". The capability test returned **UNAVAILABLE** (D20 signature, as in S1). Models were discovered.
+- r1 shared as text (`youtube.com/watch?v=uy_PEGgUF4U`):
+  - First run: **MODEL_BUSY**. 503 on `gemini-3.8-flash`, then 503 on `gemini-3.7-flash`; both went on the 10-minute cooldown.
+  - **Retry: DONE.** Path `youtube-url`. Analysis: the cooldowns skipped 3.8/3.7, and 3.6's daily quota was already used up, so the call moved once to `gemini-3.5-flash`. Research on 3.5, the sticky model. 6 attempts that day, matching the Home "Used today".
+  - Findings:
+    - `cli/cli` **CONFIRMED via the GitHub API** with link (the S2 ground truth).
+    - `vilmibm/gh-user-status` CONFIRMED.
+    - "GitHub CLI" BEST_MATCH, "Unverified, from AI knowledge".
+    - "GitHub Actions" matched the Wikipedia article "GitHub". That was too loose: fixed so only a longer title that contains the name counts as close. Regression test added.
+  - `cache/jobs` and `files/shared` were empty afterwards.
+- Screenshots: key setup, key OK, MODEL_BUSY, DONE (top and bottom), Home (kept locally, not committed).

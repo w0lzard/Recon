@@ -1145,3 +1145,47 @@ Not in v1. Kept so the work isn't redone if it comes back.
   | … | | | | | | |
   | **Total** | | | __/10 | __/10 | __/10 | |
 - Verdict: PASS | FAIL | PARTIAL
+- Plan changes made (Decisions log rows + sections edited):
+```
+
+### Hit-rate manifest (frozen)
+- File: `spikes/inputs/manifest.tsv`
+- sha256: `64358f0451252563e28baf6627a9ca0b18831a35d3c0fd82365fb9ee1bbd64c3`
+- Frozen: 2026-10-07, before any model call. No expected answer may change after the first model call. If the owner edits rows during review, record the new sha256 here before S2 runs.
+- Curated by Claude Code: 10 public YouTube videos, 41–87 s, all YouTube (no Instagram rows supplied). Owner review pending.
+- Mix: repo ×2 (r1, r2), app ×1 (r3), product ×1 (r4), recipe (r5), place (r6), book (r7), claim ×2 (r8 Hindi health, r9 English), none (r10).
+- Hard cases: r1 repo shown on screen in small terminal text but never said, r2 repo name garbled by TTS, r7 two books, r8 four unrelated claims.
+- Ground truth comes only from titles, descriptions, auto-captions and frame contact sheets inspected by Claude Code (`spikes/work/sheets/`), never from the model under test.
+- Local copies: `spikes/inputs/<id>_720.mp4` (long edge ≤ 1280) and `<id>_480.mp4` (long edge ≤ 854), merged from YouTube video-only + audio-only streams on the laptop with ffmpeg. Git-ignored.
+
+### Pre-spike findings (from curation, no model involved)
+- **YouTube offers no muxed formats.** All 11 candidate videos had none (format 18 is gone); every format is video-only or audio-only. The YouTube *download fallback* therefore cannot get a single playable file without merging. Proposed (confirm in S3, then edit D5 and the policy):
+  - YouTube fallback skips Path A.
+  - It downloads `bv*` and `ba[ext=m4a]` as two files and runs Path B directly: frames from the video-only file, audio file used as-is.
+  - No ffmpeg is needed.
+  - The main YouTube route (URL to Gemini) is unaffected.
+- **`[height<=480]` is wrong for vertical video.** yt-dlp's `height` is the long edge on Shorts and reels, so `height<=480` picked 240×426. A long-edge cap works for both orientations: `[height<=854][width<=854]` ≈ 480p and `[height<=1280][width<=1280]` ≈ 720p. Policy item 1 and T7 are updated to that form.
+- **480p is not always offered.** 4 of 10 videos topped out at 360p (640×360) under the 854 cap, so "≤ 480p" sometimes means 360p. S2's readability check covers this, since those files are the 480p-cap inputs.
+- **YouTube rate-limits subtitle fetches** (HTTP 429) after a few requests. This only affects curation, not the app.
+
+### Free-tier quota findings (2026-10-07, run 1)
+- **20 requests/day per model per project** (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`, value 20). `gemini-flash-latest` shares the quota of `gemini-3.8-flash`. The daily 429 carried `retryDelay` ≈ 67 552 s (≈ 18.8 h).
+- **HTTP 503 "high demand" is frequent** on 3.5/3.6/3.7/3.8-flash, and failed 503 attempts **count against the 20/day**. 3.8-flash and 3.6-flash each lost most of their budget to 503s.
+- Consequence for the product: at D9's ≤ 4 calls/job, a free key gives **≤ 5 jobs/day per model**, fewer under 503 load. Needs a decision (fallback model id list, no auto-retry on 503 beyond 1, user-visible "daily limit reached") before Task 7. **Decided 2026-10-08 (D9, D11):** 1–2 calls/job (≈ 10 jobs/day/model on a 20-request day, more with the fallback model), one fallback-model attempt on 503, `WAITING_QUOTA`, and limits learned from errors.
+- Runner: `spikes/s2.py`, `spikes/s1.py` (throwaway, D12). Raw outputs: `spikes/work/s2/<id>_<mode>_<model>.json`, `spikes/work/s1/`.
+
+### S2 — Path A vs Path B (Gemini API) — first run
+- Date: 2026-10-07. Model for the A/B comparison: `gemini-3.5-flash` (3.8-flash quota burned by 503s, 3.7-flash unavailable). Language: English. Path B = ≤ 20 frames evenly (~every 2 s), long edge ≤ 768 px **without upscaling** (plan's `scale=768:-2` would upscale 360p verticals), audio copied, all from the 480p-cap file.
+- Verdict: **PARTIAL, incomplete** after the first run. **Completed by rerun1 (2026-10-08): extraction PASS (A 8/10, B 9/10), 720p adds no hits, YouTube URL route works.** See "Reruns after quota reset".
+- [x] Extraction ≥ 8/10 on the better path — **PASS after rerun** (B 9/10, A 8/10). First run: A 6/7 scored, B 7/8 scored. Only miss is r2 on both paths. 9/10 still reachable.
+- [ ] r1/r2 correct repo is entity #1 — **FAIL**: r1 B has `cli/cli` as entity #2 (after "GitHub CLI" app); r2 owner/name garbled on both paths (`HeJiansun/My-girlfriend-Jingjing-LaTeX`, `yijust/uns-my-girlfriend-jinchen-latex`).
+- [x] r4 product is entity #1 with right type — **PASS** both paths.
+- [x] Health claim (r8, Hindi) extracted as `claim`, summary in requested language — **PASS** both paths.
+- [x] Schema-valid JSON — **PASS** 15/15 successful calls.
+- [ ] Wall time < 60 s — **FAIL**: A 19–85 s, B 36–103 s (includes upload; free tier under 503 load).
+- [x] 480p vs 720p on-screen text — **DONE in rerun: no difference in hits** (3.5: 4/4 = 4/4; 3.6: 2/2 = 2/2). First run: every 720p call (3.6-flash) returned 503. Indirect evidence 480p is enough: r1's small terminal text "Relevant pull requests in cli/cli" was read from the 480p-cap source by Path B (3.5) and by Path A (3.8 smoke test); 3.6-flash Path A at 480p did not extract it. r4/r6/r7 on-screen names read correctly at 480p.
+- Tokens (`usageMetadata.totalTokenCount`): Path A 6.9–9.8 k, Path B 24.9–26.3 k (**≈ 3.5× A**). Latency not better on B.
+- Side runs on 3.8-flash (Path A 480p): r1 hit (`cli/cli` #4), r3, r4, r5, r6 hit, r2 miss (`hejinsun/My Girlfriend Jinchen LaTeX`), 19–109 s.
+- **Path A vs B outcome:** same extraction on the overlap (r2–r8: 6/7 each); A costs ~3.5× fewer tokens. **Keep Path A primary, Path B fallback** (Pipeline unchanged). Download default **stays ≤ 480p** (provisional until the 720p comparison runs).
+- Follow-ups: rank `repo` above the `app` it belongs to in the analyse prompt (r1); spoken-only repo names (r2) are unreliable — they need the GitHub search fallback in T10, not better extraction.
+- YouTube `file_uri` variant (r2, r9): **NOT RUN** (429, 3.6-flash quota).

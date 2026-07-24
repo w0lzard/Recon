@@ -1234,3 +1234,47 @@ Not in v1. Kept so the work isn't redone if it comes back.
     - "GitHub Actions" matched the Wikipedia article "GitHub". That was too loose: fixed so only a longer title that contains the name counts as close. Regression test added.
   - `cache/jobs` and `files/shared` were empty afterwards.
 - Screenshots: key setup, key OK, MODEL_BUSY, DONE (top and bottom), Home (kept locally, not committed).
+
+### S3 — youtubedl-android on device
+- Date: 2026-10-07 11:57–12:05 IST.
+- **Device actually used: Samsung Galaxy S23 FE (SM-S711B), Android 16 / API 36, 7.5 GB RAM** — not the Nothing Phone (2) named in the plan. HIGH-END, NOT REPRESENTATIVE. `ro.product.cpu.abilist` = `arm64-v8a,armeabi-v7a,armeabi`; `abilist32` = `armeabi-v7a,armeabi` → **32-bit supported**, v7a tested by installing the v7a split (`primaryCpuAbi=armeabi-v7a` confirmed).
+- App: throwaway `spikes/ytdlp-app` (Java, AGP 9.4.1, `io.github.junkfood02.youtubedl-android:library:0.18.1`, no ffmpeg artifact, `useLegacyPackaging = true`, ABI splits, release build, R8 off, debug-signed). Flavors `with` / `base` (empty baseline). Uninstalled from the phone after the run. No git repo yet, so not on a `spike/ytdlp` branch.
+- Inputs: owner's IG reel `DeJ_pr9CNuO` (28 s) and YouTube Short `Psy_4mEWNDI` (r3), selector `b[height<=854][width<=854]/b[height<=1280][width<=1280]/w`, output to `cacheDir`.
+- Memory: PSS sampled in-app once a second as the sum of `/proc/<pid>/smaps_rollup` Pss over every process with the app's UID (app + `libpython.so` child; 2 processes at peak). `dumpsys meminfo` cannot see the native child on a non-debuggable build without root. `spikes/meminfo.sh` (host side, `adb root`) is used on the AVDs.
+
+| | arm64-v8a | armeabi-v7a |
+|---|---|---|
+| APK, base (empty app) | 0.64 MB | 0.64 MB |
+| APK, with youtubedl-android | 20.47 MB | 18.95 MB |
+| **youtubedl-android delta** (R8 off) | **+19.8 MB** | **+18.3 MB** |
+| `init` | 1.05 s | 0.67 s |
+| `updateYoutubeDL(STABLE)` | 1.95 s, DONE → 2026.08.19 | 1.52 s, DONE → 2026.08.19 |
+| IG reel, plan selector | **OK 6.7 s**, fmt `1`, h264 720×1280 + aac, 2.40 MB | **OK 7.8 s**, same file |
+| YT Short, plan selector | **FAIL 4.8 s**: "Requested format is not available" | **FAIL 6.1 s**, same |
+| YT fallback video `bv*[height<=854][width<=854]` | OK 6.7 s, fmt 243 VP9 640×338, 0.17 MB | OK 7.0 s, same |
+| YT fallback audio `ba[ext=m4a]` | OK 5.2 s, fmt 140 aac, 0.98 MB | OK 6.2 s, same |
+| PSS peak, app + Python child | **131 MB** (IG job) | **144 MB** (YT audio job) |
+
+- [x] IG reel downloads < 60 s, muxed, plays with audio — **PASS** on arm64 and v7a. MediaExtractor shows `video/avc` + `audio/mp4a-latm`. The phone's file has the same size as the laptop download (2 396 953 B), which decodes cleanly with ffmpeg (Android 16 blocks `adb pull` from `Android/data`, so no direct copy).
+- [ ] YouTube Short with the plan selector — **FAIL (expected)**: YouTube has no muxed formats (pre-spike finding confirmed on device). The two-file fallback (video-only + m4a, no merge) **PASS** on both ABIs → adopt it as the YouTube download fallback feeding Path B (D5 holds: no ffmpeg). Edit D5, the policy list and T7 before Task 7.
+- [x] armeabi-v7a — **PASS**, tested on device.
+- [x] PSS ≤ ~300 MB on the gate AVD — **PASS, emulator, indicative only**: peak 93 MB (see the gate AVD block below). High-end phone peak 131–144 MB.
+- `ffmpeg-location ... libffmpeg.so does not exist! Continuing without ffmpeg` is logged on every job: harmless warning, the library defaults to looking for ffmpeg.
+- Verdict: **PASS on device (function, both ABIs)**; YouTube needs the two-file fallback; AVD low-end numbers in the next block.
+
+### S3 + low-end gate — emulators (emulator, indicative only)
+- Date: 2026-10-08 14:50–15:05 IST. **Every number in this block is emulator, indicative only.** x86_64 AVDs on a KVM host, debug build, R8 off. Not ARM hardware, not a release build.
+- AVD (a) `recon_gate_api26`: `system-images;android-26;google_apis;x86_64`, `hw.ramSize=3072` (MemTotal 3 076 052 kB), `hw.cpu.ncore=2` (2 CPUs in `/proc/cpuinfo`), kernel 3.18. Small heap set with root and a zygote restart: `dalvik.vm.heapgrowthlimit=128m`, `heapsize=256m`. The config `vm.heapSize=192` did not take effect: it booted with 576m. Headless (`-no-window -no-audio -gpu swiftshader_indirect`). Network confirmed (ping, then downloads).
+- AVD (b) `recon_arm_xlate_api30`: `system-images;android-30;google_apis;x86_64`, `abilist=x86_64,x86,arm64-v8a,armeabi-v7a,armeabi`, `native.bridge=libndk_translation.so`.
+- AVDs live in `~/.config/.android/avd`, so the emulator needs `ANDROID_AVD_HOME=~/.config/.android/avd`.
+- App: `spikes/ytdlp-app` with an `x86_64` split (debug and gate only), plus a `mode=job` intent. That mode runs one job in `cacheDir/jobs/<id>/`: download, a Path B frame pass (≤ 20 frames, long edge ≤ 480, one Bitmap alive at a time), then `delete(dir)` in `finally`. A `mode=cancel` intent calls `destroyProcessById`.
+- Memory: `spikes/meminfo.sh` (host side) samples every process with the app UID once a second through `dumpsys meminfo <pid>` TOTAL PSS, with `adb root` so the native child can be read. It also works on the yt-dlp `libpython` child. The in-app sampler falls back from `smaps_rollup` to `smaps`, because kernel 3.18 has no `smaps_rollup`. Both agree within ~5 MB.
+
+| AVD (a), emulator, indicative only | Result |
+|---|---|
+| APK, debug x86_64: base / with youtubedl-android | 0.87 MB / 21.32 MB (**+20.4 MB**; debug arm64 21.28, v7a 19.75) |
+| `init` / `updateYoutubeDL(STABLE)` | 1.06 s / 1.31 s, DONE, 2026.08.19 |
+| IG reel `DeJ_pr9CNuO`, plan selector | OK 4.9 s, h264 720×1280 + aac, 2.40 MB |
+| YT Short r3 `Psy_4mEWNDI`, plan selector | FAIL 3.4 s "Requested format is not available" (expected) |
+| YT r3 two-file fallback: video / audio | OK 3.1 s fmt 243 VP9 640×338 / OK 3.0 s fmt 140 aac |
+| PSS peak, S3 job list (app + child) | **93 MB** (app ~36 MB + yt-dlp child ~57 MB) |

@@ -1101,3 +1101,47 @@ The only button is "I understand". Until it is tapped, shared links are held. If
 | R12 | youtubedl-android bloats APK / RAM (the Python child counts toward the 300 MB) | Medium | High (hard requirement) | ABI splits, no ffmpeg, ≤ 480p, S3 numbers incl. child PSS, H7. If over the gate on the AVD: drop the yt-dlp update on low-RAM devices, or stop yt-dlp after each job. |
 | R17 | 480p loses small on-screen text (repo URLs) | Low (S2 rerun: 720p added no hits) | Medium | Default ≤ 480p; user-triggered "Try sharper video" at 720p (D21). |
 | R18 | No real ≤ 3 GB phone available; AVD (x86_64) differs from ARM low-end hardware | Medium | Medium | Gate on the AVD is required. A real ≤ 3 GB phone run is **required** (Exit 9 stays open until done). The Perf results say which ran. |
+| R19 | Speech recognition garbles spoken repo names (r2 on every path and model) | High for spoken-only repos | Medium | Fuzzy token-subset GitHub search + user pick from 2–3 candidates (T9). |
+| R20 | Model invents entities for content-free videos (r10 "Kirby" on Path A) | Medium | Low–Medium | Prompt makes an empty list explicit; "Guess" badge for INFERRED; r10 test (T2, T6, T11). |
+| R13 | OEM battery killers stop jobs | Medium | Medium | Foreground `dataSync` worker, resume on restart |
+| R14 | `video/*` URI grant expires before the worker runs | High if unhandled | High | Copy immediately in the activity (T12) |
+| R15 | Release signing key lost | Low | High | T14: two offline backups, passwords in a password manager, restore drill |
+| R16 | Free-tier data used by Google to train models; users unaware | High | Low–Medium | Stated in key setup and Settings privacy note |
+
+---
+
+## Parked: Gemini web backend (D4)
+
+Not in v1. Kept so the work isn't redone if it comes back.
+- **Return trigger:** free API keys stop being available to individuals, or the owner explicitly wants it for personal builds.
+- **If revived:** own module `:gemini-web` behind a Settings "experimental" toggle. Login via WebView with cookie-paste fallback (`__Secure-1PSID`, `__Secure-1PSIDTS`). Never the default. Warning banner about account risk.
+- **Kotlin port vs Chaquopy evaluation (conclusion stands): Kotlin port.**
+  - Chaquopy would add a second CPython runtime next to youtubedl-android's, roughly +15–25 MB per ABI plus tens of MB of RAM and seconds of cold start on low-end phones.
+  - Its dependencies need Chaquopy-built native wheels for both ABIs.
+  - asyncio↔coroutine bridging is awkward.
+  - Upstream fixes still need an app release, which cancels the pip-upgrade advantage.
+  - The Kotlin port is ~400–600 LOC (access-token fetch from `/app`, upload, StreamGenerate, response parse, cookie rotation), following a pinned gemini-webapi commit as the reference.
+- **Its spike (old S1) when revived:** pass = cookies obtained by WebView or paste, plus a text reply and an image description via the Kotlin port within 4 h.
+
+---
+
+## Spike results (fill in; one block per spike)
+
+```markdown
+### S<n> — <title>
+- Date / who:
+- Device (model, Android version, RAM, ABI):            # S3
+- Model id + free-tier limits seen (incl. grounded RPD): # S1, S2
+- Inputs used:
+- Result per criterion:
+  - [ ] <criterion 1> — PASS/FAIL — evidence (numbers, logs, screenshot paths)
+  - [ ] <criterion 2> — …
+- Measurements: latency / tokens / APK size per ABI / RAM peak / download times
+- Hit-rate table (S2/S1):
+
+  | id | type | expected | Path A extracted | Path B extracted | Resolved (S1) | Notes |
+  |---|---|---|---|---|---|---|
+  | r1 | | | ✅/❌ | ✅/❌ | ✅/❌ | |
+  | … | | | | | | |
+  | **Total** | | | __/10 | __/10 | __/10 | |
+- Verdict: PASS | FAIL | PARTIAL

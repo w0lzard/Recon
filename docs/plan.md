@@ -1278,3 +1278,47 @@ Not in v1. Kept so the work isn't redone if it comes back.
 | YT Short r3 `Psy_4mEWNDI`, plan selector | FAIL 3.4 s "Requested format is not available" (expected) |
 | YT r3 two-file fallback: video / audio | OK 3.1 s fmt 243 VP9 640×338 / OK 3.0 s fmt 140 aac |
 | PSS peak, S3 job list (app + child) | **93 MB** (app ~36 MB + yt-dlp child ~57 MB) |
+| Full job, r1 `uy_PEGgUF4U`: download / 20 frames / total | 4.4 s / 0.27 s / 4.7 s, DONE |
+| PSS peak, full job (app + child) | **82 MB** host (app 27 MB + child 55 MB), 80 MB in-app |
+| Cleanup on success | `jobs/<id>/` gone, `cache/jobs` empty |
+| Cleanup on failure (airplane mode on at +12 s, `-r 40K`) | `.part` 351 KB present mid-download → FAILED after 29.5 s ("[Errno 7] No address associated with hostname. Giving up after 10 retries") → dir gone |
+| Cleanup on cancel (at +10 s) | `.part` 310 KB present → `destroyProcessById`=true → CANCELLED, dir gone, child process gone |
+| 10 consecutive jobs (all manifest r1–r10) | 10/10 DONE, 3.0–7.4 s each, PSS peak 79–87 MB per job, no OOM or ANR (the only `am_kill` is the test's own `force-stop`), cache empty after |
+| **Finding: AV1 on API 26** | The `bv*` fallback picked fmt 397 AV1 for r2, r4, r5, r6, r7. API 26 cannot decode AV1, so the frame pass got **0 frames** (job "DONE" with nothing to analyse). The fallback `bv*[vcodec^=avc1][height<=854][width<=854]/bv*[vcodec!^=av01][height<=854][width<=854]` fixed it: 5/5 picked avc1 (fmt 134/135, ≤ 480p), 19 frames each, 0.15–0.23 s. **Adopt it in the T7 YouTube fallback.** |
+
+| AVD (b), armeabi-v7a — **translation-based, not a real 32-bit test** | Result |
+|---|---|
+| Install v7a debug split | **Installs**, `primaryCpuAbi=armeabi-v7a` |
+| App start, `init`, `updateYoutubeDL` | OK: 0.96 s / 2.46 s, DONE 2026.08.19 |
+| Any download (IG, YT, fallback) | **FAIL** in < 15 ms: `CANNOT LINK EXECUTABLE "/system/bin/ndk_translation_program_runner_binfmt_misc": ".../python/usr/lib/libz.so.1.3.1" is for EM_ARM (40) instead of EM_386 (3)`. The ARM Python child is started through the x86 binfmt runner, which loads the ARM libraries. This is an emulator translation limit. It is not a v7a result: the real 32-bit run on the S23 FE passed on 2026-10-07. |
+
+- Not covered here: Gemini analyse/research inside a job (the spike app has no Gemini client, and Task 1 has not started). The gate uses a release R8 build, and this run was debug. A real ≤ 3 GB ARM phone was not used.
+- Verdict: **PSS gate PASS, emulator, indicative only** (peak 93 MB vs ~300 MB). This is a **lower bound**: debug build, R8 off, spike app with no Gemini code, and no upload or JSON in memory. Re-measure on the release build with the full pipeline (T17). Cleanup PASS on success, failure and cancel. v7a translation run is inconclusive. **Real-device low-end gate stays OPEN.**
+
+### Hit-rate table (S2/S1) — first run + rerun 2026-10-08, model `gemini-3.5-flash`
+Scoring: a hit means the expected entity is extracted with the right type. A repo counts if owner/name is recoverable from `owner` or `qualifier`. For r10, a hit means no entities, or only `other`.
+
+| id | type | expected | Path A 480 | Path B | A 720 (3.5) | YT URL (3.5) | Actual res, ≤ 480p file / 720p file | Resolved (S1) | Notes |
+|---|---|---|---|---|---|---|---|---|---|
+| r1 | repo | cli/cli | ✅ #3 (rerun) | ✅ #2 | ✅ #2 | — | 640×360 h264 / 1280×720 h264 | — (429) | `cli` in `qualifier`, not `owner`; 3.6-flash A480 ❌ |
+| r2 | repo | HEJustinSun/my-girlfriend-jingtian-latex | ❌ | ❌ | — | ❌ `he-justinsun-s-girlfriend-jinchin-latex` | 854×480 **AV1** / 1280×720 h264 | — | spoken name garbled on every path and model |
+| r3 | app | Codeium | ✅ | ✅ | ✅ | — | 640×338 h264 / 1280×674 h264 | — | |
+| r4 | product | Motorola razr (2026) | ✅ | ✅ | ✅ (+2 noise entities) | — | 854×480 h264 / 1280×720 h264 | — (429) | 3.6: ✅ 480 and 720 |
+| r5 | recipe | Chocolate chip cookies (2-cookie) | ✅ | ✅ | — | — | 480×854 h264 / 720×1280 h264 | — (429) | |
+| r6 | place | Taj Mahal, Agra | ✅ | ✅ | ✅ | — | 640×480 **AV1** / 960×720 h264 | — | 3.6: identical 480 and 720 |
+| r7 | book | Atomic Habits / James Clear | ✅ | ✅ | — | — | 854×480 h264 / 1280×720 h264 | — | both books found |
+| r8 | claim | Water while standing → knee/joint harm | ✅ | ✅ | — | — | 640×360 h264 / 1280×720 h264 | — (429) | Hindi; all 4 claims |
+| r9 | claim | Chocolate causes acne | ✅ #2 (rerun) | ✅ #1 (rerun) | — | ✅ #2 | 640×360 h264 / 1280×720 h264 | — | extracted as "Chocolate does not cause acne" (the video's debunk) |
+| r10 | none | — | ❌ `product Kirby` (inferred) (rerun) | ✅ empty (rerun) | — | — | 360×640 h264 / 720×1280 h264 | — | A invents an inferred entity |
+| **Total** | | | **8/10** | **9/10** | 4/4 | 1/2 | | 0 (grounding 429) | |
+
+- Actual resolution: the "≤ 480p" laptop files were downloaded with the plan selector. 4 of the 10 are really 360p (16:9 landscape, where the best ≤ 854 long edge was 640×360), and r2 and r6 came out as AV1. The app now uses the avc1-first selector (T7), so on device those become h264.
+
+Per-category hit rate (3.5-flash, A480 / B): repo 1/2 / 1/2 · app/product 2/2 / 2/2 · recipe 1/1 / 1/1 · place 1/1 / 1/1 · book 1/1 / 1/1 · claim 2/2 / 2/2 · none 0/1 / 1/1. **A 8/10, B 9/10** → the "≥ 8/10 on the better path" check **PASSES**.
+
+### Call log per spike (first run 2026-10-07, rerun 2026-10-08)
+Attempts counted from runner logs; a "503 attempt" is one HTTP call that returned 503 (these count toward the daily quota).
+
+| Spike | Model | Attempts | OK | 503 | 429 | Limit hit |
+|---|---|---|---|---|---|---|
+| S2 A480 batch + smoke + probes | gemini-3.8-flash | ≈ 22 | 6 | ≈ 15 | 1 | `GenerateRequestsPerDayPerProjectPerModel-FreeTier` = 20 (retryDelay ≈ 18.8 h); `gemini-flash-latest` shares it |

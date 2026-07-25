@@ -1322,3 +1322,47 @@ Attempts counted from runner logs; a "503 attempt" is one HTTP call that returne
 | Spike | Model | Attempts | OK | 503 | 429 | Limit hit |
 |---|---|---|---|---|---|---|
 | S2 A480 batch + smoke + probes | gemini-3.8-flash | ≈ 22 | 6 | ≈ 15 | 1 | `GenerateRequestsPerDayPerProjectPerModel-FreeTier` = 20 (retryDelay ≈ 18.8 h); `gemini-flash-latest` shares it |
+| S2 A480 + B pairs + 1 probe | gemini-3.5-flash | 25 | 16 | 5 | 4 | daily 429 from r9 on (same per-model daily limit) |
+| S2 480/720 + YT | gemini-3.6-flash | 32 | 2 | 22 | 2 (+6 grounded below) | daily 429 on the YT calls after 503s used the budget |
+| S1 grounded | gemini-3.6-flash, 3.5-flash | 12 | 0 | 0 | 12 | grounded 429 with no `quotaId`/`retryDelay` while ungrounded calls succeeded; 2 more S1 items skipped with no call (missing S2 source) |
+| S3 | — (no model calls) | 0 | — | — | — | — |
+| **Rerun 2026-10-08** S2 r1/r9/r10 + A720 + YT | gemini-3.5-flash | 11 | 11 | 0 | 0 | — (11 of 20 used) |
+| **Rerun 2026-10-08** S2 480/720 + YT + S1 | gemini-3.6-flash | 38 | 5 | 16 | 17 | 503s used up the daily 20 (`generate_content_free_tier_requests`, limit 20, retry 14 h 8 m); everything after was 429 |
+| **Rerun 2026-10-08** S1 grounded | gemini-3.5-flash | 15 (5 items × 3 attempts) | 0 | 0 | 15 | grounded 429 with no quota metric, while 3.5 had 9 requests left and ungrounded calls succeeded minutes before |
+
+### Reruns after quota reset — 2026-10-08 (rerun1)
+- Run by hand from 15:06 to 15:36 IST, because the 06:00 schedule did not fire. Outputs: `spikes/work/rerun1/` (S2). `spikes/work/rerun1_s1/` is empty because every S1 call returned 429. Log: `spikes/work/rerun1.log`.
+- `gemini-3.6-flash` was overloaded again: 16 of 21 non-429 calls returned 503, and those 503s counted toward the daily 20. So the 3.6 items (r1/r3 720p pairs, YT, S1) were re-run on `gemini-3.5-flash`, which returned 200 on every ungrounded call.
+
+**S2 rerun**
+- r1 A480: ✅ (`cli/cli` #3). r9 A/B: ✅ / ✅. r10 A/B: ❌ (invented "Kirby", `inferred`) / ✅ (empty). Totals in the hit-rate table: **A 8/10, B 9/10, so extraction PASSES**.
+- **480p vs 720p** (Path A, same model per pair):
+
+| id | 3.5 A480 | 3.5 A720 | 3.6 A480 | 3.6 A720 | Tokens 480 / 720 (3.5) |
+|---|---|---|---|---|---|
+| r1 (small terminal text) | ✅ #3 | ✅ #2 | ❌ | — 503 | 6 577 / 6 915 |
+| r3 (on-screen only) | ✅ (first run) | ✅ | — 503 | — 503 | — / 6 897 |
+| r4 | ✅ | ✅ (+ noise "Ratonfoulg", inferred Genshin Impact) | ✅ | ✅ | — / 7 157 |
+| r6 | ✅ | ✅ | ✅ | ✅ (identical) | — / 7 237 |
+
+  - Result: **720p adds no hits** (3.5: 4/4 vs 4/4; 3.6: 2/2 vs 2/2). Its only gain is r1's repo moving from #3 to #2, on one sample. It also adds noise on r4 and ~5% more tokens. **480p is enough; keep ≤ 480p.**
+- **YouTube `file_uri` (URL, no download)**, 3.5: r9 ✅ (15–23 s, 5.7 k tokens), r2 ❌ (same garbled spoken name as the other paths, 10.5 k tokens). The URL route works on the free tier, so D2 "YouTube sent as a URL" holds.
+- Wall time (3.5, upload included): A 18–25 s (r6 A720 65 s), B 17–22 s, YT URL 15–23 s. On 3.6 under load: 44–135 s. The "< 60 s" check passes on 3.5 except one outlier.
+- Tokens: A 5.9–7.5 k, B 24.6–25.1 k (≈ 3.5× A, as in the first run), YT URL 5.7–10.5 k.
+
+**S1 rerun (retest after reset)**
+- On 3.6: 15 attempts, all 429, but that was the exhausted daily cap, so it says nothing about grounding.
+- On 3.5: r1, r4, r5, r8 and r1 `--schema` were each tried 3 times (15 attempts), all 429 "You exceeded your current quota" with **no quota metric and no retry delay**. At the time 3.5 had 9 of 20 requests left, and its ungrounded calls had succeeded minutes before. This is the same pattern as 2026-10-07.
+- Verdict: **S1 FAIL, confirmed on a second day: Google Search grounding is unavailable on this free-tier key.** Per the S1 fail rule, the default researcher becomes ungrounded model knowledge, verdicts are capped at `BEST_MATCH`/`UNCLEAR` with the "From AI knowledge, not checked online" label, H4 (Wikipedia) moves into the MVP, and D13 and the fallback table are edited **before Task 10**. **Not applied yet: owner decision.**
+- Never reached: `groundingChunks`, `searchEntryPoint`, the r5 verdict, recipe ingredients, `responseSchema` + tool (D16).
+
+## Perf results (filled in Task 17 / H3)
+
+```markdown
+- Release APK arm64-v8a: __ MB | armeabi-v7a: __ MB
+- youtubedl-android APK delta: arm64 __ MB | v7a __ MB
+- Nothing Phone (2) — HIGH-END, NOT REPRESENTATIVE: full job Path A __ s, PSS peak (app+child) __ MB
+- Gate AVD (API 26, 3 GB, 2 cores, x86_64 debug-gate build): IG job __ s, Short job __ s, PSS peak (app+child) __ MB, 10-job run OOM/ANR: none / __
+  - Spike pre-read 2026-10-08 (emulator, indicative only; debug, R8 off, download + frames, no Gemini): IG 4.9 s, Short 4.7 s, PSS peak 93 MB, 10 jobs no OOM/ANR
+- Real ≤ 3 GB phone (model, RAM, ABI) or "not run": job __ s, PSS peak __ MB — **OPEN: not run; required before the low-end gate counts as passed (no physical ≤ 3 GB phone yet)**
+- Path B sampling time for a 60 s video (AVD): __ s

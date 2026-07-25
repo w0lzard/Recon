@@ -1366,3 +1366,47 @@ Attempts counted from runner logs; a "503 attempt" is one HTTP call that returne
   - Spike pre-read 2026-10-08 (emulator, indicative only; debug, R8 off, download + frames, no Gemini): IG 4.9 s, Short 4.7 s, PSS peak 93 MB, 10 jobs no OOM/ANR
 - Real ≤ 3 GB phone (model, RAM, ABI) or "not run": job __ s, PSS peak __ MB — **OPEN: not run; required before the low-end gate counts as passed (no physical ≤ 3 GB phone yet)**
 - Path B sampling time for a 60 s video (AVD): __ s
+```
+
+---
+
+## First-task checklist (Day 1, before any app code)
+
+- [ ] Create a throwaway Google account and use it for AI Studio.
+- [ ] Create a free API key at https://aistudio.google.com/apikey in a project **without billing**. Put it in a local `.env` (git-ignored).
+- [ ] `git init` in `Recon/`, add `.gitignore` (`.env`, `spikes/inputs/`, `keystore.properties`, `*.jks`), and commit `plan.md`.
+- [ ] Collect the S2 inputs r1–r5 into `spikes/inputs/` (r3 is a URL in a text file).
+- [ ] List models and pick the newest free Flash that supports grounding (D11):
+  `curl -s "https://generativelanguage.googleapis.com/v1beta/models" -H "x-goog-api-key: $KEY" | jq -r '.models[] | select(.supportedGenerationMethods|index("generateContent")) | .name'`
+- [ ] Run S2 Path A per input:
+  ```bash
+  F=spikes/inputs/r1.mp4; SIZE=$(stat -c%s "$F")
+  curl -s -D hdr.txt -X POST "https://generativelanguage.googleapis.com/upload/v1beta/files" \
+    -H "x-goog-api-key: $KEY" -H "X-Goog-Upload-Protocol: resumable" -H "X-Goog-Upload-Command: start" \
+    -H "X-Goog-Upload-Header-Content-Length: $SIZE" -H "X-Goog-Upload-Header-Content-Type: video/mp4" \
+    -H "Content-Type: application/json" -d '{"file":{"display_name":"r1"}}' > /dev/null
+  URL=$(grep -i '^x-goog-upload-url:' hdr.txt | cut -d' ' -f2 | tr -d '\r')
+  curl -s "$URL" -H "X-Goog-Upload-Offset: 0" -H "X-Goog-Upload-Command: upload, finalize" --data-binary "@$F" > file.json
+  NAME=$(jq -r .file.name file.json); URI=$(jq -r .file.uri file.json)
+  until [ "$(curl -s "https://generativelanguage.googleapis.com/v1beta/$NAME" -H "x-goog-api-key: $KEY" | jq -r .state)" = ACTIVE ]; do sleep 2; done
+  # prompt.txt = Analyse prompt with {language} filled in; schema.json = Analyse schema
+  jq -n --arg uri "$URI" --rawfile p prompt.txt --slurpfile s schema.json \
+    '{contents:[{parts:[{file_data:{mime_type:"video/mp4",file_uri:$uri}},{text:$p}]}],
+      generationConfig:{responseMimeType:"application/json",responseSchema:$s[0]}}' > req.json
+  time curl -s "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent" \
+    -H "x-goog-api-key: $KEY" -H "Content-Type: application/json" -d @req.json \
+    | tee out.json | jq -r '.candidates[0].content.parts[0].text, .usageMetadata'
+  ```
+- [ ] Run S2 Path B and the YouTube `file_uri` variant. Fill in the S2 block.
+- [ ] Run S1: research prompt over S2's entities for r1, r4 and r5:
+  ```bash
+  jq -n --rawfile p research_prompt.txt \
+    '{contents:[{parts:[{text:$p}]}], tools:[{google_search:{}}]}' > rreq.json
+  curl -s "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent" \
+    -H "x-goog-api-key: $KEY" -H "Content-Type: application/json" -d @rreq.json \
+    | tee rout.json | jq '.candidates[0].content.parts[0].text, .candidates[0].groundingMetadata.groundingChunks, (.candidates[0].groundingMetadata.searchEntryPoint != null)'
+  ```
+  Repeat with `generationConfig.responseSchema` added (D16). Fill in the S1 block.
+- [ ] Apply any S1/S2 plan changes (Pipeline, D13, D16, fallback table) **before** Task 1.
+- [ ] S3 on `spike/ytdlp`. Fill in the block.
+- [ ] Only after all three results blocks are filled: start Task 1.

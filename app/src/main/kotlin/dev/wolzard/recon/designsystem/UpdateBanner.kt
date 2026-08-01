@@ -1,4 +1,4 @@
-package dev.wolzard.recon.ui.home
+package dev.wolzard.recon.designsystem
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement

@@ -1,4 +1,4 @@
-package dev.wolzard.recon.ui.theme
+package dev.wolzard.recon.designsystem
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape

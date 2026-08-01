@@ -1,4 +1,4 @@
-package dev.wolzard.recon.ui.setup
+package dev.wolzard.recon.core.copy
 
 import dev.wolzard.recon.core.model.FailureReason
 

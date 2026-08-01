@@ -1,4 +1,4 @@
-package dev.wolzard.recon.ui.common
+package dev.wolzard.recon.designsystem
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
@@ -18,8 +18,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import dev.wolzard.recon.ui.theme.Mono
-import dev.wolzard.recon.ui.theme.status
+import dev.wolzard.recon.designsystem.Mono
+import dev.wolzard.recon.designsystem.status
 
 /** Colour role of a [StatusChip]; Neutral is the plain hairline chip (Done, Running). */
 enum class ChipKind { Neutral, Ok, Warn, Unclear, Bad }

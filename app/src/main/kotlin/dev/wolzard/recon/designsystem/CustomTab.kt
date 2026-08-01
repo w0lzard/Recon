@@ -1,4 +1,4 @@
-package dev.wolzard.recon.ui.common
+package dev.wolzard.recon.designsystem
 
 import android.content.Context
 import android.content.Intent

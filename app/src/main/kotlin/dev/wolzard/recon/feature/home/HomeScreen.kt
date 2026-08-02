@@ -1,5 +1,6 @@
-package dev.wolzard.recon.ui.home
+package dev.wolzard.recon.feature.home
 
+import dev.wolzard.recon.designsystem.UpdateBanner
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -11,12 +12,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import dev.wolzard.recon.ui.common.ChipKind
-import dev.wolzard.recon.ui.common.Reticle
-import dev.wolzard.recon.ui.common.StatusChip
-import dev.wolzard.recon.ui.common.Wordmark
-import dev.wolzard.recon.ui.common.dotGrid
-import dev.wolzard.recon.ui.theme.Mono
+import dev.wolzard.recon.designsystem.ChipKind
+import dev.wolzard.recon.designsystem.Reticle
+import dev.wolzard.recon.designsystem.StatusChip
+import dev.wolzard.recon.designsystem.Wordmark
+import dev.wolzard.recon.designsystem.dotGrid
+import dev.wolzard.recon.designsystem.Mono
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,13 +37,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import dev.wolzard.recon.core.link.LinkRouter
+import dev.wolzard.recon.core.link.displayHost
 import dev.wolzard.recon.core.model.Job
 import dev.wolzard.recon.core.model.JobState
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import java.net.URI
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -52,8 +52,7 @@ data class HomeRow(val id: String, val state: String, val host: String, val summ
         private val fmt = DateTimeFormatter.ofPattern("d MMM, HH:mm").withZone(ZoneId.systemDefault())
 
         fun from(job: Job): HomeRow {
-            val host = if (job.localUri != null) "Shared video" else
-                (job.url ?: LinkRouter.extractUrl(job.sharedText))?.let { runCatching { URI(it).host?.removePrefix("www.")?.removePrefix("m.") }.getOrNull() } ?: "Link"
+            val host = job.displayHost()
             val summary = job.resultJson?.let {
                 runCatching { Json.parseToJsonElement(it).jsonObject["analysis"]!!.jsonObject["summary"]!!.jsonPrimitive.content.lineSequence().first() }.getOrNull()
             }
@@ -79,13 +78,16 @@ data class HomeRow(val id: String, val state: String, val host: String, val summ
 }
 
 @Composable
-fun HomeScreen(rows: List<HomeRow>, onOpen: (String) -> Unit, onSettings: () -> Unit, banner: @Composable () -> Unit = {}) {
+fun HomeScreen(state: HomeState, onIntent: (HomeIntent) -> Unit) {
+    val rows = state.rows
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().height(64.dp).padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Wordmark(Modifier.weight(1f))
-            IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, contentDescription = "Settings") }
+            IconButton(onClick = { onIntent(HomeIntent.OpenSettings) }) { Icon(Icons.Filled.Settings, contentDescription = "Settings") }
         }
-        banner()
+        state.update?.let { u ->
+            UpdateBanner(u, { onIntent(HomeIntent.OpenLink(it)) }, { onIntent(HomeIntent.DismissUpdate(u.version)) }, Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+        }
         if (rows.isEmpty()) {
             Box(
                 Modifier.fillMaxSize().padding(16.dp).border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium).dotGrid(MaterialTheme.colorScheme.outlineVariant).padding(24.dp),
@@ -102,7 +104,7 @@ fun HomeScreen(rows: List<HomeRow>, onOpen: (String) -> Unit, onSettings: () -> 
         LazyColumn {
             items(rows, key = { it.id }) { r ->
                 Row(
-                    Modifier.fillMaxWidth().heightIn(min = 72.dp).clickable { onOpen(r.id) }.padding(horizontal = 16.dp, vertical = 8.dp),
+                    Modifier.fillMaxWidth().heightIn(min = 72.dp).clickable { onIntent(HomeIntent.OpenJob(r.id)) }.padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Column(Modifier.weight(1f)) {

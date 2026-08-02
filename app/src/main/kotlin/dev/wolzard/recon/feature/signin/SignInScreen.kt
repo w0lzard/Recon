@@ -1,5 +1,6 @@
-package dev.wolzard.recon.ui.setup
+package dev.wolzard.recon.feature.signin
 
+import dev.wolzard.recon.core.copy.SetupCopy
 import android.annotation.SuppressLint
 import android.webkit.CookieManager
 import android.webkit.WebView
@@ -7,7 +8,7 @@ import android.webkit.WebViewClient
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.draw.clip
-import dev.wolzard.recon.ui.theme.status
+import dev.wolzard.recon.designsystem.status
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,7 +25,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -33,15 +33,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /** Google sign-in in a WebView; the session cookies are taken once it lands on gemini.google.com (D22). */
 @Composable
-fun SignInScreen(vm: SignInViewModel, onDone: () -> Unit) {
-    val state by vm.state.collectAsStateWithLifecycle()
+fun SignInScreen(state: SignInState, onIntent: (SignInIntent) -> Unit) {
     var paste by rememberSaveable { mutableStateOf(false) }
     var pasted by rememberSaveable { mutableStateOf("") }
-    LaunchedEffect(state.done) { if (state.done) onDone() }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -67,10 +64,10 @@ fun SignInScreen(vm: SignInViewModel, onDone: () -> Unit) {
                 value = pasted, onValueChange = { pasted = it }, label = { Text("Cookie header") },
                 visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.small,
             )
-            Button(onClick = { vm.onCookies(pasted) }, Modifier.fillMaxWidth().height(48.dp), enabled = pasted.isNotBlank() && !state.checking, shape = MaterialTheme.shapes.small) { Text("Use these cookies") }
+            Button(onClick = { onIntent(SignInIntent.CookiesReceived(pasted)) }, Modifier.fillMaxWidth().height(48.dp), enabled = pasted.isNotBlank() && !state.checking, shape = MaterialTheme.shapes.small) { Text("Use these cookies") }
             TextButton(onClick = { paste = false }) { Text("Sign in here instead") }
         } else {
-            SignInWebView(Modifier.fillMaxWidth().height(560.dp).clip(MaterialTheme.shapes.medium).border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium), vm::onCookies)
+            SignInWebView(Modifier.fillMaxWidth().height(560.dp).clip(MaterialTheme.shapes.medium).border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium), { onIntent(SignInIntent.CookiesReceived(it)) })
             TextButton(onClick = { paste = true }) { Text("Can't sign in here? Paste cookies") }
         }
     }

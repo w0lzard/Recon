@@ -1,4 +1,4 @@
-package dev.wolzard.recon.ui.job
+package dev.wolzard.recon.feature.job
 
 import dev.wolzard.recon.core.model.Basis
 import dev.wolzard.recon.core.model.EntityType

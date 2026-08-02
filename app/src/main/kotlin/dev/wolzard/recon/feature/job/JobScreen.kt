@@ -1,4 +1,4 @@
-package dev.wolzard.recon.ui.job
+package dev.wolzard.recon.feature.job
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -8,17 +8,17 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
-import dev.wolzard.recon.ui.common.dotGrid
-import dev.wolzard.recon.ui.theme.status
+import dev.wolzard.recon.designsystem.dotGrid
+import dev.wolzard.recon.designsystem.status
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.ui.text.font.FontWeight
-import dev.wolzard.recon.ui.common.ChipKind
-import dev.wolzard.recon.ui.common.Reticle
-import dev.wolzard.recon.ui.common.StatusChip
-import dev.wolzard.recon.ui.theme.Mono
+import dev.wolzard.recon.designsystem.ChipKind
+import dev.wolzard.recon.designsystem.Reticle
+import dev.wolzard.recon.designsystem.StatusChip
+import dev.wolzard.recon.designsystem.Mono
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -37,7 +37,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.ui.text.style.TextOverflow
-import dev.wolzard.recon.ui.home.HomeRow
+import dev.wolzard.recon.core.link.displayHost
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Info
@@ -80,27 +80,14 @@ import dev.wolzard.recon.core.model.JobResult
 import dev.wolzard.recon.core.model.JobState
 import dev.wolzard.recon.core.model.Verdict
 
-sealed interface JobAction {
-    data object Retry : JobAction
-    data object CheckAgain : JobAction
-    data object LookUp : JobAction
-    data object TrySharper : JobAction
-    data object SignIn : JobAction
-    data object OpenSettings : JobAction
-    data object Cancel : JobAction
-    data object Back : JobAction
-    data class Pick(val findingIndex: Int, val repo: GhRepo?) : JobAction   // null = "None of these"
-    data class Open(val url: String) : JobAction
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 /** Stateless: everything comes from [job]/[result]; [now] decides whether Retry is enabled yet. */
 @Composable
-fun JobScreen(job: Job, result: JobResult?, now: Long, onAction: (JobAction) -> Unit) {
+fun JobScreen(job: Job, result: JobResult?, now: Long, onIntent: (JobIntent) -> Unit) {
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
-            title = { Text(HomeRow.from(job).host, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono, fontWeight = FontWeight.Medium)) },
-            navigationIcon = { IconButton(onClick = { onAction(JobAction.Back) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+            title = { Text(job.displayHost(), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono, fontWeight = FontWeight.Medium)) },
+            navigationIcon = { IconButton(onClick = { onIntent(JobIntent.Back) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             windowInsets = WindowInsets(0), // MainActivity's Scaffold already pads for the status bar
         )
@@ -109,22 +96,22 @@ fun JobScreen(job: Job, result: JobResult?, now: Long, onAction: (JobAction) -> 
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             when {
-                job.state == JobState.FAILED -> Failed(job, now, onAction)
-                job.state == JobState.DONE && result != null -> Done(result, onAction)
-                else -> Running(job, onAction)
+                job.state == JobState.FAILED -> Failed(job, now, onIntent)
+                job.state == JobState.DONE && result != null -> Done(result, onIntent)
+                else -> Running(job, onIntent)
             }
         }
     }
 }
 
 @Composable
-private fun Running(job: Job, onAction: (JobAction) -> Unit) {
+private fun Running(job: Job, onIntent: (JobIntent) -> Unit) {
     if (job.state == JobState.WAITING_QUOTA) {
         StatusChip("Waiting for quota", ChipKind.Warn)
         Text("Waiting for your free AI quota", style = MaterialTheme.typography.titleLarge)
-        Text("Link: ${HomeRow.from(job).host}")
+        Text("Link: ${job.displayHost()}")
         Text("Quota resets at ${job.retryAtEpochMs?.let(JobCopy::time) ?: "the next daily reset"}; this video starts then.")
-        OutlinedButton(shape = MaterialTheme.shapes.small, onClick = { onAction(JobAction.Cancel) }) { Text("Cancel") }
+        OutlinedButton(shape = MaterialTheme.shapes.small, onClick = { onIntent(JobIntent.Cancel) }) { Text("Cancel") }
         return
     }
     val steps = listOf(JobState.QUEUED to "Queued", JobState.DOWNLOADING to "Downloading", JobState.ANALYSING to "Analysing", JobState.RESEARCHING to "Looking things up")
@@ -151,7 +138,7 @@ private fun Running(job: Job, onAction: (JobAction) -> Unit) {
 }
 
 @Composable
-private fun Failed(job: Job, now: Long, onAction: (JobAction) -> Unit) {
+private fun Failed(job: Job, now: Long, onIntent: (JobIntent) -> Unit) {
     val reason = job.failure ?: FailureReason.UNKNOWN
     var help by rememberSaveable { mutableStateOf(false) }
     StatusChip("Failed", ChipKind.Bad)
@@ -163,11 +150,11 @@ private fun Failed(job: Job, now: Long, onAction: (JobAction) -> Unit) {
             FailureReason.UNSUPPORTED_LINK -> Unit
             FailureReason.DOWNLOAD_FAILED -> {
                 OutlinedButton(shape = MaterialTheme.shapes.small, onClick = { help = true }) { Text("Share the video file instead") }
-                if (!sharedFile) Button(shape = MaterialTheme.shapes.small, onClick = { onAction(JobAction.Retry) }) { Text("Retry") }
+                if (!sharedFile) Button(shape = MaterialTheme.shapes.small, onClick = { onIntent(JobIntent.Retry) }) { Text("Retry") }
             }
             FailureReason.VIDEO_UNREADABLE -> OutlinedButton(shape = MaterialTheme.shapes.small, onClick = { help = true }) { Text("Share a different file") }
-            FailureReason.API_KEY_MISSING, FailureReason.API_KEY_INVALID -> Button(shape = MaterialTheme.shapes.small, onClick = { onAction(JobAction.SignIn) }) { Text("Sign in") }
-            else -> if (!sharedFile) Button(shape = MaterialTheme.shapes.small, onClick = { onAction(JobAction.Retry) }, enabled = retryEnabled) { Text("Retry") }
+            FailureReason.API_KEY_MISSING, FailureReason.API_KEY_INVALID -> Button(shape = MaterialTheme.shapes.small, onClick = { onIntent(JobIntent.SignIn) }) { Text("Sign in") }
+            else -> if (!sharedFile) Button(shape = MaterialTheme.shapes.small, onClick = { onIntent(JobIntent.Retry) }, enabled = retryEnabled) { Text("Retry") }
         }
     }
     if (sharedFile && reason != FailureReason.UNSUPPORTED_LINK) Text("Share the video again to try once more; Recon's copy is gone.", style = MaterialTheme.typography.bodySmall)
@@ -180,7 +167,7 @@ private fun Failed(job: Job, now: Long, onAction: (JobAction) -> Unit) {
 }
 
 @Composable
-private fun Done(result: JobResult, onAction: (JobAction) -> Unit) {
+private fun Done(result: JobResult, onIntent: (JobIntent) -> Unit) {
     SectionLabel("SUMMARY")
     Text(result.analysis.summary, style = MaterialTheme.typography.bodyLarge)
     result.degraded.forEach { (id, retryAt) ->
@@ -190,12 +177,12 @@ private fun Done(result: JobResult, onAction: (JobAction) -> Unit) {
                 Text(text)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     when (id) {
-                        "budget" -> Button(shape = MaterialTheme.shapes.small, onClick = { onAction(JobAction.LookUp) }) { Text("Look up") }
+                        "budget" -> Button(shape = MaterialTheme.shapes.small, onClick = { onIntent(JobIntent.LookUp) }) { Text("Look up") }
                         "github" -> {
-                            OutlinedButton(shape = MaterialTheme.shapes.small, onClick = { onAction(JobAction.OpenSettings) }) { Text("Add GitHub token") }
-                            Button(shape = MaterialTheme.shapes.small, onClick = { onAction(JobAction.CheckAgain) }) { Text("Check again") }
+                            OutlinedButton(shape = MaterialTheme.shapes.small, onClick = { onIntent(JobIntent.OpenSettings) }) { Text("Add GitHub token") }
+                            Button(shape = MaterialTheme.shapes.small, onClick = { onIntent(JobIntent.CheckAgain) }) { Text("Check again") }
                         }
-                        else -> Button(shape = MaterialTheme.shapes.small, onClick = { onAction(JobAction.CheckAgain) }) { Text("Check again") }
+                        else -> Button(shape = MaterialTheme.shapes.small, onClick = { onIntent(JobIntent.CheckAgain) }) { Text("Check again") }
                     }
                 }
             }
@@ -207,12 +194,12 @@ private fun Done(result: JobResult, onAction: (JobAction) -> Unit) {
         contentAlignment = Alignment.Center,
     ) { Text(JobCopy.NOTHING_FOUND, Modifier.background(MaterialTheme.colorScheme.background), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center) }
     else SectionLabel("ENTITIES FOUND · ${result.findings.size}")
-    result.findings.forEachIndexed { i, f -> FindingCard(i, f, onAction) }
+    result.findings.forEachIndexed { i, f -> FindingCard(i, f, onIntent) }
     if (sharperOffered) OutlinedCard(Modifier.fillMaxWidth(), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Text hard to read?", style = MaterialTheme.typography.labelLarge)
             Text("Run again with more frames at higher resolution.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedButton(onClick = { onAction(JobAction.TrySharper) }, Modifier.fillMaxWidth().height(48.dp), shape = MaterialTheme.shapes.small) { Text("Try sharper video") }
+            OutlinedButton(onClick = { onIntent(JobIntent.TrySharper) }, Modifier.fillMaxWidth().height(48.dp), shape = MaterialTheme.shapes.small) { Text("Try sharper video") }
         }
     }
 
@@ -221,7 +208,7 @@ private fun Done(result: JobResult, onAction: (JobAction) -> Unit) {
         Column {
             result.sources.forEachIndexed { i, src ->
                 Row(
-                    Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button) { onAction(JobAction.Open(src.uri)) },
+                    Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button) { onIntent(JobIntent.Open(src.uri)) },
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text("${i + 1}", Modifier.width(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
@@ -246,7 +233,7 @@ private fun OnScreenText(lines: List<String>) {
 }
 
 @Composable
-private fun FindingCard(index: Int, f: Finding, onAction: (JobAction) -> Unit) {
+private fun FindingCard(index: Int, f: Finding, onIntent: (JobIntent) -> Unit) {
     OutlinedCard(Modifier.fillMaxWidth(), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             val verdictKind = when (f.verdict) {
@@ -266,32 +253,32 @@ private fun FindingCard(index: Int, f: Finding, onAction: (JobAction) -> Unit) {
                 StatusChip(JobCopy.basis(f.basis), ChipKind.Neutral)
                 f.stars?.let { StatusChip("★ $it", ChipKind.Neutral) }
             }
-            if (f.candidates.isNotEmpty()) Candidates(index, f.candidates, onAction)
+            if (f.candidates.isNotEmpty()) Candidates(index, f.candidates, onIntent)
             if (f.whatItIs.isNotBlank()) Text(f.whatItIs, color = MaterialTheme.colorScheme.onSurfaceVariant)
             f.keyFacts.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium) }
             if (f.howToTry.isNotBlank()) Text("${JobCopy.howToTryLabel(f.entity.type)}: ${f.howToTry}", style = MaterialTheme.typography.bodyMedium)
             if (f.whyInVideo.isNotBlank()) Text(f.whyInVideo, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             f.primaryLink?.takeIf { it.startsWith("https://") }?.let { link ->
-                OutlinedButton(shape = MaterialTheme.shapes.small, onClick = { onAction(JobAction.Open(link)) }) { Text(if (link.startsWith("https://github.com/")) "Open on GitHub" else "Open on Wikipedia") }
+                OutlinedButton(shape = MaterialTheme.shapes.small, onClick = { onIntent(JobIntent.Open(link)) }) { Text(if (link.startsWith("https://github.com/")) "Open on GitHub" else "Open on Wikipedia") }
             }
         }
     }
 }
 
 @Composable
-private fun Candidates(index: Int, repos: List<GhRepo>, onAction: (JobAction) -> Unit) {
+private fun Candidates(index: Int, repos: List<GhRepo>, onIntent: (JobIntent) -> Unit) {
     val line = MaterialTheme.colorScheme.outlineVariant
     Column(Modifier.fillMaxWidth().border(1.dp, line, MaterialTheme.shapes.small).clip(MaterialTheme.shapes.small)) {
         Text("Which repo did the video mean?", Modifier.padding(horizontal = 12.dp, vertical = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
         repos.forEach { r ->
             HorizontalDivider(color = line)
-            Column(Modifier.fillMaxWidth().heightIn(min = 52.dp).clickable(role = Role.Button) { onAction(JobAction.Pick(index, r)) }.padding(horizontal = 12.dp, vertical = 6.dp), verticalArrangement = Arrangement.Center) {
+            Column(Modifier.fillMaxWidth().heightIn(min = 52.dp).clickable(role = Role.Button) { onIntent(JobIntent.Pick(index, r)) }.padding(horizontal = 12.dp, vertical = 6.dp), verticalArrangement = Arrangement.Center) {
                 Text(r.fullName, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono, fontWeight = FontWeight.Medium))
                 Text(listOfNotNull("★ ${r.stars}", r.description).joinToString(" · "), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             }
         }
         HorizontalDivider(color = line)
-        TextButton(onClick = { onAction(JobAction.Pick(index, null)) }) { Text("None of these") }
+        TextButton(onClick = { onIntent(JobIntent.Pick(index, null)) }) { Text("None of these") }
     }
 }
 

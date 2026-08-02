@@ -1,4 +1,4 @@
-package dev.wolzard.recon.ui.job
+package dev.wolzard.recon.feature.job
 
 import android.content.Intent
 import android.webkit.WebResourceRequest

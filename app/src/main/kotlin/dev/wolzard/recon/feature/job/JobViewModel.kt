@@ -1,6 +1,5 @@
-package dev.wolzard.recon.ui.job
+package dev.wolzard.recon.feature.job
 
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.wolzard.recon.core.job.UserAction
 import dev.wolzard.recon.core.model.GhRepo
@@ -9,9 +8,7 @@ import dev.wolzard.recon.core.model.JobResult
 import dev.wolzard.recon.core.model.JobState
 import dev.wolzard.recon.core.model.Verdict
 import dev.wolzard.recon.core.port.JobStore
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.stateIn
+import dev.wolzard.recon.mvi.MviViewModel
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 
@@ -49,21 +46,29 @@ class JobActions(private val store: JobStore, private val cancelWork: (Job) -> U
     fun result(job: Job?): JobResult? = job?.resultJson?.let { runCatching { json.decodeFromString(JobResult.serializer(), it) }.getOrNull() }
 }
 
-class JobViewModel(private val id: String, store: JobStore, private val actions: JobActions) : ViewModel() {
-    val job: StateFlow<Job?> = store.observe(id).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
-
-    fun result(job: Job?) = actions.result(job)
-
-    /** Handles job-level actions; navigation actions are handled by the screen's route. */
-    fun act(a: JobAction) {
+class JobViewModel(private val id: String, store: JobStore, private val actions: JobActions) :
+    MviViewModel<JobViewState, JobIntent, JobEffect>(JobViewState()) {
+    init {
         viewModelScope.launch {
-            when (a) {
-                JobAction.Retry -> actions.requeue(id, UserAction.RUN)
-                JobAction.CheckAgain, JobAction.LookUp -> actions.requeue(id, UserAction.RESEARCH_ONLY)
-                JobAction.TrySharper -> actions.requeue(id, UserAction.TRY_SHARPER)
-                is JobAction.Pick -> actions.pick(id, a.findingIndex, a.repo)
-                JobAction.Cancel -> actions.cancel(id)
-                else -> Unit
+            store.observe(id).collect { job -> setState { JobViewState(job, actions.result(job)) } }
+        }
+    }
+
+    override fun onIntent(intent: JobIntent) {
+        when (intent) {
+            JobIntent.SignIn -> send(JobEffect.NavigateToSignIn)
+            JobIntent.OpenSettings -> send(JobEffect.NavigateToSettings)
+            JobIntent.Back -> send(JobEffect.NavigateBack)
+            is JobIntent.Open -> send(JobEffect.OpenUrl(intent.url))
+            else -> viewModelScope.launch {
+                when (intent) {
+                    JobIntent.Retry -> actions.requeue(id, UserAction.RUN)
+                    JobIntent.CheckAgain, JobIntent.LookUp -> actions.requeue(id, UserAction.RESEARCH_ONLY)
+                    JobIntent.TrySharper -> actions.requeue(id, UserAction.TRY_SHARPER)
+                    is JobIntent.Pick -> actions.pick(id, intent.findingIndex, intent.repo)
+                    JobIntent.Cancel -> { actions.cancel(id); send(JobEffect.NavigateBack) }
+                    else -> Unit
+                }
             }
         }
     }

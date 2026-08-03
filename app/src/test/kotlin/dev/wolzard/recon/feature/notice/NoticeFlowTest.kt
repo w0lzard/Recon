@@ -1,5 +1,7 @@
-package dev.wolzard.recon.ui.setup
+package dev.wolzard.recon.feature.notice
 
+import dev.wolzard.recon.data.notice.NOTICE_VERSION
+import dev.wolzard.recon.data.notice.Notice
 import android.content.Context
 import android.content.Intent
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -11,14 +13,14 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.work.testing.WorkManagerTestInitHelper
-import dev.wolzard.recon.Home
-import dev.wolzard.recon.SignIn
-import dev.wolzard.recon.Notice as NoticeRoute
+import dev.wolzard.recon.navigation.HomeDestination
+import dev.wolzard.recon.navigation.SignInDestination
+import dev.wolzard.recon.navigation.NoticeDestination
 import dev.wolzard.recon.core.link.LinkRouter
 import dev.wolzard.recon.data.db.ReconDb
 import dev.wolzard.recon.data.db.RoomJobStore
 import dev.wolzard.recon.data.media.ContentUriFetcher
-import dev.wolzard.recon.startDestination
+import dev.wolzard.recon.navigation.startDestination
 import dev.wolzard.recon.work.ShareGate
 import dev.wolzard.recon.work.ShareIntake
 import kotlinx.coroutines.flow.first
@@ -58,15 +60,15 @@ class NoticeFlowTest {
 
     @Test fun freshInstallShowsNoticeBeforeSignIn() {
         assertTrue(Notice(prefs).needed)
-        assertEquals(NoticeRoute, startDestination(noticeNeeded = true, signedIn = false))
-        assertEquals(NoticeRoute, startDestination(noticeNeeded = true, signedIn = true))
+        assertEquals(NoticeDestination, startDestination(noticeNeeded = true, signedIn = false))
+        assertEquals(NoticeDestination, startDestination(noticeNeeded = true, signedIn = true))
     }
 
     @Test fun afterAcceptNextLaunchSkipsIt() {
         Notice(prefs).accept()
         assertFalse(Notice(prefs).needed)
-        assertEquals(SignIn, startDestination(noticeNeeded = false, signedIn = false))
-        assertEquals(Home, startDestination(noticeNeeded = false, signedIn = true))
+        assertEquals(SignInDestination, startDestination(noticeNeeded = false, signedIn = false))
+        assertEquals(HomeDestination, startDestination(noticeNeeded = false, signedIn = true))
     }
 
     @Test fun bumpingNoticeVersionShowsItAgain() {

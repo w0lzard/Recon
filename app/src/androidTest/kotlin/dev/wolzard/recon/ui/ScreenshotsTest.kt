@@ -22,15 +22,16 @@ import dev.wolzard.recon.core.model.JobResult
 import dev.wolzard.recon.core.model.JobState
 import dev.wolzard.recon.core.model.Source
 import dev.wolzard.recon.core.model.Verdict
-import dev.wolzard.recon.ui.home.HomeRow
-import dev.wolzard.recon.ui.home.HomeScreen
-import dev.wolzard.recon.ui.job.JobScreen
-import dev.wolzard.recon.ui.settings.SettingsScreen
-import dev.wolzard.recon.ui.settings.SettingsViewModel
-import dev.wolzard.recon.ui.setup.SignInScreen
-import dev.wolzard.recon.ui.setup.SignInViewModel
-import dev.wolzard.recon.ui.setup.NoticeScreen
-import dev.wolzard.recon.ui.theme.ReconTheme
+import dev.wolzard.recon.feature.home.HomeRow
+import dev.wolzard.recon.feature.home.HomeScreen
+import dev.wolzard.recon.feature.home.HomeState
+import dev.wolzard.recon.feature.job.JobScreen
+import dev.wolzard.recon.feature.settings.SettingsScreen
+import dev.wolzard.recon.feature.settings.SettingsViewModel
+import dev.wolzard.recon.feature.signin.SignInScreen
+import dev.wolzard.recon.feature.signin.SignInState
+import dev.wolzard.recon.feature.notice.NoticeScreen
+import dev.wolzard.recon.designsystem.ReconTheme
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -74,10 +75,10 @@ class ScreenshotsTest {
             resultJson = """{"analysis":{"entities":[],"summary":"Three productivity books reviewed.","confidence":0.8},"findings":[],"sources":[],"searchSuggestionsHtml":null,"path":"A"}""",
             createdAt = now - 3_600_000, updatedAt = now)
         val waiting = Job("j2", "https://www.tiktok.com/@x/video/1", url = "https://www.tiktok.com/@x/video/1", state = JobState.WAITING_QUOTA, createdAt = now, updatedAt = now)
-        HomeScreen(listOf(HomeRow.from(waiting), HomeRow.from(done)), {}, {})
+        HomeScreen(HomeState(listOf(HomeRow.from(waiting), HomeRow.from(done)))) {}
     }
 
-    @Test fun homeEmpty() = shot("home_empty") { HomeScreen(emptyList(), {}, {}) }
+    @Test fun homeEmpty() = shot("home_empty") { HomeScreen(HomeState()) {} }
 
     @Test fun jobDone() = shot("job_done") {
         JobScreen(job(JobState.DONE), result(listOf(
@@ -106,13 +107,12 @@ class ScreenshotsTest {
     @Test fun quotaWaiting() = shot("job_quota_waiting") { JobScreen(job(JobState.WAITING_QUOTA, retryAt = now + 2 * 3_600_000), null, now) {} }
 
     @Test fun signIn() {
-        val vm = SignInViewModel(koin.get()) {}
-        shot("sign_in") { SignInScreen(vm) {} }
+        shot("sign_in") { SignInScreen(SignInState()) {} }
     }
 
     @Test fun settings() {
-        val vm = SettingsViewModel(koin.get(), koin.get())
-        shot("settings") { SettingsScreen(vm) {} }
+        val state = SettingsViewModel(koin.get(), koin.get()).state.value
+        shot("settings") { SettingsScreen(state) {} }
     }
 
     @Test fun notice() = shot("first_run_notice") { NoticeScreen {} }

@@ -1,5 +1,6 @@
 package dev.wolzard.recon
 
+import dev.wolzard.recon.data.notice.Notice
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -22,21 +23,22 @@ import androidx.navigation.toRoute
 import dev.wolzard.recon.core.port.Secret
 import dev.wolzard.recon.core.port.SecretStore
 import dev.wolzard.recon.data.update.UpdateChecker
-import dev.wolzard.recon.ui.common.openCustomTab
-import dev.wolzard.recon.ui.common.openInBrowser
-import dev.wolzard.recon.ui.home.UpdateBanner
+import dev.wolzard.recon.designsystem.openCustomTab
+import dev.wolzard.recon.designsystem.openInBrowser
+import dev.wolzard.recon.designsystem.UpdateBanner
 import androidx.compose.ui.unit.dp
-import dev.wolzard.recon.ui.home.HomeScreen
-import dev.wolzard.recon.ui.home.HomeViewModel
-import dev.wolzard.recon.ui.job.JobAction
-import dev.wolzard.recon.ui.job.JobScreen
-import dev.wolzard.recon.ui.job.JobViewModel
-import dev.wolzard.recon.ui.settings.SettingsScreen
-import dev.wolzard.recon.ui.setup.SignInScreen
-import dev.wolzard.recon.ui.setup.NoticeScreen
+import dev.wolzard.recon.feature.home.HomeScreen
+import dev.wolzard.recon.feature.home.HomeViewModel
+import dev.wolzard.recon.feature.job.JobIntent
+import dev.wolzard.recon.feature.job.JobScreen
+import dev.wolzard.recon.feature.job.JobViewModel
+import dev.wolzard.recon.feature.settings.SettingsScreen
+import dev.wolzard.recon.feature.signin.SignInScreen
 import dev.wolzard.recon.work.ShareGate
 import androidx.core.os.BundleCompat
-import dev.wolzard.recon.ui.theme.ReconTheme
+import dev.wolzard.recon.designsystem.ReconTheme
+import dev.wolzard.recon.navigation.ReconNavHost
+import dev.wolzard.recon.navigation.startDestination
 import dev.wolzard.recon.work.ShareIntake
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -44,19 +46,6 @@ import kotlinx.serialization.Serializable
 import org.koin.android.ext.android.inject
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
-
-@Serializable object Home
-@Serializable object Settings
-@Serializable object SignIn
-@Serializable object Notice
-@Serializable data class JobRoute(val id: String)
-
-/** T16: the personal-use notice comes before everything, then Gemini sign-in if signed out (D22). */
-fun startDestination(noticeNeeded: Boolean, signedIn: Boolean): Any = when {
-    noticeNeeded -> Notice
-    !signedIn -> SignIn
-    else -> Home
-}
 
 class MainActivity : ComponentActivity() {
     companion object {
@@ -68,7 +57,7 @@ class MainActivity : ComponentActivity() {
     private val intake: ShareIntake by inject()
     private val clock: () -> Long by inject()
     private val updates: UpdateChecker by inject()
-    private val notice by lazy { dev.wolzard.recon.ui.setup.Notice(getSharedPreferences(dev.wolzard.recon.ui.setup.Notice.PREFS, MODE_PRIVATE)) }
+    private val notice by lazy { Notice(getSharedPreferences(Notice.PREFS, MODE_PRIVATE)) }
     private val shares by lazy { ShareGate(notice, intake::accept) }
     /** A job to open: from a share or a notification's deep link. */
     private val openJob = MutableStateFlow<String?>(null)
@@ -83,55 +72,12 @@ class MainActivity : ComponentActivity() {
         val start = startDestination(notice.needed, signedIn())
         setContent {
             ReconTheme {
-                val nav = rememberNavController()
-                val pending by openJob.collectAsStateWithLifecycle()
-                LaunchedEffect(pending) {
-                    pending?.let { nav.navigate(JobRoute(it)) { launchSingleTop = true }; openJob.value = null }
-                }
-                Scaffold { padding ->
-                    NavHost(nav, startDestination = start, modifier = Modifier.padding(padding)) {
-                        composable<Home> {
-                            val vm: HomeViewModel = koinViewModel()
-                            val rows by vm.rows.collectAsStateWithLifecycle()
-                            val update by updates.available.collectAsStateWithLifecycle()
-                            HomeScreen(rows, onOpen = { nav.navigate(JobRoute(it)) }, onSettings = { nav.navigate(Settings) }) {
-                                update?.let { u ->
-                                    UpdateBanner(u, ::openInBrowser, { updates.dismiss(u.version) }, Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-                                }
-                            }
-                        }
-                        composable<JobRoute> { entry ->
-                            val id = entry.toRoute<JobRoute>().id
-                            val vm: JobViewModel = koinViewModel(key = id) { parametersOf(id) }
-                            val job by vm.job.collectAsStateWithLifecycle()
-                            job?.let { j ->
-                                JobScreen(j, vm.result(j), clock()) { a ->
-                                    when (a) {
-                                        JobAction.SignIn -> nav.navigate(SignIn)
-                                        JobAction.OpenSettings -> nav.navigate(Settings)
-                                        JobAction.Back -> nav.popBackStack()
-                                        JobAction.Cancel -> { vm.act(a); nav.popBackStack() }
-                                        is JobAction.Open -> if (a.url.startsWith("https://")) openCustomTab(a.url)
-                                        else -> vm.act(a)
-                                    }
-                                }
-                            }
-                        }
-                        composable<Notice> {
-                            NoticeScreen {
-                                if (!notice.needed) { nav.popBackStack(); return@NoticeScreen } // re-read from Settings
-                                lifecycleScope.launch { shares.accepted()?.let { openJob.value = it } }
-                                nav.navigate(startDestination(false, signedIn())) { popUpTo(nav.graph.id) { inclusive = true } }
-                            }
-                        }
-                        composable<SignIn> {
-                            SignInScreen(koinViewModel()) {
-                                nav.navigate(Home) { popUpTo(nav.graph.id) { inclusive = true } }
-                            }
-                        }
-                        composable<Settings> { SettingsScreen(koinViewModel(), onNotice = { nav.navigate(Notice) }) { nav.navigate(SignIn) } }
-                    }
-                }
+                ReconNavHost(
+                    start, openJob, clock,
+                    noticeNeeded = { notice.needed },
+                    signedIn = signedIn,
+                    onNoticeAccepted = { lifecycleScope.launch { shares.accepted()?.let { openJob.value = it } } },
+                )
             }
         }
     }

@@ -1,4 +1,4 @@
-package dev.wolzard.recon.ui.job
+package dev.wolzard.recon.feature.job
 
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -32,7 +32,7 @@ import org.junit.runner.RunWith
 class JobScreenTest {
     @get:Rule val compose = createComposeRule()
     private val now = 1_000_000L
-    private val actions = mutableListOf<JobAction>()
+    private val actions = mutableListOf<JobIntent>()
 
     private fun job(state: JobState, failure: FailureReason? = null, retryAt: Long? = null) =
         Job("j1", "https://www.instagram.com/reel/x/", state = state, failure = failure, failureDetail = "detail", retryAtEpochMs = retryAt, createdAt = 0, updatedAt = 0)
@@ -81,7 +81,7 @@ class JobScreenTest {
         show(job(JobState.DONE), result(listOf(finding(e, Verdict.NOT_CHECKED, Basis.VIDEO_ONLY)), degraded = mapOf("knowledge" to null)))
         compose.onNodeWithText("Couldn't look things up", substring = true).assertExists()
         compose.onNodeWithText("Check again").performClick()
-        assertEquals(listOf<JobAction>(JobAction.CheckAgain), actions)
+        assertEquals(listOf<JobIntent>(JobIntent.CheckAgain), actions)
     }
 
     @Test fun degradedGithubBanner() {
@@ -94,7 +94,7 @@ class JobScreenTest {
         show(job(JobState.DONE), result(listOf(finding(entity(EntityType.APP, "X"), Verdict.NOT_CHECKED, Basis.VIDEO_ONLY)), degraded = mapOf("budget" to null)))
         compose.onNodeWithText("lookups were skipped to save your Gemini usage", substring = true).assertExists()
         compose.onNodeWithText("Look up").performClick()
-        assertEquals(listOf<JobAction>(JobAction.LookUp), actions)
+        assertEquals(listOf<JobIntent>(JobIntent.LookUp), actions)
     }
 
     @Test fun wikipediaDegradedIsSilent() {
@@ -146,7 +146,7 @@ class JobScreenTest {
         repos.forEach { compose.onNodeWithText(it.fullName).assertExists() }
         compose.onNodeWithText("None of these").assertExists()
         compose.onNodeWithText("fuzzland/girlfriend").performScrollTo().performClick()
-        assertEquals(listOf<JobAction>(JobAction.Pick(0, repos[1])), actions)
+        assertEquals(listOf<JobIntent>(JobIntent.Pick(0, repos[1])), actions)
     }
 
     // --- done layout
@@ -188,14 +188,14 @@ class JobScreenTest {
         compose.onNodeWithText("Link: instagram.com").assertExists()
         compose.onNodeWithText("Quota resets at ${JobCopy.time(now + 60_000)}", substring = true).assertExists()
         compose.onNodeWithText("Cancel").performClick()
-        assertEquals(listOf<JobAction>(JobAction.Cancel), actions)
+        assertEquals(listOf<JobIntent>(JobIntent.Cancel), actions)
     }
 
     @Test fun topBarShowsHostAndBack() {
         show(job(JobState.ANALYSING))
         compose.onNodeWithText("instagram.com").assertExists()
         compose.onNodeWithContentDescription("Back").performClick()
-        assertEquals(listOf<JobAction>(JobAction.Back), actions)
+        assertEquals(listOf<JobIntent>(JobIntent.Back), actions)
     }
 
     @Test fun downloadingShowsSteps() {

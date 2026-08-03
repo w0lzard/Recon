@@ -1,6 +1,15 @@
-package dev.wolzard.recon.ui.job
+package dev.wolzard.recon.feature.job
 
 import androidx.room.Room
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
+import org.junit.Before
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.wolzard.recon.core.job.UserAction
@@ -26,12 +35,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(AndroidJUnit4::class)
 class JobViewModelTest {
     private val db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), ReconDb::class.java).allowMainThreadQueries().build()
     private val store = RoomJobStore(db)
     private val queued = mutableListOf<Pair<String, UserAction>>()
-    @After fun close() = db.close()
+    @Before fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
+    @After fun close() { db.close(); Dispatchers.resetMain() }
 
     private val repos = listOf(
         GhRepo("HEJustinSun/my-girlfriend-jingtian-latex", "https://github.com/HEJustinSun/my-girlfriend-jingtian-latex", "LaTeX for her", 3),
@@ -92,5 +103,44 @@ class JobViewModelTest {
         assertEquals(false, actions.cancel(running))
         assertEquals(JobState.ANALYSING, store.get(running)!!.state)
         assertEquals(listOf(waiting), cancelled)
+    }
+
+    // --- MVI: intents become state or one-shot effects
+
+    private fun vm(id: String) = JobViewModel(id, store, JobActions(store) { i, a -> queued += i to a })
+
+    @Test fun stateFollowsTheStoredJobAndItsResult() = runBlocking {
+        val id = jobWithPicker()
+        val state = withTimeout(5_000) { vm(id).state.first { it.job != null } }
+        assertEquals(JobState.DONE, state.job?.state)
+        assertEquals(1, state.result?.findings?.size)
+    }
+
+    @Test fun navigationIntentsBecomeEffects() = runBlocking {
+        val vm = vm(jobWithPicker())
+        vm.onIntent(JobIntent.SignIn)
+        vm.onIntent(JobIntent.OpenSettings)
+        vm.onIntent(JobIntent.Back)
+        vm.onIntent(JobIntent.Open("https://github.com/x/y"))
+        assertEquals(JobEffect.NavigateToSignIn, vm.effects.first())
+        assertEquals(JobEffect.NavigateToSettings, vm.effects.first())
+        assertEquals(JobEffect.NavigateBack, vm.effects.first())
+        assertEquals(JobEffect.OpenUrl("https://github.com/x/y"), vm.effects.first())
+    }
+
+    @Test fun retryRequeuesTheJob() = runBlocking {
+        val id = jobWithPicker()
+        vm(id).onIntent(JobIntent.Retry)
+        withTimeout(5_000) { while (queued.isEmpty()) delay(10) } // Room runs the update on its own thread
+        assertEquals(listOf(id to UserAction.RUN), queued)
+    }
+
+    @Test fun cancellingAWaitingJobDeletesItAndGoesBack() = runBlocking {
+        val id = store.create("https://youtu.be/yeNPwz5QcPw", null)
+        store.update(id) { it.copy(state = JobState.WAITING_QUOTA) }
+        val vm = vm(id)
+        vm.onIntent(JobIntent.Cancel)
+        assertEquals(JobEffect.NavigateBack, vm.effects.first())
+        assertNull(store.get(id))
     }
 }

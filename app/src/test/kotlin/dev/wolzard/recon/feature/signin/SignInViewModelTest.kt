@@ -1,18 +1,20 @@
-package dev.wolzard.recon.ui.setup
+package dev.wolzard.recon.feature.signin
 
+import dev.wolzard.recon.core.copy.SetupCopy
 import dev.wolzard.recon.core.model.AnalyzerException
 import dev.wolzard.recon.core.model.FailureReason
 import dev.wolzard.recon.core.port.Secret
 import dev.wolzard.recon.core.port.SecretStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -30,15 +32,15 @@ class SignInViewModelTest {
     @Test fun acceptedCookiesAreSavedWithoutCookiePrefix() {
         val secrets = FakeSecrets()
         val vm = SignInViewModel(secrets) {}
-        vm.onCookies("Cookie: NID=1; __Secure-1PSID=abc; __Secure-1PSIDTS=t ")
-        assertTrue(vm.state.value.done)
+        vm.onIntent(SignInIntent.CookiesReceived("Cookie: NID=1; __Secure-1PSID=abc; __Secure-1PSIDTS=t "))
+        assertEquals(SignInEffect.SignedIn, runBlocking { vm.effects.first() })
         assertEquals("NID=1; __Secure-1PSID=abc; __Secure-1PSIDTS=t", secrets.map[Secret.GEMINI_COOKIES])
     }
 
     @Test fun rejectedCookiesAreForgotten() {
         val secrets = FakeSecrets()
         val vm = SignInViewModel(secrets) { throw AnalyzerException(FailureReason.API_KEY_INVALID) }
-        vm.onCookies("__Secure-1PSID=abc")
+        vm.onIntent(SignInIntent.CookiesReceived("__Secure-1PSID=abc"))
         assertEquals(SetupCopy.signInFailed(FailureReason.API_KEY_INVALID), vm.state.value.error)
         assertNull(secrets.map[Secret.GEMINI_COOKIES])
     }
@@ -46,7 +48,7 @@ class SignInViewModelTest {
     @Test fun pasteWithoutSessionCookieIsRefusedWithoutACheck() {
         var checked = false
         val vm = SignInViewModel(FakeSecrets()) { checked = true }
-        vm.onCookies("NID=1; SID=2")
+        vm.onIntent(SignInIntent.CookiesReceived("NID=1; SID=2"))
         assertEquals(SetupCopy.NO_SESSION_COOKIE, vm.state.value.error)
         assertEquals(false, checked)
     }

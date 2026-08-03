@@ -1,10 +1,10 @@
-package dev.wolzard.recon.ui.settings
+package dev.wolzard.recon.feature.settings
 
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.wolzard.recon.core.port.Secret
-import dev.wolzard.recon.ui.setup.SignInViewModelTest.FakeSecrets
+import dev.wolzard.recon.feature.signin.SignInViewModelTest.FakeSecrets
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -14,8 +14,8 @@ class SettingsScreenTest {
     @get:Rule val compose = createComposeRule()
 
     private fun show(secrets: FakeSecrets) {
-        val vm = SettingsViewModel(secrets)
-        compose.setContent { SettingsScreen(vm) {} }
+        val state = SettingsViewModel(secrets).state.value
+        compose.setContent { SettingsScreen(state) {} }
     }
 
     @Test fun signedOutOffersSignIn() {

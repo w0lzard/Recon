@@ -6,7 +6,7 @@ import android.net.Uri
 import androidx.core.content.IntentCompat
 import dev.wolzard.recon.core.port.JobStore
 import dev.wolzard.recon.data.media.ContentUriFetcher
-import dev.wolzard.recon.ui.setup.Notice
+import dev.wolzard.recon.data.notice.Notice
 import java.io.File
 import java.util.UUID
 

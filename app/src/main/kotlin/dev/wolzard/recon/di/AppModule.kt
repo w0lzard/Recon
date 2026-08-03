@@ -15,7 +15,7 @@ import dev.wolzard.recon.data.db.RoomJobStore
 import dev.wolzard.recon.data.gemini.GeminiWebBackend
 import dev.wolzard.recon.data.gemini.GeminiWebClient
 import dev.wolzard.recon.core.port.GroundingCapability
-import dev.wolzard.recon.ui.setup.SignInViewModel
+import dev.wolzard.recon.feature.signin.SignInViewModel
 import dev.wolzard.recon.data.github.OkHttpGitHubClient
 import dev.wolzard.recon.core.port.GitHubClient
 import dev.wolzard.recon.core.research.GitHubResearcher
@@ -32,10 +32,10 @@ import dev.wolzard.recon.data.media.YoutubeDlRunner
 import dev.wolzard.recon.data.media.YtDlpFetcher
 import dev.wolzard.recon.data.media.YtDlpRunner
 import dev.wolzard.recon.data.secret.KeystoreSecretStore
-import dev.wolzard.recon.ui.settings.SettingsViewModel
-import dev.wolzard.recon.ui.home.HomeViewModel
-import dev.wolzard.recon.ui.job.JobActions
-import dev.wolzard.recon.ui.job.JobViewModel
+import dev.wolzard.recon.feature.settings.SettingsViewModel
+import dev.wolzard.recon.feature.home.HomeViewModel
+import dev.wolzard.recon.feature.job.JobActions
+import dev.wolzard.recon.feature.job.JobViewModel
 import dev.wolzard.recon.work.JobQueue
 import okhttp3.OkHttpClient
 import dev.wolzard.recon.core.job.Fetchers
@@ -91,5 +91,5 @@ val appModule = module {
     viewModel { SettingsViewModel(get(), get()) }
     single { JobActions(get(), { job -> JobQueue.cancel(androidContext(), job) }) { id, action -> JobQueue.enqueue(androidContext(), id, action) } }
     viewModel { params -> JobViewModel(params.get(), get(), get()) }
-    viewModel { HomeViewModel(get()) }
+    viewModel { HomeViewModel(get(), get()) }
 }

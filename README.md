@@ -15,7 +15,7 @@ apps, books, places, repos, products, with sources where it can.
 ![Sideload only](https://img.shields.io/badge/distribution-sideload-A8E06C?style=flat-square&labelColor=161A18)
 ![No analytics](https://img.shields.io/badge/analytics-none-A8E06C?style=flat-square&labelColor=161A18)
 
-[**Download**](https://github.com/w0lzard/Recon/releases/latest) · [Install](#install) · [Verify](#verify-the-download) · [Privacy](#privacy) · [Build](#building)
+[**Download**](https://github.com/w0lzard/Recon/releases/latest) · [Install](#install) · [Verify](#verify-the-download) · [Privacy](#privacy) · [Architecture](#architecture) · [Build](#building)
 
 <br>
 
@@ -119,6 +119,42 @@ so they don't show up in your Gemini history.
 
 **Uninstall** Recon like any app. That removes your history and your Gemini sign-in from the phone. To end the session
 on Google's side too, sign out of all sessions in your Google account's security settings.
+
+## Architecture
+
+Kotlin and Jetpack Compose, organised **by feature**, with **MVI** in the presentation layer.
+
+```
+core/                    pure Kotlin module: models, ports, job pipeline, research chain, shared copy and host label (no Android)
+app/src/main/kotlin/dev/wolzard/recon/
+├── feature/             one folder per screen flow
+│   ├── home/            HomeContract · HomeViewModel · HomeScreen · HomeRoute
+│   ├── job/             progress, waiting, failed and result
+│   ├── settings/
+│   ├── signin/
+│   └── notice/          first-run notice (no ViewModel: one button)
+├── mvi/                 MviViewModel base + CollectEffects
+├── navigation/          ReconNavHost: the nav graph and start destination
+├── designsystem/        theme, status chip, reticle, dot grid, update banner, browser helpers
+├── data/                Room, Gemini web client, GitHub and Wikipedia clients, media, secrets, update check, notice acceptance
+├── work/                WorkManager job queue, notifications, share intake
+└── di/                  Koin wiring
+```
+
+Each feature follows the same loop:
+
+```mermaid
+flowchart LR
+    S["Screen<br/>(stateless)"] -- Intent --> V[ViewModel]
+    V -- State --> S
+    V -- Effect --> R["Route<br/>(navigate, open link)"]
+```
+
+- **State** is one immutable class per feature. The screen is a pure function of it: `Screen(state, onIntent)`.
+- **Intent** is a sealed interface of everything the user can do. The ViewModel handles it in `onIntent`.
+- **Effect** is a one-shot event: navigate, open a link, clear the sign-in WebView. It is delivered once, through a buffered channel, never kept in state.
+- **Route** is the only composable that knows about the ViewModel and Android. It collects state and effects and hands navigation back to `ReconNavHost`.
+- `core` knows nothing about Android; `data` implements its ports. Features depend only on `core`, `data`, `designsystem` and `mvi`, never on each other. Code two features need lives in one of those: the update banner in `designsystem`, the sign-in copy and the job host label in `core`, the notice acceptance in `data`. Only `di` knows every feature, to bind the ViewModels.
 
 ## Building
 

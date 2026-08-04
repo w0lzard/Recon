@@ -13,7 +13,7 @@ val keystoreProps = rootProject.file("keystore.properties").takeIf { it.exists()
     ?.let { f -> Properties().apply { f.inputStream().use(::load) } }
 // APK names (AGP pattern <archivesName>-<abi>-<buildType>.apk): recon-0.1.0-arm64-v8a-release.apk.
 // T15 matches release assets by this pattern; see README → "Which APK".
-val appVersion = "0.1.0"
+val appVersion = "0.1.1"
 base.archivesName.set("recon-$appVersion")
 
 android {
@@ -24,7 +24,7 @@ android {
         applicationId = "dev.wolzard.recon"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
+        versionCode = 2
         versionName = appVersion
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "RELEASES_REPO", "\"${providers.gradleProperty("recon.releasesRepo").get()}\"")

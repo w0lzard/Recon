@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark system-bar icons on the light splash/app background, light icons on the dark one. -->
+    <bool name="light_bars">true</bool>
+</resources>

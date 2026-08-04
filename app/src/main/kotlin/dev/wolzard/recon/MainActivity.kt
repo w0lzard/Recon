@@ -36,6 +36,7 @@ import dev.wolzard.recon.feature.settings.SettingsScreen
 import dev.wolzard.recon.feature.signin.SignInScreen
 import dev.wolzard.recon.work.ShareGate
 import androidx.core.os.BundleCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import dev.wolzard.recon.designsystem.ReconTheme
 import dev.wolzard.recon.navigation.ReconNavHost
 import dev.wolzard.recon.navigation.startDestination
@@ -62,8 +63,16 @@ class MainActivity : ComponentActivity() {
     /** A job to open: from a share or a notification's deep link. */
     private val openJob = MutableStateFlow<String?>(null)
 
+    /** True once the first Compose frame is up; the splash stays until then so there is no blank flash. */
+    private var firstFrameDrawn = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splash = installSplashScreen()
         super.onCreate(savedInstanceState)
+        splash.setKeepOnScreenCondition { !firstFrameDrawn }
+        splash.setOnExitAnimationListener { screen ->
+            screen.view.animate().alpha(0f).setDuration(200).withEndAction { screen.remove() }.start()
+        }
         enableEdgeToEdge()
         shares.held = savedInstanceState?.let { BundleCompat.getParcelable(it, HELD_SHARE, Intent::class.java) }
         if (savedInstanceState == null) handle(intent)
@@ -72,6 +81,7 @@ class MainActivity : ComponentActivity() {
         val start = startDestination(notice.needed, signedIn())
         setContent {
             ReconTheme {
+                LaunchedEffect(Unit) { firstFrameDrawn = true }
                 ReconNavHost(
                     start, openJob, clock,
                     noticeNeeded = { notice.needed },

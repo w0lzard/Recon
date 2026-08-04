@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Splash icon (design 2d/2e): dark plate with the mark at 40% of its diameter. The plate is part of the drawable so
+     it also shows before Android 12, where the icon background colour isn't supported. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="@color/splash_plate" android:pathData="M54,54m-36,0a36,36 0 1,1 72,0a36,36 0 1,1 -72,0" />
+    <group android:pivotX="54" android:pivotY="54" android:scaleX="0.6" android:scaleY="0.6">
+        <path android:fillColor="#00000000" android:strokeColor="#E8ECE9" android:strokeWidth="3.75"
+            android:pathData="M30,45V30H45M63,30H78V45M30,63V78H45M63,78H78V63" />
+        <path android:fillColor="#A8E06C" android:pathData="M49.5,49.5h9v9h-9z" />
+    </group>
+</vector>

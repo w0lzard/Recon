@@ -14,11 +14,13 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import dev.wolzard.recon.R
 
 /** Status inks are app-level extensions, not M3 roles (design "Recon UI" 1a). */
 @Immutable
@@ -32,9 +34,9 @@ private val LightStatus = StatusColors(Color(0xFF3F6B12), Color(0xFF8A5A00), Col
 private val Lime = Color(0xFFA8E06C)
 private val Ink = Color(0xFF0E1110)
 
-// ponytail: system Sans/Monospace stand in for Inter/JetBrains Mono; bundle the fonts in res/font if exact match matters.
-val Mono = FontFamily.Monospace
-private val Sans = FontFamily.SansSerif
+// D24: Inter and JetBrains Mono (both SIL OFL, docs/licenses), subset to Latin, 369 KB in all. Other scripts fall back to the system font.
+val Mono = FontFamily(Font(R.font.jetbrains_mono_regular, FontWeight.Normal), Font(R.font.jetbrains_mono_medium, FontWeight.Medium))
+private val Sans = FontFamily(Font(R.font.inter_regular, FontWeight.Normal), Font(R.font.inter_medium, FontWeight.Medium), Font(R.font.inter_semibold, FontWeight.SemiBold))
 
 private val Dark = darkColorScheme(
     background = Ink, surface = Ink, onBackground = Color(0xFFE8ECE9), onSurface = Color(0xFFE8ECE9),

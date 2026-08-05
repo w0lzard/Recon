@@ -18,7 +18,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import dev.wolzard.recon.designsystem.ChipKind
 import dev.wolzard.recon.designsystem.Reticle
+import androidx.compose.ui.graphics.vector.ImageVector
 import dev.wolzard.recon.designsystem.StatusChip
+import dev.wolzard.recon.designsystem.StatusIcons
 import dev.wolzard.recon.designsystem.Wordmark
 import dev.wolzard.recon.designsystem.dotGrid
 import dev.wolzard.recon.designsystem.Mono
@@ -51,7 +53,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-data class HomeRow(val id: String, val state: String, val host: String, val summary: String?, val time: String, val kind: ChipKind = ChipKind.Neutral) {
+data class HomeRow(val id: String, val state: String, val host: String, val summary: String?, val time: String, val kind: ChipKind = ChipKind.Neutral, val icon: ImageVector? = null) {
     companion object {
         private val fmt = DateTimeFormatter.ofPattern("d MMM, HH:mm").withZone(ZoneId.systemDefault())
 
@@ -60,7 +62,14 @@ data class HomeRow(val id: String, val state: String, val host: String, val summ
             val summary = job.resultJson?.let {
                 runCatching { Json.parseToJsonElement(it).jsonObject["analysis"]!!.jsonObject["summary"]!!.jsonPrimitive.content.lineSequence().first() }.getOrNull()
             }
-            return HomeRow(job.id, stateLabel(job.state), host, summary, fmt.format(Instant.ofEpochMilli(job.createdAt)), chipKind(job.state))
+            return HomeRow(job.id, stateLabel(job.state), host, summary, fmt.format(Instant.ofEpochMilli(job.createdAt)), chipKind(job.state), stateIcon(job.state))
+        }
+
+        fun stateIcon(s: JobState) = when (s) {
+            JobState.DONE -> StatusIcons.Done
+            JobState.FAILED -> StatusIcons.Error
+            JobState.WAITING_QUOTA -> StatusIcons.Waiting
+            else -> StatusIcons.Running
         }
 
         fun chipKind(s: JobState) = when (s) {
@@ -134,7 +143,7 @@ fun HomeScreen(state: HomeState, onIntent: (HomeIntent) -> Unit) {
                         Text(r.host, maxLines = 1, style = if (r.summary != null) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono, fontWeight = FontWeight.Medium))
                         Text(r.time, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                     }
-                    StatusChip(r.state, r.kind)
+                    StatusChip(r.state, r.kind, icon = r.icon)
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }

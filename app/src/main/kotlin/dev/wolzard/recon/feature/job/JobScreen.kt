@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import dev.wolzard.recon.designsystem.ChipKind
 import dev.wolzard.recon.designsystem.Reticle
 import dev.wolzard.recon.designsystem.StatusChip
+import dev.wolzard.recon.designsystem.StatusIcons
 import dev.wolzard.recon.designsystem.Mono
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -73,6 +74,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import dev.wolzard.recon.core.model.Answer
+import dev.wolzard.recon.core.model.Basis
 import dev.wolzard.recon.core.model.AnswerStatus
 import kotlin.math.roundToInt
 import dev.wolzard.recon.core.model.EntityType
@@ -115,7 +117,7 @@ fun JobScreen(job: Job, result: JobResult?, now: Long, onIntent: (JobIntent) -> 
 @Composable
 private fun Running(job: Job, onIntent: (JobIntent) -> Unit) {
     if (job.state == JobState.WAITING_QUOTA) {
-        StatusChip("Waiting for quota", ChipKind.Warn)
+        StatusChip("Waiting for quota", ChipKind.Warn, icon = StatusIcons.Waiting)
         Text("Waiting for your free AI quota", style = MaterialTheme.typography.titleLarge)
         Text("Link: ${job.displayHost()}")
         Text("Quota resets at ${job.retryAtEpochMs?.let(JobCopy::time) ?: "the next daily reset"}; this video starts then.")
@@ -149,7 +151,7 @@ private fun Running(job: Job, onIntent: (JobIntent) -> Unit) {
 private fun Failed(job: Job, now: Long, onIntent: (JobIntent) -> Unit) {
     val reason = job.failure ?: FailureReason.UNKNOWN
     var help by rememberSaveable { mutableStateOf(false) }
-    StatusChip("Failed", ChipKind.Bad)
+    StatusChip("Failed", ChipKind.Bad, icon = StatusIcons.Error)
     Text(JobCopy.failureMessage(reason, job.retryAtEpochMs, job.failureDetail), style = MaterialTheme.typography.titleLarge)
     val retryEnabled = job.retryAtEpochMs?.let { now >= it } ?: true
     val sharedFile = job.localUri != null
@@ -273,8 +275,9 @@ private fun FindingCard(index: Int, f: Finding, onIntent: (JobIntent) -> Unit) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             val verdictKind = when (f.verdict) {
                 Verdict.DISPUTED -> ChipKind.Bad
-                Verdict.CONFIRMED -> ChipKind.Ok
-                else -> ChipKind.Unclear
+                Verdict.CONFIRMED, Verdict.SUPPORTED -> ChipKind.Ok
+                // From AI memory alone nothing is verified: amber "Unverified" ink, as in the design.
+                else -> if (f.basis == Basis.AI_KNOWLEDGE && f.verdict != Verdict.NOT_FOUND) ChipKind.Warn else ChipKind.Unclear
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Icon(icon(f.entity.type), contentDescription = f.entity.type.wire, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)

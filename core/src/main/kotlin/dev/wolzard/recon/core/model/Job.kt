@@ -23,6 +23,7 @@ data class Job(
     val resultJson: String? = null,
     val createdAt: Long,
     val updatedAt: Long,
+    val userContext: String? = null,    // D23: optional viewer note/question, ≤ 300 chars, kept for Retry and "Try sharper video"
 )
 
 /** Persisted as JSON in JobEntity.resultJson. */

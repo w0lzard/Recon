@@ -1,6 +1,7 @@
 package dev.wolzard.recon.core.json
 
 import dev.wolzard.recon.core.model.AnalyzerException
+import dev.wolzard.recon.core.model.AnswerStatus
 import dev.wolzard.recon.core.model.Basis
 import dev.wolzard.recon.core.model.Entity
 import dev.wolzard.recon.core.model.EntityType
@@ -208,5 +209,62 @@ class ResultParserTest {
         assertEquals("github", f.researcher)
         assertEquals("A tool to use GitHub from the terminal.", f.whatItIs)
         assertEquals("h", f.howToTry)
+    }
+
+    // --- D23 answer + media
+
+    private fun withAnswer(a: String) = analysis(ent("app", "Codeium"), extra = ""","answer":$a""")
+
+    @Test fun answerPresentIsParsed() {
+        val r = ResultParser.parseAnalysis(withAnswer("""{"text":"It is Codeium.","status":"verified","confidence":0.9,"sources":["caption at start"]}"""))
+        val a = r.answer!!
+        assertEquals("It is Codeium.", a.text)
+        assertEquals(AnswerStatus.VERIFIED, a.status)
+        assertEquals(0.9, a.confidence, 0.0)
+        assertEquals(listOf("caption at start"), a.sources)
+    }
+
+    @Test fun answerAbsentIsNull() {
+        assertNull(ResultParser.parseAnalysis(analysis(ent("app", "Codeium"))).answer)
+        assertNull(ResultParser.parseAnalysis(withAnswer("null")).answer)
+    }
+
+    @Test fun malformedAnswerIsDroppedWithoutFailingTheAnalysis() {
+        for (bad in listOf("\"just a string\"", "[1,2]", "{}", """{"status":"verified"}""", """{"text":"  "}""")) {
+            val r = ResultParser.parseAnalysis(withAnswer(bad))
+            assertNull(bad, r.answer)
+            assertEquals(1, r.entities.size)
+        }
+    }
+
+    @Test fun verifiedWithoutSourcesIsShownAsUnverified() {
+        val r = ResultParser.parseAnalysis(withAnswer("""{"text":"x","status":"Verified","confidence":0.9,"sources":[]}"""))
+        assertEquals(AnswerStatus.UNVERIFIED, r.answer!!.status)
+    }
+
+    @Test fun unknownOrMissingStatusIsUnclearAndConfidenceIsClamped() {
+        assertEquals(AnswerStatus.UNCLEAR, ResultParser.parseAnalysis(withAnswer("""{"text":"x","status":"maybe","confidence":7}""")).answer!!.status)
+        assertEquals(1.0, ResultParser.parseAnalysis(withAnswer("""{"text":"x","status":"unclear","confidence":7}""")).answer!!.confidence, 0.0)
+        assertEquals(0.0, ResultParser.parseAnalysis(withAnswer("""{"text":"x"}""")).answer!!.confidence, 0.0)
+    }
+
+    @Test fun answerSourcesHaveNoUrlsAndAreCapped() {
+        val r = ResultParser.parseAnalysis(withAnswer("""{"text":"see https://evil.example now","status":"verified","confidence":1,"sources":["a https://x.example","b","c","d","e"]}"""))
+        val a = r.answer!!
+        assertFalse(a.text.contains("http"))
+        assertEquals(4, a.sources.size)
+        assertFalse(a.sources.any { it.contains("http") })
+    }
+
+    @Test fun answerIsIgnoredWhenTheViewerAskedNothing() {
+        val raw = withAnswer("""{"text":"x","status":"unclear","confidence":0.1}""")
+        assertNull(ResultParser.parseAnalysis(raw, allowAnswer = false).answer)
+    }
+
+    @Test fun mediaEntityIsParsedWithYearQualifier() {
+        val r = ResultParser.parseAnalysis(analysis(ent("media", "Inception", "2010, Christopher Nolan")))
+        val e = r.entities.single()
+        assertEquals(EntityType.MEDIA, e.type)
+        assertEquals("2010, Christopher Nolan", e.qualifier)
     }
 }

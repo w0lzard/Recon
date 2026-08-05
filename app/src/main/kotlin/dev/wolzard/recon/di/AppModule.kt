@@ -10,6 +10,7 @@ import dev.wolzard.recon.core.port.LanguageModel
 import dev.wolzard.recon.core.port.LinkResolver
 import dev.wolzard.recon.core.port.SecretStore
 import dev.wolzard.recon.core.port.VideoAnalyzer
+import dev.wolzard.recon.data.db.MIGRATION_1_2
 import dev.wolzard.recon.data.db.ReconDb
 import dev.wolzard.recon.data.db.RoomJobStore
 import dev.wolzard.recon.data.gemini.GeminiWebBackend
@@ -33,6 +34,7 @@ import dev.wolzard.recon.data.media.YtDlpFetcher
 import dev.wolzard.recon.data.media.YtDlpRunner
 import dev.wolzard.recon.data.secret.KeystoreSecretStore
 import dev.wolzard.recon.feature.settings.SettingsViewModel
+import dev.wolzard.recon.feature.context.ContextViewModel
 import dev.wolzard.recon.feature.home.HomeViewModel
 import dev.wolzard.recon.feature.job.JobActions
 import dev.wolzard.recon.feature.job.JobViewModel
@@ -52,7 +54,7 @@ import org.koin.dsl.module
 
 val appModule = module {
     single { OkHttpClient() }
-    single { Room.databaseBuilder(androidContext(), ReconDb::class.java, "recon.db").build() }
+    single { Room.databaseBuilder(androidContext(), ReconDb::class.java, "recon.db").addMigrations(MIGRATION_1_2).build() }
     single<JobStore> { RoomJobStore(get()) }
     single<LinkResolver> { OkHttpLinkResolver(get()) }
     single<SecretStore> { KeystoreSecretStore(androidContext()) }
@@ -91,5 +93,6 @@ val appModule = module {
     viewModel { SettingsViewModel(get(), get()) }
     single { JobActions(get(), { job -> JobQueue.cancel(androidContext(), job) }) { id, action -> JobQueue.enqueue(androidContext(), id, action) } }
     viewModel { params -> JobViewModel(params.get(), get(), get()) }
+    viewModel { params -> ContextViewModel(params.get(), get()) }
     viewModel { HomeViewModel(get(), get()) }
 }

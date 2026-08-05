@@ -17,4 +17,16 @@ data class AnalysisResult(
     val summary: String,
     val confidence: Double,                     // 0.0..1.0 that entities[0] is the video's main subject
     val onScreenText: List<String> = emptyList(),
+    val answer: Answer? = null,                 // D23: only when the viewer added a note or question
+)
+
+enum class AnswerStatus { VERIFIED, UNVERIFIED, UNCLEAR }
+
+/** The reply to the viewer's question (D23). Model-written, so every field is bounded by ResultParser. */
+@Serializable
+data class Answer(
+    val text: String,
+    val status: AnswerStatus,
+    val confidence: Double,                     // 0.0..1.0
+    val sources: List<String> = emptyList(),    // where in the video / which reference; plain text, never opened as links
 )

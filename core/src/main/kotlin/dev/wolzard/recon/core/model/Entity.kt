@@ -12,6 +12,7 @@ enum class EntityType(val wire: String) {
     @SerialName("person") PERSON("person"),
     @SerialName("place") PLACE("place"),
     @SerialName("recipe") RECIPE("recipe"),
+    @SerialName("media") MEDIA("media"),   // movie, show or song (D23)
     @SerialName("claim") CLAIM("claim"),
     @SerialName("other") OTHER("other");
 

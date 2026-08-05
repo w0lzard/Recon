@@ -203,4 +203,64 @@ class JobScreenTest {
         compose.onNodeWithText("Downloading").assertExists()
         compose.onNodeWithText("Analysing").assertExists()
     }
+
+    // --- D23: the viewer's question and the answer card
+
+    private fun answered(answer: dev.wolzard.recon.core.model.Answer?, findings: List<Finding> = listOf(finding(entity(EntityType.APP, "Codeium"), Verdict.CONFIRMED, Basis.WEB_SOURCES))) =
+        result(findings).let { it.copy(analysis = it.analysis.copy(answer = answer)) }
+
+    private fun asked(state: JobState = JobState.DONE) = job(state).copy(userContext = "What app is this?")
+
+    @Test fun questionIsEchoedWhileRunning() {
+        show(asked(JobState.ANALYSING))
+        compose.onNodeWithText("YOUR QUESTION").assertExists()
+        compose.onNodeWithTag("your_question").assertExists()
+        compose.onNodeWithText("What app is this?").assertExists()
+    }
+
+    @Test fun questionIsEchoedWhenFailed() {
+        show(asked(JobState.FAILED).copy(failure = FailureReason.NETWORK))
+        compose.onNodeWithText("What app is this?").assertExists()
+    }
+
+    @Test fun noQuestionMeansNoQuestionBlockOrAnswerCard() {
+        show(job(JobState.DONE), answered(null))
+        compose.onAllNodesWithText("YOUR QUESTION").assertCountEquals(0)
+        compose.onAllNodesWithText("ANSWER").assertCountEquals(0)
+    }
+
+    @Test fun answerCardComesBeforeSummaryAndEntities() {
+        val a = dev.wolzard.recon.core.model.Answer("It is Codeium.", dev.wolzard.recon.core.model.AnswerStatus.VERIFIED, 0.9, listOf("caption at the start"))
+        show(asked(), answered(a))
+        compose.onNodeWithText("It is Codeium.").assertExists()
+        compose.onNodeWithText("Verified").assertExists()
+        compose.onNodeWithText("90%").assertExists()
+        compose.onNodeWithText("• caption at the start").assertExists()
+        val y = { tag: String -> compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.top }
+        val summaryTop = compose.onNodeWithText("SUMMARY").fetchSemanticsNode().boundsInRoot.top
+        val entitiesTop = compose.onNodeWithText("ENTITIES FOUND · 1", substring = true).fetchSemanticsNode().boundsInRoot.top
+        val q = y("your_question")
+        val card = y("answer_card")
+        assert(q < card && card < summaryTop && summaryTop < entitiesTop) { "order: question $q, answer $card, summary $summaryTop, entities $entitiesTop" }
+    }
+
+    @Test fun unclearAnswerShowsItsStatus() {
+        val a = dev.wolzard.recon.core.model.Answer("The video does not say who this is.", dev.wolzard.recon.core.model.AnswerStatus.UNCLEAR, 0.2)
+        show(asked(), answered(a))
+        compose.onNodeWithText("Unclear").assertExists()
+        compose.onNodeWithText("The video does not say who this is.").assertExists()
+    }
+
+    @Test fun questionWithoutAnswerShowsAFallbackCard() {
+        show(asked(), answered(null))
+        compose.onNodeWithText(JobCopy.NO_ANSWER).assertExists()
+        compose.onNodeWithText("Unclear").assertExists()
+    }
+
+    @Test fun mediaFindingShowsItsLabel() {
+        val f = finding(entity(EntityType.MEDIA, "Inception"), Verdict.CONFIRMED, Basis.WIKIPEDIA)
+        show(job(JobState.DONE), result(listOf(f)))
+        compose.onNodeWithText("MEDIA").assertExists()
+        compose.onNodeWithText("Watch or listen: how").assertExists()
+    }
 }

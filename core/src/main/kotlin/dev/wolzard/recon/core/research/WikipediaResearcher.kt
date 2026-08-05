@@ -20,7 +20,7 @@ import java.net.URI
  */
 class WikipediaResearcher(private val client: WikipediaClient) : Researcher {
     override val id = "wikipedia"
-    private val accepted = setOf(EntityType.PERSON, EntityType.PLACE, EntityType.BOOK, EntityType.PRODUCT, EntityType.APP, EntityType.OTHER)
+    private val accepted = setOf(EntityType.PERSON, EntityType.PLACE, EntityType.BOOK, EntityType.PRODUCT, EntityType.APP, EntityType.MEDIA, EntityType.OTHER)
     override fun accepts(type: EntityType) = type in accepted
 
     override suspend fun research(entities: List<Entity>, ctx: ResearchContext): ResearchOutput {
@@ -41,13 +41,28 @@ class WikipediaResearcher(private val client: WikipediaClient) : Researcher {
 
     private suspend fun lookUp(lang: String, e: Entity): WikiSummary? {
         val query = listOfNotNull(e.name, e.qualifier).joinToString(" ")
-        val hit = client.search(lang, query).firstOrNull { matchOf(it.title, e.name) != null } ?: return null
-        return client.summary(lang, hit.key)?.takeIf { !it.disambiguation && it.extract.isNotBlank() && matchOf(it.title, e.name) != null }
+        val hits = client.search(lang, query).filter { matchOf(it.title, e.name) != null }
+        val year = yearOf(e)
+        // Media (D23): a title like "Dune (1984 film)" is a different work from the "2021" the video named.
+        val pages = hits.filter { year == null || titleYear(it.title).let { y -> y == null || y == year } }
+            .mapNotNull { client.summary(lang, it.key) }
+            .filter { !it.disambiguation && it.extract.isNotBlank() && matchOf(it.title, e.name) != null }
+        return pages.firstOrNull { year != null && hasYear(it, year) } ?: pages.firstOrNull()
     }
+
+    /** Media only: the release year from the qualifier ("2010, Christopher Nolan"). */
+    private fun yearOf(e: Entity): String? =
+        if (e.type == EntityType.MEDIA) e.qualifier?.let { yearRe.find(it)?.value } else null
+
+    private fun titleYear(title: String) = yearRe.find(title.substringAfterLast('(', ""))?.value
+    private fun hasYear(p: WikiSummary, year: String) = year in p.title || year in p.extract
 
     private fun finding(e: Entity, page: WikiSummary): Finding {
         val exact = matchOf(page.title, e.name) == true
-        val qualifierFound = e.qualifier == null || e.qualifier.split(',', ' ').map { it.trim().lowercase() }
+        val year = yearOf(e)
+        // Media is confirmed only when the page carries the video's year; a title alone cannot tell two works apart.
+        val qualifierFound = if (e.type == EntityType.MEDIA) year != null && hasYear(page, year)
+        else e.qualifier == null || e.qualifier.split(',', ' ').map { it.trim().lowercase() }
             .filter { it.length >= 3 }.all { page.extract.lowercase().contains(it) }
         return Finding(
             entity = e, researcher = id,
@@ -71,6 +86,8 @@ class WikipediaResearcher(private val client: WikipediaClient) : Researcher {
             else -> null
         }
     }
+
+    private val yearRe = Regex("""\b(?:19|20)\d{2}\b""")
 
     private fun isWikipedia(url: String) = runCatching { URI(url) }.getOrNull()
         ?.let { it.scheme == "https" && (it.host?.endsWith(".wikipedia.org") == true) } == true

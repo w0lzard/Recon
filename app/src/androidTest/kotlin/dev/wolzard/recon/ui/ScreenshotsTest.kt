@@ -11,6 +11,8 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.wolzard.recon.core.model.AnalysisResult
+import dev.wolzard.recon.core.model.Answer
+import dev.wolzard.recon.core.model.AnswerStatus
 import dev.wolzard.recon.core.model.Basis
 import dev.wolzard.recon.core.model.Entity
 import dev.wolzard.recon.core.model.EntityType
@@ -22,6 +24,8 @@ import dev.wolzard.recon.core.model.JobResult
 import dev.wolzard.recon.core.model.JobState
 import dev.wolzard.recon.core.model.Source
 import dev.wolzard.recon.core.model.Verdict
+import dev.wolzard.recon.feature.context.ContextScreen
+import dev.wolzard.recon.feature.context.ContextState
 import dev.wolzard.recon.feature.home.HomeRow
 import dev.wolzard.recon.feature.home.HomeScreen
 import dev.wolzard.recon.feature.home.HomeState
@@ -105,6 +109,34 @@ class ScreenshotsTest {
     }
 
     @Test fun quotaWaiting() = shot("job_quota_waiting") { JobScreen(job(JobState.WAITING_QUOTA, retryAt = now + 2 * 3_600_000), null, now) {} }
+
+    // --- D23: context screen, the question echo and the answer card
+
+    private fun asked(state: JobState) = job(state).copy(userContext = "What song is this?")
+
+    private fun answered(answer: Answer?, findings: List<Finding>) =
+        result(findings).let { it.copy(analysis = it.analysis.copy(answer = answer)) }
+
+    @Test fun contextEmpty() = shot("context_empty") {
+        ContextScreen(ContextState("https://www.instagram.com/reel/abc/", "instagram.com")) {}
+    }
+
+    @Test fun contextFilled() = shot("context_filled") {
+        ContextScreen(ContextState("https://www.instagram.com/reel/abc/", "instagram.com", text = "What song is this, and who sings it?")) {}
+    }
+
+    @Test fun jobRunningWithQuestion() = shot("job_running_question") { JobScreen(asked(JobState.ANALYSING), null, now) {} }
+
+    @Test fun jobAnswerVerified() = shot("job_answer") {
+        val a = Answer("It is “Blinding Lights” by The Weeknd, shown in the caption.", AnswerStatus.VERIFIED, 0.9, listOf("caption at the start", "spoken: “this is Blinding Lights”"))
+        val song = finding(EntityType.MEDIA, "Blinding Lights", Verdict.CONFIRMED, Basis.WIKIPEDIA, link = "https://en.wikipedia.org/wiki/Blinding_Lights")
+        JobScreen(asked(JobState.DONE), answered(a, listOf(song)), now) {}
+    }
+
+    @Test fun jobAnswerUnclear() = shot("job_answer_unclear") {
+        val a = Answer("The video does not name the person, so this is not enough to say who it is.", AnswerStatus.UNCLEAR, 0.2)
+        JobScreen(asked(JobState.DONE).copy(userContext = "Who is this?"), answered(a, emptyList()), now) {}
+    }
 
     @Test fun signIn() {
         shot("sign_in") { SignInScreen(SignInState()) {} }

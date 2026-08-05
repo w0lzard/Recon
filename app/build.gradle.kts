@@ -75,6 +75,8 @@ android {
     testOptions { unitTests.isIncludeAndroidResources = true }
 }
 
+ksp { arg("room.schemaLocation", "$projectDir/schemas") }   // D23: the exported schemas are the record of each version; MigrationTest builds v1 from 1.json
+
 // x86_64 is for the emulator only (debug + gate); release ships arm64-v8a and armeabi-v7a.
 androidComponents {
     onVariants(selector().withBuildType("release")) { variant ->

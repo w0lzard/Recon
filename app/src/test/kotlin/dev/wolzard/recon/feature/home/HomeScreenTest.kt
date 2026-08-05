@@ -47,4 +47,12 @@ class HomeScreenTest {
         compose.onNodeWithText("A slime video.").performClick()
         assertEquals(listOf<HomeIntent>(HomeIntent.OpenJob("j1")), intents)
     }
+
+    @Test fun pasteButtonSendsClipboardTextAndShowsTheError() {
+        val intents = mutableListOf<HomeIntent>()
+        compose.setContent { HomeScreen(HomeState(pasteError = "No video link on the clipboard. Copy one first.")) { intents += it } }
+        compose.onNodeWithText("No video link on the clipboard. Copy one first.").assertExists()
+        compose.onNodeWithText("Paste a video link").performClick()
+        assertEquals(listOf<HomeIntent>(HomeIntent.PasteLink("")), intents) // empty clipboard in the test
+    }
 }

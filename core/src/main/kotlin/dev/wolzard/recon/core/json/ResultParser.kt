@@ -1,6 +1,8 @@
 package dev.wolzard.recon.core.json
 
 import dev.wolzard.recon.core.model.AnalysisResult
+import dev.wolzard.recon.core.model.Answer
+import dev.wolzard.recon.core.model.AnswerStatus
 import dev.wolzard.recon.core.model.AnalyzerException
 import dev.wolzard.recon.core.model.Basis
 import dev.wolzard.recon.core.model.Entity
@@ -28,6 +30,7 @@ object ResultParser {
     private const val MAX_ON_SCREEN_LEN = 200
     private const val MAX_STRING = 500
     private const val MAX_FACTS = 5
+    private const val MAX_ANSWER_SOURCES = 4
 
     private val json = Json { isLenient = true; ignoreUnknownKeys = true }
     private val ownerRe = Regex("^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$")
@@ -35,7 +38,8 @@ object ResultParser {
     private val githubPrefixRe = Regex("^(?:https?://)?(?:www\\.)?github\\.com/", RegexOption.IGNORE_CASE)
     private val urlRe = Regex("""(?:https?://|www\.)\S+""", RegexOption.IGNORE_CASE)
 
-    fun parseAnalysis(raw: String): AnalysisResult {
+    /** [allowAnswer] = false drops any `answer` the model volunteers when the viewer asked nothing (D23). */
+    fun parseAnalysis(raw: String, allowAnswer: Boolean = true): AnalysisResult {
         val o = parseObject(raw)
         val summary = o.str("summary") ?: invalid("summary missing")
         val entities = (o["entities"] as? JsonArray).orEmpty()
@@ -46,7 +50,27 @@ object ResultParser {
             .mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf(String::isNotEmpty)?.take(MAX_ON_SCREEN_LEN) }
             .take(MAX_ON_SCREEN)
         val confidence = (o["confidence"] as? JsonPrimitive)?.doubleOrNull ?: 0.0
-        return AnalysisResult(entities, summary.take(MAX_STRING), confidence.coerceIn(0.0, 1.0), onScreen)
+        val answer = if (allowAnswer) answer(o["answer"]) else null
+        return AnalysisResult(entities, summary.take(MAX_STRING), confidence.coerceIn(0.0, 1.0), onScreen, answer)
+    }
+
+    /**
+     * A malformed or empty answer is dropped, not a failure: the analysis itself is still good.
+     * "Verified" needs at least one source; without one it is shown as Unverified. An unknown status is Unclear.
+     */
+    private fun answer(el: JsonElement?): Answer? {
+        val o = el as? JsonObject ?: return null
+        val text = clean(o.str("text")).takeIf(String::isNotEmpty) ?: return null
+        val sources = (o["sources"] as? JsonArray).orEmpty()
+            .mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.let(::clean)?.takeIf(String::isNotEmpty) }
+            .take(MAX_ANSWER_SOURCES)
+        val status = when (o.str("status")?.trim()?.lowercase()) {
+            "verified" -> if (sources.isEmpty()) AnswerStatus.UNVERIFIED else AnswerStatus.VERIFIED
+            "unverified" -> AnswerStatus.UNVERIFIED
+            else -> AnswerStatus.UNCLEAR
+        }
+        val confidence = (o["confidence"] as? JsonPrimitive)?.doubleOrNull ?: 0.0
+        return Answer(text, status, confidence.coerceIn(0.0, 1.0), sources)
     }
 
     private fun entity(o: JsonObject): Entity? {

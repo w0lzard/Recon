@@ -2,6 +2,7 @@ package dev.wolzard.recon.data.gemini
 
 import dev.wolzard.recon.core.json.ResultParser
 import dev.wolzard.recon.core.model.AnalysisInput
+import dev.wolzard.recon.core.model.UserContext
 import dev.wolzard.recon.core.port.Analysis
 import dev.wolzard.recon.core.port.LanguageModel
 import dev.wolzard.recon.core.port.ModelAnswer
@@ -20,16 +21,16 @@ class GeminiWebBackend(private val web: GeminiWebClient) : VideoAnalyzer, Langua
     // ponytail: YouTube links are downloaded like any other video; passing the URL to the web app is untested.
     override val supportsYouTubeUrl = false
 
-    override suspend fun analyze(input: AnalysisInput, language: String): Analysis {
+    override suspend fun analyze(input: AnalysisInput, language: String, userContext: String?): Analysis {
         val files = when (input) {
             is AnalysisInput.YouTubeUrl -> emptyList()
             is AnalysisInput.VideoFile -> listOf(input.file to input.mimeType)
             is AnalysisInput.FramesAndAudio -> input.frames.map { it.file to "image/jpeg" } + listOfNotNull(input.audio?.let { it to "audio/mp4" })
         }
         val uploaded = coroutineScope { files.map { (f, mime) -> async { web.upload(f, mime) to f.name } }.awaitAll() }
-        val prompt = Prompts.analyze(language) + "\n\nJSON schema:\n" + Prompts.ANALYZE_SCHEMA +
+        val prompt = Prompts.analyze(language, userContext) + "\n\nJSON schema:\n" + Prompts.ANALYZE_SCHEMA +
             ((input as? AnalysisInput.YouTubeUrl)?.let { "\n\nVideo: ${it.url}" }.orEmpty())
-        return Analysis(ResultParser.parseAnalysis(web.generate(prompt, uploaded)), MODEL)
+        return Analysis(ResultParser.parseAnalysis(web.generate(prompt, uploaded), allowAnswer = UserContext.clean(userContext) != null), MODEL)
     }
 
     /** [googleSearch] is ignored: the web app decides on its own when to search, and returns no sources here. */

@@ -23,6 +23,7 @@ import dev.wolzard.recon.data.media.ContentUriFetcher
 import dev.wolzard.recon.navigation.startDestination
 import dev.wolzard.recon.work.ShareGate
 import dev.wolzard.recon.work.ShareIntake
+import dev.wolzard.recon.work.ShareOutcome
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -93,24 +94,24 @@ class NoticeFlowTest {
         assertNull(gate.share(share("look https://www.instagram.com/reel/abc/")))
         assertTrue(jobs().isEmpty())
 
-        val id = gate.accepted()!!
-        assertEquals("look https://www.instagram.com/reel/abc/", store.get(id)!!.sharedText)
+        // Released through the intake: the link is validated now and waits for its context; still no job.
+        assertEquals(ShareOutcome.NeedsContext("https://www.instagram.com/reel/abc/"), gate.accepted())
         assertNull(gate.accepted()) // released once
-        assertEquals(1, jobs().size)
+        assertTrue(jobs().isEmpty())
     }
 
     @Test fun afterAcceptSharesGoStraightThrough() = runBlocking {
         Notice(prefs).accept()
         val gate = ShareGate(Notice(prefs), intake::accept)
-        assertTrue(gate.share(share("https://youtu.be/a")) != null)
+        assertEquals(ShareOutcome.NeedsContext("https://youtu.be/a"), gate.share(share("https://youtu.be/a")))
     }
 
     @Test fun heldShareIsValidatedOnlyWhenReleased() = runBlocking {
         val gate = ShareGate(Notice(prefs), intake::accept)
         gate.share(share("javascript:alert(1) file:///data/data/dev.wolzard.recon/databases/recon.db intent://x#Intent;end"))
-        val id = gate.accepted()
+        val id = (gate.accepted() as ShareOutcome.Started).jobId
         // Released through the same intake as any share: no web link survives, so RunJob fails it as UNSUPPORTED_LINK.
-        val job = store.get(id!!)!!
+        val job = store.get(id)!!
         assertNull(job.url)
         assertNull(LinkRouter.extractUrl(job.sharedText))
         // A non-share intent held before accept is dropped by the intake.

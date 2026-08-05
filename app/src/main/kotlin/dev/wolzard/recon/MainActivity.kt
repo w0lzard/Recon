@@ -41,6 +41,7 @@ import dev.wolzard.recon.designsystem.ReconTheme
 import dev.wolzard.recon.navigation.ReconNavHost
 import dev.wolzard.recon.navigation.startDestination
 import dev.wolzard.recon.work.ShareIntake
+import dev.wolzard.recon.work.ShareOutcome
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
@@ -62,6 +63,14 @@ class MainActivity : ComponentActivity() {
     private val shares by lazy { ShareGate(notice, intake::accept) }
     /** A job to open: from a share or a notification's deep link. */
     private val openJob = MutableStateFlow<String?>(null)
+    /** A valid link waiting for its optional context (D23). */
+    private val openContext = MutableStateFlow<String?>(null)
+
+    private fun show(outcome: ShareOutcome?) = when (outcome) {
+        is ShareOutcome.Started -> openJob.value = outcome.jobId
+        is ShareOutcome.NeedsContext -> openContext.value = outcome.link
+        null -> Unit
+    }
 
     /** True once the first Compose frame is up; the splash stays until then so there is no blank flash. */
     private var firstFrameDrawn = false
@@ -83,10 +92,10 @@ class MainActivity : ComponentActivity() {
             ReconTheme {
                 LaunchedEffect(Unit) { firstFrameDrawn = true }
                 ReconNavHost(
-                    start, openJob, clock,
+                    start, openJob, openContext, clock,
                     noticeNeeded = { notice.needed },
                     signedIn = signedIn,
-                    onNoticeAccepted = { lifecycleScope.launch { shares.accepted()?.let { openJob.value = it } } },
+                    onNoticeAccepted = { lifecycleScope.launch { show(shares.accepted()) } },
                 )
             }
         }
@@ -110,6 +119,6 @@ class MainActivity : ComponentActivity() {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
         }
         // Copy/create right away: a shared video's URI grant is temporary (R14).
-        lifecycleScope.launch { runCatching { shares.share(intent) }.getOrNull()?.let { openJob.value = it } }
+        lifecycleScope.launch { show(runCatching { shares.share(intent) }.getOrNull()) }
     }
 }

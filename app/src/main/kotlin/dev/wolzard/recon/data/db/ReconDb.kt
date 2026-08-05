@@ -8,6 +8,8 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.RoomDatabase
 import androidx.room.Update
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import dev.wolzard.recon.core.model.FailureReason
 import dev.wolzard.recon.core.model.Job
 import dev.wolzard.recon.core.model.JobState
@@ -28,6 +30,7 @@ data class JobEntity(
     val resultJson: String?,
     val createdAt: Long,
     val updatedAt: Long,
+    val userContext: String? = null,   // D23
 )
 
 @Dao
@@ -41,11 +44,15 @@ interface JobDao {
     @Query("DELETE FROM jobs WHERE id = :id") suspend fun delete(id: String)
 }
 
-// ponytail: exportSchema off until the first schema change ships; add room.schemaDirectory + migrations then.
-@Database(entities = [JobEntity::class], version = 1, exportSchema = false)
+@Database(entities = [JobEntity::class], version = 2, exportSchema = true)
 abstract class ReconDb : RoomDatabase() {
     abstract fun jobs(): JobDao
 }
 
-fun JobEntity.toJob() = Job(id, sharedText, url, localUri, state, failure, failureDetail, retryAtEpochMs, progress, analysisJson, resultJson, createdAt, updatedAt)
-fun Job.toEntity() = JobEntity(id, sharedText, url, localUri, state, failure, failureDetail, retryAtEpochMs, progress, analysisJson, resultJson, createdAt, updatedAt)
+/** D23: jobs gain the viewer's optional note. Existing rows keep NULL = no context. */
+val MIGRATION_1_2 = object : Migration(1, 2) {
+    override fun migrate(db: SupportSQLiteDatabase) = db.execSQL("ALTER TABLE jobs ADD COLUMN userContext TEXT")
+}
+
+fun JobEntity.toJob() = Job(id, sharedText, url, localUri, state, failure, failureDetail, retryAtEpochMs, progress, analysisJson, resultJson, createdAt, updatedAt, userContext)
+fun Job.toEntity() = JobEntity(id, sharedText, url, localUri, state, failure, failureDetail, retryAtEpochMs, progress, analysisJson, resultJson, createdAt, updatedAt, userContext)

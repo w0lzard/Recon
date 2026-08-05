@@ -6,8 +6,8 @@ import dev.wolzard.recon.core.model.Source
 
 interface VideoAnalyzer {
     val supportsYouTubeUrl: Boolean
-    /** One logical call (D9): ≤ 2 HTTP attempts across ranked models. @throws AnalyzerException */
-    suspend fun analyze(input: AnalysisInput, language: String): Analysis
+    /** One logical call (D9). [userContext] (D23) rides in the same call; null = none. @throws AnalyzerException */
+    suspend fun analyze(input: AnalysisInput, language: String, userContext: String? = null): Analysis
 }
 
 data class Analysis(val result: AnalysisResult, val model: String)   // model = the one that answered

@@ -2,6 +2,8 @@ package dev.wolzard.recon.feature.job
 
 import androidx.lifecycle.viewModelScope
 import dev.wolzard.recon.core.job.UserAction
+import dev.wolzard.recon.core.link.LinkRouter
+import dev.wolzard.recon.core.model.UserContext
 import dev.wolzard.recon.core.model.GhRepo
 import dev.wolzard.recon.core.model.Job
 import dev.wolzard.recon.core.model.JobResult
@@ -20,6 +22,17 @@ class JobActions(private val store: JobStore, private val cancelWork: (Job) -> U
     suspend fun requeue(id: String, action: UserAction) {
         store.update(id) { it.copy(state = JobState.QUEUED, failure = null, failureDetail = null, retryAtEpochMs = null, progress = null) }
         enqueue(id, action)
+    }
+
+    /**
+     * D23 Start/Skip: validates the link again (it came from a share or paste, possibly long ago), then creates and
+     * queues the job with the cleaned context. Null = the link is not usable and nothing was created.
+     */
+    suspend fun start(shared: String, context: String?): String? {
+        val link = LinkRouter.validLink(shared) ?: return null
+        val id = store.create(link, null, UserContext.clean(context))
+        enqueue(id, UserAction.RUN)
+        return id
     }
 
     /** Only a WAITING_QUOTA job can be cancelled; it is removed, not kept as failed. */

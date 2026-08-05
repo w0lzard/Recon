@@ -125,7 +125,7 @@ class RunJob(
             store.update(job.id) { it.copy(url = resolved) }
             if (LinkRouter.classify(resolved) is Route.YouTube && analyzer.supportsYouTubeUrl && action != UserAction.TRY_SHARPER) {
                 store.update(job.id) { it.copy(state = JobState.ANALYSING) }
-                when (val r = attempt(budget, timeouts.pathA) { analyzer.analyze(AnalysisInput.YouTubeUrl(resolved), lang) }) {
+                when (val r = attempt(budget, timeouts.pathA) { analyzer.analyze(AnalysisInput.YouTubeUrl(resolved), lang, job.userContext) }) {
                     is Attempt.Ok -> return SavedAnalysis(r.analysis.result, r.analysis.model, "youtube-url")
                     is Attempt.Failed -> lastError = r.error // falls through to the download path
                 }
@@ -148,7 +148,7 @@ class RunJob(
         if (media.audio == null && media.video.length() <= timeouts.maxPathABytes) {
             if (!budget.canSpend()) throw lastError ?: AnalyzerException(FailureReason.UNKNOWN, message = "call budget used up")
             store.update(job.id) { it.copy(state = JobState.ANALYSING, progress = null) }
-            when (val r = attempt(budget, timeouts.pathA) { analyzer.analyze(AnalysisInput.VideoFile(media.video, mime(media.video)), lang) }) {
+            when (val r = attempt(budget, timeouts.pathA) { analyzer.analyze(AnalysisInput.VideoFile(media.video, mime(media.video)), lang, job.userContext) }) {
                 is Attempt.Ok -> return SavedAnalysis(r.analysis.result, r.analysis.model, "A")
                 is Attempt.Failed -> lastError = r.error
             }
@@ -165,7 +165,7 @@ class RunJob(
         if (frames.frames.isEmpty()) throw AnalyzerException(FailureReason.VIDEO_UNREADABLE, message = "no frame could be decoded")
         if (!budget.canSpend()) throw lastError ?: AnalyzerException(FailureReason.UNKNOWN, message = "call budget used up")
         val input = AnalysisInput.FramesAndAudio(frames.frames, media.audio ?: frames.audio)
-        return when (val r = attempt(budget, timeouts.pathB) { analyzer.analyze(input, lang) }) {
+        return when (val r = attempt(budget, timeouts.pathB) { analyzer.analyze(input, lang, job.userContext) }) {
             is Attempt.Ok -> SavedAnalysis(r.analysis.result, r.analysis.model, "B")
             is Attempt.Failed -> throw r.error
         }

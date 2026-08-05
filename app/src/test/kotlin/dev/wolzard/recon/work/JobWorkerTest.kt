@@ -1,5 +1,6 @@
 package dev.wolzard.recon.work
 
+import kotlinx.coroutines.flow.first
 import android.content.Context
 import android.content.Intent
 import androidx.room.Room
@@ -93,13 +94,21 @@ class JobWorkerTest {
         assertEquals(60_000L, info.initialDelayMillis)
     }
 
-    @Test fun textShareCreatesJobAndEnqueuesWork() = runBlocking {
+    @Test fun textShareWithoutLinkCreatesFailingJobAndEnqueuesWork() = runBlocking {
         val intake = ShareIntake(ctx, store, ContentUriFetcher(ctx))
-        val id = intake.accept(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "look https://youtu.be/abc"))!!
-        assertEquals("look https://youtu.be/abc", store.get(id)!!.sharedText)
+        val id = (intake.accept(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "no link in here")) as ShareOutcome.Started).jobId
+        assertEquals("no link in here", store.get(id)!!.sharedText)
         val infos = WorkManager.getInstance(ctx).getWorkInfosForUniqueWork(JobQueue.NAME).get()
         assertEquals(1, infos.size)
         assertTrue(infos.single().tags.contains(JobQueue.tag(id)))
+    }
+
+    @Test fun textShareWithValidLinkWaitsForContextAndCreatesNothing() = runBlocking {
+        val intake = ShareIntake(ctx, store, ContentUriFetcher(ctx))
+        val out = intake.accept(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "look https://youtu.be/abc!"))
+        assertEquals(ShareOutcome.NeedsContext("https://youtu.be/abc"), out)
+        assertTrue(store.observeAll().first().isEmpty())
+        assertTrue(WorkManager.getInstance(ctx).getWorkInfosForUniqueWork(JobQueue.NAME).get().isEmpty())
     }
 
     @Test fun nonShareIntentIsIgnored() = runBlocking {

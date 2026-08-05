@@ -1,5 +1,6 @@
 package dev.wolzard.recon.feature.job
 
+import dev.wolzard.recon.core.model.AnswerStatus
 import dev.wolzard.recon.core.model.Basis
 import dev.wolzard.recon.core.model.EntityType
 import dev.wolzard.recon.core.model.FailureReason
@@ -49,6 +50,14 @@ object JobCopy {
         Verdict.UNCLEAR -> "Unclear"
     }
 
+    fun answerStatus(s: AnswerStatus) = when (s) {
+        AnswerStatus.VERIFIED -> "Verified"
+        AnswerStatus.UNVERIFIED -> "Unverified"
+        AnswerStatus.UNCLEAR -> "Unclear"
+    }
+
+    const val NO_ANSWER = "Recon couldn't answer this from the video."
+
     fun basis(b: Basis) = when (b) {
         Basis.GITHUB_API -> "From GitHub"
         Basis.WIKIPEDIA -> "From Wikipedia"
@@ -61,6 +70,7 @@ object JobCopy {
         EntityType.REPO -> "Install"
         EntityType.APP, EntityType.PRODUCT -> "Get it"
         EntityType.BOOK -> "Read"
+        EntityType.MEDIA -> "Watch or listen"
         EntityType.PLACE -> "Visit"
         EntityType.RECIPE -> "Ingredients & steps"
         else -> "Next step"

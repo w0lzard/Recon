@@ -1,5 +1,9 @@
 package dev.wolzard.recon.feature.home
 
+import android.content.ClipboardManager
+import android.content.Context
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.platform.LocalContext
 import dev.wolzard.recon.designsystem.UpdateBanner
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -77,6 +81,23 @@ data class HomeRow(val id: String, val state: String, val host: String, val summ
     }
 }
 
+/** The "pasted" way in (D23): reads the clipboard on tap and sends it to the ViewModel to validate. */
+@Composable
+private fun PasteBar(error: String?, onIntent: (HomeIntent) -> Unit) {
+    val ctx = LocalContext.current
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        OutlinedButton(
+            onClick = { onIntent(HomeIntent.PasteLink(clipboardText(ctx))) },
+            Modifier.fillMaxWidth().height(48.dp), shape = MaterialTheme.shapes.small,
+        ) { Text("Paste a video link") }
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+    }
+}
+
+private fun clipboardText(ctx: Context): String =
+    (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.primaryClip
+        ?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(ctx)?.toString().orEmpty()
+
 @Composable
 fun HomeScreen(state: HomeState, onIntent: (HomeIntent) -> Unit) {
     val rows = state.rows
@@ -88,6 +109,7 @@ fun HomeScreen(state: HomeState, onIntent: (HomeIntent) -> Unit) {
         state.update?.let { u ->
             UpdateBanner(u, { onIntent(HomeIntent.OpenLink(it)) }, { onIntent(HomeIntent.DismissUpdate(u.version)) }, Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
         }
+        PasteBar(state.pasteError, onIntent)
         if (rows.isEmpty()) {
             Box(
                 Modifier.fillMaxSize().padding(16.dp).border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium).dotGrid(MaterialTheme.colorScheme.outlineVariant).padding(24.dp),

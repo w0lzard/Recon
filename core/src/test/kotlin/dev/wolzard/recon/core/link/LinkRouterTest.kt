@@ -65,4 +65,16 @@ class LinkRouterTest {
         nonWeb.forEach { assertNull(it, LinkRouter.extractUrl("look $it")) }
         assertEquals("https://youtu.be/a", LinkRouter.extractUrl("javascript:void(0) then https://youtu.be/a"))
     }
+
+    @Test fun validLinkIsTheFirstWebLinkOrNull() {
+        assertEquals("https://youtu.be/a", LinkRouter.validLink("watch this https://youtu.be/a!"))
+        assertNull(LinkRouter.validLink("no link here"))
+        assertNull(LinkRouter.validLink("javascript:alert(1) intent://x#Intent;end file:///data/x"))
+        assertNull(LinkRouter.validLink("https://localhost/x")) // no dot in the host: not a real host
+    }
+
+    @Test fun validLinkIsStableWhenRunTwice() { // share-time check, then the Start-time check on its result
+        val first = LinkRouter.validLink("see https://www.instagram.com/reel/abc/).")!!
+        assertEquals(first, LinkRouter.validLink(first))
+    }
 }

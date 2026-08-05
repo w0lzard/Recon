@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Warning
@@ -69,7 +70,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import dev.wolzard.recon.core.model.Answer
+import dev.wolzard.recon.core.model.AnswerStatus
+import kotlin.math.roundToInt
 import dev.wolzard.recon.core.model.EntityType
 import dev.wolzard.recon.core.model.Evidence
 import dev.wolzard.recon.core.model.FailureReason
@@ -95,9 +100,12 @@ fun JobScreen(job: Job, result: JobResult?, now: Long, onIntent: (JobIntent) -> 
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            val question = job.userContext
+            // D23: the question is echoed in every state; once done, the answer card comes before the summary.
+            if (question != null) YourQuestion(question)
             when {
                 job.state == JobState.FAILED -> Failed(job, now, onIntent)
-                job.state == JobState.DONE && result != null -> Done(result, onIntent)
+                job.state == JobState.DONE && result != null -> Done(result, question != null, onIntent)
                 else -> Running(job, onIntent)
             }
         }
@@ -167,7 +175,34 @@ private fun Failed(job: Job, now: Long, onIntent: (JobIntent) -> Unit) {
 }
 
 @Composable
-private fun Done(result: JobResult, onIntent: (JobIntent) -> Unit) {
+private fun YourQuestion(text: String) {
+    SectionLabel("YOUR QUESTION")
+    Text(text, Modifier.testTag("your_question"), style = MaterialTheme.typography.bodyLarge)
+}
+
+@Composable
+private fun AnswerCard(answer: Answer?) {
+    val kind = when (answer?.status) {
+        AnswerStatus.VERIFIED -> ChipKind.Ok
+        AnswerStatus.UNVERIFIED -> ChipKind.Warn
+        else -> ChipKind.Unclear
+    }
+    OutlinedCard(Modifier.fillMaxWidth().testTag("answer_card"), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                SectionLabel("ANSWER", Modifier.weight(1f))
+                StatusChip(JobCopy.answerStatus(answer?.status ?: AnswerStatus.UNCLEAR), kind)
+                answer?.let { StatusChip("${(it.confidence * 100).roundToInt()}%", ChipKind.Neutral) }
+            }
+            Text(answer?.text ?: JobCopy.NO_ANSWER, style = MaterialTheme.typography.bodyLarge)
+            answer?.sources?.forEach { Text("• $it", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        }
+    }
+}
+
+@Composable
+private fun Done(result: JobResult, asked: Boolean, onIntent: (JobIntent) -> Unit) {
+    if (asked) AnswerCard(result.analysis.answer)
     SectionLabel("SUMMARY")
     Text(result.analysis.summary, style = MaterialTheme.typography.bodyLarge)
     result.degraded.forEach { (id, retryAt) ->
@@ -283,7 +318,7 @@ private fun Candidates(index: Int, repos: List<GhRepo>, onIntent: (JobIntent) ->
 }
 
 @Composable
-private fun SectionLabel(text: String) = Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+private fun SectionLabel(text: String, modifier: Modifier = Modifier) = Text(text, modifier, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
 
 private fun icon(t: EntityType): ImageVector = when (t) {
     EntityType.REPO -> Icons.Filled.Build
@@ -293,6 +328,7 @@ private fun icon(t: EntityType): ImageVector = when (t) {
     EntityType.PERSON -> Icons.Filled.Person
     EntityType.PLACE -> Icons.Filled.Place
     EntityType.RECIPE -> Icons.Filled.Favorite
+    EntityType.MEDIA -> Icons.Filled.PlayArrow
     EntityType.CLAIM -> Icons.Filled.Warning
     EntityType.OTHER -> Icons.Filled.Info
 }

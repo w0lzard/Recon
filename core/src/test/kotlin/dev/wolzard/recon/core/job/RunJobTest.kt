@@ -57,7 +57,7 @@ class RunJobTest {
         override fun observeAll() = jobs.map { it.values.toList() }
         override fun observe(id: String) = jobs.map { it[id] }
         override suspend fun get(id: String) = jobs.value[id]
-        override suspend fun create(sharedText: String, localUri: String?) = error("unused")
+        override suspend fun create(sharedText: String, localUri: String?, userContext: String?) = error("unused")
         override suspend fun update(id: String, transform: (Job) -> Job) {
             val old = jobs.value.getValue(id)
             val new = transform(old)
@@ -74,9 +74,11 @@ class RunJobTest {
     private inner class Analyzer(vararg outcomes: Any) : VideoAnalyzer {
         private val queue = ArrayDeque(outcomes.toList())
         val inputs = mutableListOf<AnalysisInput>()
+        val contexts = mutableListOf<String?>()
         override val supportsYouTubeUrl = true
-        override suspend fun analyze(input: AnalysisInput, language: String): Analysis {
+        override suspend fun analyze(input: AnalysisInput, language: String, userContext: String?): Analysis {
             inputs += input
+            contexts += userContext
             return when (val o = queue.removeFirstOrNull() ?: analysis()) {
                 is Analysis -> o
                 is Exception -> throw o
@@ -150,8 +152,8 @@ class RunJobTest {
         timeouts = timeouts,
     )
 
-    private fun job(text: String = "look https://www.instagram.com/reel/abc/", localUri: String? = null, analysisJson: String? = null) =
-        Job("j1", text, localUri = localUri, analysisJson = analysisJson, createdAt = 0, updatedAt = 0).also { store.put(it) }
+    private fun job(text: String = "look https://www.instagram.com/reel/abc/", localUri: String? = null, analysisJson: String? = null, userContext: String? = null) =
+        Job("j1", text, localUri = localUri, analysisJson = analysisJson, userContext = userContext, createdAt = 0, updatedAt = 0).also { store.put(it) }
 
     private suspend fun result(): JobResult = Json.decodeFromString(JobResult.serializer(), store.get("j1")!!.resultJson!!)
     private suspend fun state() = store.get("j1")!!.state
@@ -361,5 +363,48 @@ class RunJobTest {
         job()
         runJob(Analyzer())("j1")
         assertNull(store.get("j1")!!.progress)   // cleared when the job ends
+    }
+
+    // --- D23: user context rides in the same analysis call
+
+    @Test fun contextGoesIntoTheSingleAnalysisCallAndBudgetIsUnchanged() = runTest {
+        job(userContext = "What song is this?")
+        val a = Analyzer()
+        runJob(a)("j1")
+        assertEquals(listOf<String?>("What song is this?"), a.contexts)   // one analysis call, one context
+        assertEquals(1, ai.calls)                                          // research stays one call: no extra AI call
+        assertEquals(JobState.DONE, state())
+    }
+
+    @Test fun noContextMeansNullInTheCall() = runTest {
+        job()
+        val a = Analyzer()
+        runJob(a)("j1")
+        assertEquals(listOf<String?>(null), a.contexts)
+    }
+
+    @Test fun contextIsReusedOnPathBFallbackWithinTheTwoCallBudget() = runTest {
+        job(userContext = "Who is this?")
+        val a = Analyzer(AnalyzerException(FailureReason.NETWORK))
+        runJob(a)("j1")
+        assertEquals(listOf<String?>("Who is this?", "Who is this?"), a.contexts)
+        assertEquals(0, ai.calls)   // both calls spent on analysis: research skipped, as before
+    }
+
+    @Test fun trySharperReusesTheStoredContext() = runTest {
+        job(userContext = "Is this true?")
+        val a = Analyzer()
+        runJob(a)("j1", UserAction.TRY_SHARPER)
+        assertEquals(listOf<String?>("Is this true?"), a.contexts)
+    }
+
+    @Test fun retryAfterFailureReusesTheStoredContext() = runTest {
+        job(userContext = "Where is this?")
+        runJob(Analyzer(AnalyzerException(FailureReason.MODEL_BUSY)))("j1")
+        assertEquals(JobState.FAILED, state())
+        val a = Analyzer()
+        runJob(a)("j1")   // Retry = RUN on the same job row
+        assertEquals(listOf<String?>("Where is this?"), a.contexts)
+        assertEquals("Where is this?", store.get("j1")!!.userContext)
     }
 }

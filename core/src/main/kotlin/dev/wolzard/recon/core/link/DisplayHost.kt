@@ -9,3 +9,7 @@ fun Job.displayHost(): String {
     val link = url ?: LinkRouter.extractUrl(sharedText)
     return link?.let { runCatching { URI(it).host?.removePrefix("www.")?.removePrefix("m.") }.getOrNull() } ?: "Link"
 }
+
+/** Host of a link for headers ("instagram.com"), without www./m.; "Link" if it has none. */
+fun hostOf(url: String): String =
+    runCatching { URI(url).host?.removePrefix("www.")?.removePrefix("m.") }.getOrNull() ?: "Link"

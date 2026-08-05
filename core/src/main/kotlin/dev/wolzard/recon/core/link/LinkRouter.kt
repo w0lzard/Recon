@@ -22,6 +22,9 @@ object LinkRouter {
         .map { trim(it.value) }
         .firstOrNull { host(it) != null }
 
+    /** The one check for a share or paste (D23): the first http(s) link in [text], or null. Run before the context screen and again at Start. */
+    fun validLink(text: String): String? = extractUrl(text)?.takeIf(::isWebUrl)
+
     /** Only absolute http(s) URLs with a real host may reach the network or yt-dlp (no file:, intent:, javascript:, …). */
     fun isWebUrl(url: String): Boolean = runCatching { URI(url) }.getOrNull()
         ?.let { it.scheme?.lowercase() in setOf("http", "https") && host(url) != null } ?: false

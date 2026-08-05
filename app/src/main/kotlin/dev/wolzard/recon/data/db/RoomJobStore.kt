@@ -3,6 +3,7 @@ package dev.wolzard.recon.data.db
 import androidx.room.withTransaction
 import dev.wolzard.recon.core.model.Job
 import dev.wolzard.recon.core.model.JobState
+import dev.wolzard.recon.core.model.UserContext
 import dev.wolzard.recon.core.port.JobStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -15,10 +16,10 @@ class RoomJobStore(private val db: ReconDb, private val clock: () -> Long = Syst
     override fun observe(id: String): Flow<Job?> = dao.observe(id).map { it?.toJob() }
     override suspend fun get(id: String): Job? = dao.get(id)?.toJob()
 
-    override suspend fun create(sharedText: String, localUri: String?): String {
+    override suspend fun create(sharedText: String, localUri: String?, userContext: String?): String {
         val now = clock()
         val id = UUID.randomUUID().toString()
-        dao.insert(Job(id = id, sharedText = sharedText, localUri = localUri, createdAt = now, updatedAt = now).toEntity())
+        dao.insert(Job(id = id, sharedText = sharedText, localUri = localUri, userContext = UserContext.clean(userContext), createdAt = now, updatedAt = now).toEntity())
         return id
     }
 

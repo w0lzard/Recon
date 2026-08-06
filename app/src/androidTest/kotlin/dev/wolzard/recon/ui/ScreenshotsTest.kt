@@ -138,6 +138,25 @@ class ScreenshotsTest {
         JobScreen(asked(JobState.DONE).copy(userContext = "Who is this?"), answered(a, emptyList()), now) {}
     }
 
+    // --- D24
+
+    @Test fun jobFailed() = shot("job_failed") {
+        JobScreen(job(JobState.FAILED).copy(failure = dev.wolzard.recon.core.model.FailureReason.VIDEO_UNREADABLE), null, now) {}
+    }
+
+    @Test fun jobClaims() = shot("job_claims", scrollTo = "CLAIMS · 3") {
+        JobScreen(job(JobState.DONE), result(listOf(
+            finding(EntityType.CLAIM, "It cuts shell startup time in half.", Verdict.DISPUTED, Basis.WEB_SOURCES),
+            finding(EntityType.CLAIM, "It runs on macOS, Linux and Windows.", Verdict.SUPPORTED, Basis.WEB_SOURCES),
+            finding(EntityType.CLAIM, "Sitting under six hours a day halves back-pain risk.", Verdict.UNCLEAR, Basis.AI_KNOWLEDGE),
+        )), now) {}
+    }
+
+    @Test fun homeUpdate() = shot("home_update") {
+        val info = dev.wolzard.recon.data.update.UpdateInfo("0.2.0", "https://github.com/w0lzard/recon/releases/download/v0.2.0/a.apk", "https://github.com/w0lzard/recon/releases/tag/v0.2.0")
+        HomeScreen(HomeState(update = info)) {}
+    }
+
     @Test fun signIn() {
         shot("sign_in") { SignInScreen(SignInState()) {} }
     }

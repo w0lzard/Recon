@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -34,7 +35,7 @@ import dev.wolzard.recon.designsystem.StatusChip
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContextScreen(state: ContextState, onIntent: (ContextIntent) -> Unit) {
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().imePadding()) { // the keyboard shrinks the scroll area; nothing sits under it
         TopAppBar(
             title = {},
             navigationIcon = { IconButton(onClick = { onIntent(ContextIntent.Back) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },

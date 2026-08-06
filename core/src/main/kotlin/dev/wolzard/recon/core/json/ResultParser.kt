@@ -5,6 +5,7 @@ import dev.wolzard.recon.core.model.Answer
 import dev.wolzard.recon.core.model.AnswerStatus
 import dev.wolzard.recon.core.model.AnalyzerException
 import dev.wolzard.recon.core.model.Basis
+import dev.wolzard.recon.core.model.ClaimDomain
 import dev.wolzard.recon.core.model.Entity
 import dev.wolzard.recon.core.model.EntityType
 import dev.wolzard.recon.core.model.Evidence
@@ -92,6 +93,7 @@ object ResultParser {
             qualifier = qualifier?.take(MAX_STRING),
             evidence = Evidence.fromWire(o.str("evidence")),
             saidInVideo = o.str("saidInVideo")?.trim().orEmpty().take(MAX_STRING),
+            domain = if (type == EntityType.CLAIM) ClaimDomain.fromWire(o.str("domain")) else null,
         )
     }
 
@@ -127,10 +129,15 @@ object ResultParser {
             )
         }
         val knowledge = cap == VerdictCap.KNOWLEDGE
+        // Without sources there is nothing to name, so knowledge answers carry none whatever the model wrote.
+        val source = if (knowledge) null else clean(o.str("source")).takeIf { it.isNotEmpty() }
+        var verdict = verdict(item.entity.type, o.str("verdict"), cap)
+        // D24: a health, legal or financial claim is Supported or Disputed only on a named source.
+        if (item.entity.type == EntityType.CLAIM && item.entity.domain?.sensitive == true && source == null) verdict = Verdict.UNCLEAR
         return Finding(
             entity = item.entity,
             researcher = if (knowledge) "knowledge" else "web",
-            verdict = verdict(item.entity.type, o.str("verdict"), cap),
+            verdict = verdict,
             title = clean(o.str("title")).ifEmpty { item.entity.name },
             whatItIs = whatItIs,
             keyFacts = keyFacts,
@@ -138,6 +145,7 @@ object ResultParser {
             whyInVideo = whyInVideo,
             primaryLink = null,
             basis = if (knowledge) Basis.AI_KNOWLEDGE else Basis.WEB_SOURCES,
+            source = source,
         )
     }
 

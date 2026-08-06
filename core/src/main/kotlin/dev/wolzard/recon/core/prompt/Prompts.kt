@@ -61,6 +61,7 @@ Return:
    - qualifier: what disambiguates it — repo: owner (as in github.com/<owner>/<name>); book: author; app/product: maker or brand; place: city and country; media: release year, then director or artist if known (for example "2010, Christopher Nolan"). null if unknown. Never invent one.
    - evidence: "on-screen" if the name is visibly shown, "spoken" if said aloud but not shown, "inferred" if you deduce it from a description, logo or appearance.
    - saidInVideo: one sentence on what the video says about it.
+   - domain: for claims only, what the claim is about: "health", "legal", "financial" or "other"; null for every other type. Medical, legal and money claims must be marked as such.
    Skip generic things (e.g. "a phone", "coffee") unless the video is specifically about them.
    An empty list is a correct, complete answer. Return an empty list if nothing specific is mentioned, or if you are not sure an item is really named or shown in the video. Do not guess an entity from a character, toy or style alone. For media, give a title only if it is shown, captioned or said aloud, or you clearly recognise the exact work; otherwise leave it out. Never fill in a year you are not sure of.
 2. summary — 2 to 4 sentences: what the video is about and what it claims.
@@ -108,10 +109,11 @@ For each item return:
 - verdict:
     for claims: "supported", "disputed" or "unclear", based on reliable sources (health claims: medical bodies and peer-reviewed sources; "unclear" if evidence is weak or mixed);
     for everything else: "confirmed" if you found exactly this item, "best_match" if you found something likely but not certainly the same, "not_found" otherwise.
+- source: for claims, the name of the one reliable source your verdict rests on (for example "WHO fact sheet"), or "" if you have none. A health, legal or financial claim without a named source must be "unclear".
 """.trimIndent() + "\n" + ITEM_FIELDS + "\n" + """
 Do not include URLs in any field. Write in {language}.
 Respond only with a JSON object exactly in this shape, no other text:
-{"items":[{"index":0,"title":"","verdict":"confirmed","whatItIs":"","keyFacts":[""],"howToTry":"","whyInVideo":""}]}
+{"items":[{"index":0,"title":"","verdict":"confirmed","source":"","whatItIs":"","keyFacts":[""],"howToTry":"","whyInVideo":""}]}
 """.trimIndent()
 
     private val KNOWLEDGE_HEAD = """
@@ -154,7 +156,8 @@ Respond only with a JSON object exactly in this shape, no other text:
           "name":        { "type": "string" },
           "qualifier":   { "type": "string", "nullable": true },
           "evidence":    { "type": "string", "enum": ["spoken","on-screen","inferred"] },
-          "saidInVideo": { "type": "string" }
+          "saidInVideo": { "type": "string" },
+          "domain":      { "type": "string", "enum": ["health","legal","financial","other"], "nullable": true }
         },
         "required": ["type","name","qualifier","evidence","saidInVideo"]
       }

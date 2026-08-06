@@ -3,6 +3,7 @@ package dev.wolzard.recon.core.json
 import dev.wolzard.recon.core.model.AnalyzerException
 import dev.wolzard.recon.core.model.AnswerStatus
 import dev.wolzard.recon.core.model.Basis
+import dev.wolzard.recon.core.model.ClaimDomain
 import dev.wolzard.recon.core.model.Entity
 import dev.wolzard.recon.core.model.EntityType
 import dev.wolzard.recon.core.model.Evidence
@@ -266,5 +267,52 @@ class ResultParserTest {
         val e = r.entities.single()
         assertEquals(EntityType.MEDIA, e.type)
         assertEquals("2010, Christopher Nolan", e.qualifier)
+    }
+
+    // --- D24 claim domain
+
+    private fun claim(domain: String?) = Entity(EntityType.CLAIM, "It cures X.", null, Evidence.SPOKEN, "said", domain?.let { ClaimDomain.fromWire(it) })
+    private fun researched(domain: String?, verdict: String, source: String?, cap: VerdictCap = VerdictCap.WEB): Finding {
+        val src = source?.let { ""","source":"$it"""" }.orEmpty()
+        val raw = """{"items":[{"index":0,"title":"t","verdict":"$verdict"$src,"whatItIs":"w","keyFacts":[],"howToTry":"","whyInVideo":""}]}"""
+        return ResultParser.parseResearch(raw, listOf(ResearchItem(claim(domain))), cap).single()
+    }
+
+    @Test fun domainIsParsedForClaimsOnly() {
+        val r = ResultParser.parseAnalysis(analysis(
+            """{"type":"claim","name":"c1","qualifier":null,"evidence":"spoken","saidInVideo":"s","domain":"Health"}""",
+            """{"type":"claim","name":"c2","qualifier":null,"evidence":"spoken","saidInVideo":"s"}""",
+            """{"type":"claim","name":"c3","qualifier":null,"evidence":"spoken","saidInVideo":"s","domain":"astrology"}""",
+            """{"type":"app","name":"a","qualifier":null,"evidence":"spoken","saidInVideo":"s","domain":"health"}""",
+        ))
+        assertEquals(listOf(ClaimDomain.HEALTH, null, ClaimDomain.OTHER, null), r.entities.map { it.domain })
+    }
+
+    @Test fun sensitiveDomainsWithoutANamedSourceAreUnclear() {
+        for (d in listOf("health", "legal", "financial")) {
+            assertEquals(d, Verdict.UNCLEAR, researched(d, "supported", null).verdict)
+            assertEquals(d, Verdict.UNCLEAR, researched(d, "disputed", "  ").verdict)
+        }
+    }
+
+    @Test fun sensitiveDomainsWithANamedSourceKeepTheirVerdict() {
+        for (d in listOf("health", "legal", "financial")) {
+            val f = researched(d, "disputed", "WHO fact sheet")
+            assertEquals(d, Verdict.DISPUTED, f.verdict)
+            assertEquals("WHO fact sheet", f.source)
+        }
+        assertEquals(Verdict.SUPPORTED, researched("health", "supported", "Cochrane review").verdict)
+    }
+
+    @Test fun otherOrMissingDomainDoesNotNeedASource() {
+        assertEquals(Verdict.SUPPORTED, researched("other", "supported", null).verdict)
+        assertEquals(Verdict.DISPUTED, researched(null, "disputed", null).verdict)
+    }
+
+    @Test fun sourceIsNeverALinkAndKnowledgeAnswersCarryNone() {
+        assertEquals("WHO fact sheet", researched("health", "supported", "WHO fact sheet https://who.int/x").source)
+        val k = researched("health", "supported", "WHO fact sheet", VerdictCap.KNOWLEDGE)
+        assertNull(k.source)
+        assertEquals(Verdict.UNCLEAR, k.verdict)
     }
 }

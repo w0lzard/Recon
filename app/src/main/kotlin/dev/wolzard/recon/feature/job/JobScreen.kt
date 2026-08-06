@@ -121,8 +121,10 @@ private fun Running(job: Job, onIntent: (JobIntent) -> Unit) {
         StatusChip("Waiting for quota", ChipKind.Warn, icon = StatusIcons.Waiting)
         Text("Waiting for your free AI quota", style = MaterialTheme.typography.titleLarge)
         Text("Link: ${job.displayHost()}")
-        Text("Quota resets at ${job.retryAtEpochMs?.let(JobCopy::time) ?: "the next daily reset"}; this video starts then.")
-        InfoCard("EXPECTED RESET", job.retryAtEpochMs?.let { "~${JobCopy.time(it)}" } ?: "Next daily reset")
+        // A time is shown only when the backend gave one (retryAtEpochMs); never a guess.
+        val resetAt = job.retryAtEpochMs?.let(JobCopy::time)
+        Text(if (resetAt != null) "Quota resets at $resetAt; this video starts then." else "${JobCopy.TRY_LATER}. This video starts when your usage limit lifts.")
+        InfoCard("EXPECTED RESET", resetAt ?: JobCopy.TRY_LATER)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(shape = MaterialTheme.shapes.small, onClick = { onIntent(JobIntent.Cancel) }) { Text("Cancel") }
             Button(shape = MaterialTheme.shapes.small, onClick = { onIntent(JobIntent.SignIn) }) { Text("Switch account") }
@@ -267,6 +269,7 @@ private fun Done(result: JobResult, asked: Boolean, onIntent: (JobIntent) -> Uni
                 ClaimRow(f)
             }
         }
+        if (claims.any { it.value.entity.domain?.sensitive == true }) Text(JobCopy.NOT_ADVICE, Modifier.testTag("advice_footer"), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
     }
     if (sharperOffered) OutlinedCard(Modifier.fillMaxWidth(), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -341,7 +344,15 @@ private fun ClaimRow(f: Finding) {
         StatusChip(JobCopy.verdict(f.verdict), verdictKind(f))
         Text(f.title, style = MaterialTheme.typography.titleMedium)
         if (f.whatItIs.isNotBlank()) Text(f.whatItIs, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        f.source?.let { Text("Source: $it", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
         Text(JobCopy.basis(f.basis), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        if (f.entity.domain?.sensitive == true) Row(
+            Modifier.fillMaxWidth().testTag("advice_line").background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.small).padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(StatusIcons.Info, contentDescription = null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(JobCopy.NOT_ADVICE, style = MaterialTheme.typography.bodySmall)
+        }
     }
 }
 

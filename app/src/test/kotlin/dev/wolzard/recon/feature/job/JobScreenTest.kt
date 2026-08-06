@@ -3,7 +3,10 @@ package dev.wolzard.recon.feature.job
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -262,5 +265,55 @@ class JobScreenTest {
         show(job(JobState.DONE), result(listOf(f)))
         compose.onNodeWithText("MEDIA").assertExists()
         compose.onNodeWithText("Watch or listen: how").assertExists()
+    }
+
+    // --- D24: advice line and waiting without a time
+
+    private fun claim(name: String, domain: dev.wolzard.recon.core.model.ClaimDomain?, verdict: Verdict = Verdict.UNCLEAR) =
+        finding(entity(EntityType.CLAIM, name).copy(domain = domain), verdict, Basis.WEB_SOURCES)
+
+    @Test fun healthLegalAndFinancialClaimsShowTheAdviceLineAndOneFooter() {
+        val d = dev.wolzard.recon.core.model.ClaimDomain.values()
+        show(job(JobState.DONE), result(listOf(claim("h", d[0]), claim("l", d[1]), claim("f", d[2]))))
+        compose.onAllNodesWithTag("advice_line").assertCountEquals(3)
+        compose.onAllNodesWithText(JobCopy.NOT_ADVICE).assertCountEquals(4) // one per claim + the footer
+        compose.onNodeWithTag("advice_footer").performScrollTo().assertExists()
+    }
+
+    @Test fun otherOrUntaggedClaimsHaveNoAdviceLineOrFooter() {
+        show(job(JobState.DONE), result(listOf(claim("o", dev.wolzard.recon.core.model.ClaimDomain.OTHER, Verdict.SUPPORTED), claim("n", null, Verdict.DISPUTED))))
+        compose.onAllNodesWithTag("advice_line").assertCountEquals(0)
+        compose.onAllNodesWithTag("advice_footer").assertCountEquals(0)
+        compose.onAllNodesWithText(JobCopy.NOT_ADVICE).assertCountEquals(0)
+    }
+
+    @Test fun adviceLineIsOnlyOnTheSensitiveClaim() {
+        show(job(JobState.DONE), result(listOf(claim("sensitive", dev.wolzard.recon.core.model.ClaimDomain.HEALTH), claim("plain", dev.wolzard.recon.core.model.ClaimDomain.OTHER, Verdict.SUPPORTED))))
+        compose.onAllNodesWithTag("advice_line").assertCountEquals(1)
+        compose.onAllNodesWithText(JobCopy.NOT_ADVICE).assertCountEquals(2) // the line and the footer
+    }
+
+    @Test fun namedSourceIsShownOnTheClaim() {
+        val f = claim("c", dev.wolzard.recon.core.model.ClaimDomain.HEALTH, Verdict.DISPUTED).copy(source = "WHO fact sheet")
+        show(job(JobState.DONE), result(listOf(f)))
+        compose.onNodeWithText("Source: WHO fact sheet").assertExists()
+    }
+
+    @Test fun waitingWithoutATimeShowsTryAgainLaterAndNoClock() {
+        show(job(JobState.WAITING_QUOTA, retryAt = null))
+        compose.onAllNodesWithText(JobCopy.TRY_LATER, substring = true).assertCountEquals(2) // sentence + reset card
+        compose.onAllNodesWithText("Quota resets at", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("~", substring = true).assertCountEquals(0)
+        val clock = Regex("""\b\d{1,2}:\d{2}\b""")
+        val texts = compose.onRoot(useUnmergedTree = true).fetchSemanticsNode().let { n ->
+            fun walk(x: androidx.compose.ui.semantics.SemanticsNode): List<String> =
+                (x.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)?.map { t -> t.text }.orEmpty()) + x.children.flatMap(::walk)
+            walk(n)
+        }
+        assertEquals(emptyList<String>(), texts.filter { clock.containsMatchIn(it) })
+    }
+
+    @Test fun failedQuotaWithoutATimeDoesNotInventOne() {
+        assertEquals("You've reached your Gemini usage limit. Try again later.", JobCopy.failureMessage(FailureReason.QUOTA_EXCEEDED, null))
     }
 }

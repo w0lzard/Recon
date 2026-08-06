@@ -21,6 +21,8 @@ import dev.wolzard.recon.designsystem.Reticle
 import androidx.compose.ui.graphics.vector.ImageVector
 import dev.wolzard.recon.designsystem.StatusChip
 import dev.wolzard.recon.designsystem.StatusIcons
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import dev.wolzard.recon.designsystem.Wordmark
 import dev.wolzard.recon.designsystem.dotGrid
 import dev.wolzard.recon.designsystem.Mono
@@ -98,7 +100,11 @@ private fun PasteBar(error: String?, onIntent: (HomeIntent) -> Unit) {
         OutlinedButton(
             onClick = { onIntent(HomeIntent.PasteLink(clipboardText(ctx))) },
             Modifier.fillMaxWidth().height(48.dp), shape = MaterialTheme.shapes.small,
-        ) { Text("Paste a video link") }
+        ) {
+            Icon(StatusIcons.Link, contentDescription = null, Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Paste a video link")
+        }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
     }
 }
@@ -127,10 +133,12 @@ fun HomeScreen(state: HomeState, onIntent: (HomeIntent) -> Unit) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Reticle(Modifier.size(48.dp), tick = MaterialTheme.colorScheme.onSurfaceVariant, dot = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Share a video link to Recon from any app", Modifier.background(MaterialTheme.colorScheme.background), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+                    Text("Or paste a link above.", Modifier.background(MaterialTheme.colorScheme.background), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
                 }
             }
             return
         }
+        Text("RECENT · ${rows.size}", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         LazyColumn {
             items(rows, key = { it.id }) { r ->

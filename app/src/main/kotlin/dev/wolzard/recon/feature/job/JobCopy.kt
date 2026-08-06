@@ -12,6 +12,7 @@ import java.time.format.DateTimeFormatter
 /** The UI contract of the Failure table and degraded banners (plan → State machine), in one testable place. */
 object JobCopy {
     const val NOTHING_FOUND = "Nothing specific to look up in this video"
+    const val NOTHING_FOUND_DETAIL = "No repos, products, people, places or claims in the frames or audio."
     const val SHARE_FILE_HELP = "Some videos can't be downloaded (private, or the site needs a login). " +
         "Save or download the video in the app you watched it in, then share the video file itself to Recon."
 

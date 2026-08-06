@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollTo
@@ -54,11 +55,12 @@ class ScreenshotsTest {
     private val suffix = InstrumentationRegistry.getArguments().getString("suffix", "")
     private val dir = File(InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null), "screenshots").apply { mkdirs() }
 
-    private fun shot(name: String, scrollTo: String? = null, content: @Composable () -> Unit) {
+    private fun shot(name: String, scrollTo: String? = null, scrollToTag: String? = null, content: @Composable () -> Unit) {
         // The real app gets its background from the Scaffold in ReconNavHost; the harness needs its own.
         compose.setContent { ReconTheme { androidx.compose.material3.Surface(color = androidx.compose.material3.MaterialTheme.colorScheme.background) { content() } } }
         compose.waitForIdle()
         scrollTo?.let { compose.onNodeWithText(it).performScrollTo() }
+        scrollToTag?.let { compose.onNodeWithTag(it).performScrollTo() }
         val bmp = compose.onRoot().captureToImage().asAndroidBitmap()
         File(dir, "$name$suffix.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
@@ -145,13 +147,17 @@ class ScreenshotsTest {
         JobScreen(job(JobState.FAILED).copy(failure = dev.wolzard.recon.core.model.FailureReason.VIDEO_UNREADABLE), null, now) {}
     }
 
-    @Test fun jobClaims() = shot("job_claims", scrollTo = "CLAIMS · 3") {
+    @Test fun jobClaims() = shot("job_claims", scrollToTag = "advice_footer") {
+        fun claim(name: String, v: Verdict, basis: Basis, d: dev.wolzard.recon.core.model.ClaimDomain?) =
+            finding(EntityType.CLAIM, name, v, basis).let { it.copy(entity = it.entity.copy(domain = d), source = if (v == Verdict.DISPUTED) "Project benchmarks" else null) }
         JobScreen(job(JobState.DONE), result(listOf(
-            finding(EntityType.CLAIM, "It cuts shell startup time in half.", Verdict.DISPUTED, Basis.WEB_SOURCES),
-            finding(EntityType.CLAIM, "It runs on macOS, Linux and Windows.", Verdict.SUPPORTED, Basis.WEB_SOURCES),
-            finding(EntityType.CLAIM, "Sitting under six hours a day halves back-pain risk.", Verdict.UNCLEAR, Basis.AI_KNOWLEDGE),
+            claim("It cuts shell startup time in half.", Verdict.DISPUTED, Basis.WEB_SOURCES, dev.wolzard.recon.core.model.ClaimDomain.OTHER),
+            claim("It runs on macOS, Linux and Windows.", Verdict.SUPPORTED, Basis.WEB_SOURCES, dev.wolzard.recon.core.model.ClaimDomain.OTHER),
+            claim("Sitting under six hours a day halves back-pain risk.", Verdict.UNCLEAR, Basis.AI_KNOWLEDGE, dev.wolzard.recon.core.model.ClaimDomain.HEALTH),
         )), now) {}
     }
+
+    @Test fun quotaWaitingNoTime() = shot("job_quota_waiting_no_time") { JobScreen(job(JobState.WAITING_QUOTA), null, now) {} }
 
     @Test fun homeUpdate() = shot("home_update") {
         val info = dev.wolzard.recon.data.update.UpdateInfo("0.2.0", "https://github.com/w0lzard/recon/releases/download/v0.2.0/a.apk", "https://github.com/w0lzard/recon/releases/tag/v0.2.0")

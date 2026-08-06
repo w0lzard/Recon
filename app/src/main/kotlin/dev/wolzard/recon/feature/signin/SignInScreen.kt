@@ -19,6 +19,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.ui.Alignment
+import dev.wolzard.recon.designsystem.StatusIcons
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -51,7 +54,10 @@ fun SignInScreen(state: SignInState, onIntent: (SignInIntent) -> Unit) {
             Modifier.fillMaxWidth().border(1.dp, warn, MaterialTheme.shapes.medium).padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            Text("ACCOUNT RISK", color = warn, style = MaterialTheme.typography.labelSmall)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(StatusIcons.Info, contentDescription = null, Modifier.size(14.dp), tint = warn)
+                Text("ACCOUNT RISK", color = warn, style = MaterialTheme.typography.labelSmall)
+            }
             Text(SetupCopy.ACCOUNT_RISK, style = MaterialTheme.typography.bodyMedium)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

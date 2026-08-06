@@ -55,7 +55,8 @@ class ScreenshotsTest {
     private val dir = File(InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null), "screenshots").apply { mkdirs() }
 
     private fun shot(name: String, scrollTo: String? = null, content: @Composable () -> Unit) {
-        compose.setContent { ReconTheme { content() } }
+        // The real app gets its background from the Scaffold in ReconNavHost; the harness needs its own.
+        compose.setContent { ReconTheme { androidx.compose.material3.Surface(color = androidx.compose.material3.MaterialTheme.colorScheme.background) { content() } } }
         compose.waitForIdle()
         scrollTo?.let { compose.onNodeWithText(it).performScrollTo() }
         val bmp = compose.onRoot().captureToImage().asAndroidBitmap()

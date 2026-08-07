@@ -214,6 +214,16 @@ class RunJobTest {
         assertEquals(5_000L, j.retryAtEpochMs)
     }
 
+    @Test fun noQuotaWaitBackendNeverWritesWaitingQuota() = runTest {
+        // The web backend wires quotaWaitUntil = { null } (AppModule): a usage-limit error must end in FAILED, never WAITING_QUOTA.
+        job()
+        waitUntil = null
+        runJob(Analyzer(AnalyzerException(FailureReason.QUOTA_EXCEEDED)))("j1")
+        assertEquals(JobState.FAILED, state())
+        assertEquals(FailureReason.QUOTA_EXCEEDED, store.get("j1")!!.failure)
+        assertTrue("states were ${store.states}", JobState.WAITING_QUOTA !in store.states)
+    }
+
     @Test fun allModelsWithoutQuotaWaitWithoutAnyCall() = runTest {
         job()
         waitUntil = 9_000L

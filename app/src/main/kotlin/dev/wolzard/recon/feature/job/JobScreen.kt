@@ -175,7 +175,9 @@ private fun Failed(job: Job, now: Long, onIntent: (JobIntent) -> Unit) {
                 if (!sharedFile) Button(shape = MaterialTheme.shapes.small, onClick = { onIntent(JobIntent.Retry) }) { Text("Retry") }
             }
             FailureReason.VIDEO_UNREADABLE -> OutlinedButton(shape = MaterialTheme.shapes.small, onClick = { help = true }) { Text("Share a different file") }
-            FailureReason.API_KEY_MISSING, FailureReason.API_KEY_INVALID -> Button(shape = MaterialTheme.shapes.small, onClick = { onIntent(JobIntent.SignIn) }) { Text("Sign in") }
+            FailureReason.API_KEY_MISSING, FailureReason.API_KEY_INVALID -> Button(shape = MaterialTheme.shapes.small, onClick = { onIntent(JobIntent.SignIn) }) {
+                Text(if (reason == FailureReason.API_KEY_INVALID) "Sign in again" else "Sign in")
+            }
             else -> if (!sharedFile) Button(shape = MaterialTheme.shapes.small, onClick = { onIntent(JobIntent.Retry) }, enabled = retryEnabled) { Text("Retry") }
         }
     }

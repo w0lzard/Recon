@@ -4,6 +4,7 @@ import androidx.lifecycle.viewModelScope
 import dev.wolzard.recon.core.job.UserAction
 import dev.wolzard.recon.core.link.LinkRouter
 import dev.wolzard.recon.core.model.UserContext
+import dev.wolzard.recon.core.model.FailureReason
 import dev.wolzard.recon.core.model.GhRepo
 import dev.wolzard.recon.core.model.Job
 import dev.wolzard.recon.core.model.JobResult
@@ -61,6 +62,8 @@ class JobActions(private val store: JobStore, private val cancelWork: (Job) -> U
 
 class JobViewModel(private val id: String, store: JobStore, private val actions: JobActions) :
     MviViewModel<JobViewState, JobIntent, JobEffect>(JobViewState()) {
+    private companion object { val SIGN_IN_FAILURES = setOf(FailureReason.API_KEY_MISSING, FailureReason.API_KEY_INVALID) }
+
     init {
         viewModelScope.launch {
             store.observe(id).collect { job -> setState { JobViewState(job, actions.result(job)) } }
@@ -76,6 +79,10 @@ class JobViewModel(private val id: String, store: JobStore, private val actions:
             else -> viewModelScope.launch {
                 when (intent) {
                     JobIntent.Retry -> actions.requeue(id, UserAction.RUN)
+                    // D25: a job that stopped on sign-in runs again with its saved link and context; a shared file's copy is gone.
+                    JobIntent.SignedInAgain -> state.value.job
+                        ?.takeIf { it.state == JobState.FAILED && it.failure in SIGN_IN_FAILURES && it.localUri == null }
+                        ?.let { actions.requeue(id, UserAction.RUN) }
                     JobIntent.CheckAgain, JobIntent.LookUp -> actions.requeue(id, UserAction.RESEARCH_ONLY)
                     JobIntent.TrySharper -> actions.requeue(id, UserAction.TRY_SHARPER)
                     is JobIntent.Pick -> actions.pick(id, intent.findingIndex, intent.repo)

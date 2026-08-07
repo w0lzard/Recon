@@ -13,6 +13,8 @@ sealed interface JobIntent {
     data object LookUp : JobIntent
     data object TrySharper : JobIntent
     data object SignIn : JobIntent
+    /** Back from sign-in that this job's "Sign in again" opened (D25). */
+    data object SignedInAgain : JobIntent
     data object OpenSettings : JobIntent
     data object Cancel : JobIntent
     data object Back : JobIntent

@@ -143,4 +143,21 @@ class JobViewModelTest {
         assertEquals(JobEffect.NavigateBack, vm.effects.first())
         assertNull(store.get(id))
     }
+
+    @Test fun backFromSignInRerunsOnlyAJobThatStoppedOnSignIn() = runBlocking {
+        val expired = store.create("https://www.instagram.com/reel/abc/", null, "is this real?")
+        store.update(expired) { it.copy(state = JobState.FAILED, failure = FailureReason.API_KEY_INVALID) }
+        val busy = store.create("https://www.instagram.com/reel/def/", null)
+        store.update(busy) { it.copy(state = JobState.FAILED, failure = FailureReason.MODEL_BUSY) }
+        val file = store.create("video", "content://x/1")
+        store.update(file) { it.copy(state = JobState.FAILED, failure = FailureReason.API_KEY_INVALID) }
+        for (id in listOf(expired, busy, file)) {
+            val vm = vm(id)
+            withTimeout(5_000) { while (vm.state.value.job == null) delay(10) }
+            vm.onIntent(JobIntent.SignedInAgain)
+        }
+        withTimeout(5_000) { while (store.get(expired)?.state != JobState.QUEUED) delay(10) }
+        assertEquals(listOf(expired to UserAction.RUN), queued)
+        assertEquals("is this real?", store.get(expired)?.userContext)
+    }
 }

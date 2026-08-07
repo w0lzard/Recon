@@ -5,10 +5,11 @@ import androidx.lifecycle.viewModelScope
 import dev.wolzard.recon.core.model.AnalyzerException
 import dev.wolzard.recon.core.port.Secret
 import dev.wolzard.recon.core.port.SecretStore
+import dev.wolzard.recon.data.gemini.GeminiWebClient
 import dev.wolzard.recon.mvi.MviViewModel
 import kotlinx.coroutines.launch
 
-/** Saves the Google cookies from the sign-in WebView (or pasted) and checks Gemini accepts them (D22). */
+/** Saves the Google cookies from the sign-in WebView (or pasted) and checks Gemini accepts them before leaving (D22, D25). */
 class SignInViewModel(private val secrets: SecretStore, private val verify: suspend () -> Unit) :
     MviViewModel<SignInState, SignInIntent, SignInEffect>(SignInState()) {
     private var signedIn = false
@@ -27,7 +28,11 @@ class SignInViewModel(private val secrets: SecretStore, private val verify: susp
         setState { copy(checking = true, error = null) }
         secrets.put(Secret.GEMINI_COOKIES, cookies)
         viewModelScope.launch {
-            val error = try { verify(); null } catch (e: AnalyzerException) { SetupCopy.signInFailed(e.reason) }
+            val error = try {
+                verify(); null
+            } catch (e: AnalyzerException) {
+                if (e.message == GeminiWebClient.GOOGLE_CHALLENGE) SetupCopy.GOOGLE_CHALLENGE else SetupCopy.signInFailed(e.reason)
+            }
             if (error != null) secrets.put(Secret.GEMINI_COOKIES, null)
             signedIn = error == null
             setState { copy(checking = false, error = error) }

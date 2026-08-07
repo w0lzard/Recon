@@ -16,8 +16,11 @@ object SetupCopy {
         "header of any request to gemini.google.com from the developer tools, and paste it below."
     const val NO_SESSION_COOKIE = "That doesn't contain the __Secure-1PSID cookie. Copy the whole Cookie header."
 
+    const val GOOGLE_CHALLENGE = "Google wants you to confirm something first (a consent or \"verify it's you\" page). " +
+        "Sign in here and finish that page, or do it in a browser and paste the new cookies."
+
     fun signInFailed(reason: FailureReason): String = when (reason) {
         FailureReason.NETWORK -> "Couldn't reach Google. Check your connection and try again."
-        else -> "Gemini didn't accept this sign-in. Sign in again."
+        else -> "Google didn't accept these cookies; they may be from a signed-out or expired session. Sign in again."
     }
 }

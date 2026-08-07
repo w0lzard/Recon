@@ -16,6 +16,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import okhttp3.FormBody
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
@@ -73,7 +74,10 @@ class GeminiWebClient(
         return replyText(r.body)
     }
 
-    /** Sign-in check: re-reads the app page with the saved cookies. @throws AnalyzerException */
+    /**
+     * Sign-in check: re-reads the app page with the saved cookies, one cheap GET. @throws AnalyzerException:
+     * NETWORK, or API_KEY_INVALID (message [GOOGLE_CHALLENGE] when Google answered with a consent or verify page).
+     */
     suspend fun verify() {
         session = null
         session()
@@ -88,6 +92,7 @@ class GeminiWebClient(
 
     private suspend fun initOnce(): Session? {
         val r = send(Request.Builder().url("$appUrl/app").get().header("Origin", ORIGIN).header("Referer", "$ORIGIN/").build())
+        if (isGoogleChallenge(r.url)) throw AnalyzerException(FailureReason.API_KEY_INVALID, message = GOOGLE_CHALLENGE)
         if (r.code != 200) return null
         fun field(name: String) = Regex("\"$name\":\\s*\"(.*?)\"").find(r.body)?.groupValues?.get(1)
         val at = field("SNlM0e") ?: return null // signed-out (guest) pages have none
@@ -206,6 +211,14 @@ class GeminiWebClient(
 
     companion object {
         private const val ORIGIN = "https://gemini.google.com"
+        const val GOOGLE_CHALLENGE = "Google consent or challenge page"
+
+        /** Google sent the request to its cookie-consent page or a sign-in challenge (verify it's you, captcha). */
+        fun isGoogleChallenge(url: String): Boolean {
+            val u = url.toHttpUrlOrNull() ?: return false
+            return u.host == "consent.google.com" || u.host.startsWith("accounts.google.") &&
+                (u.encodedPath.contains("/challenge") || u.encodedPath.contains("/speedbump") || u.encodedPath.contains("/deniedsigninrejected"))
+        }
         private const val DEFAULT_PUSH_ID = "feeds/mcudyrk2a4khkz"
         private val DEFAULT_METADATA = listOf<JsonElement>(
             JsonPrimitive(""), JsonPrimitive(""), JsonPrimitive(""), JsonNull, JsonNull, JsonNull, JsonNull, JsonNull, JsonNull, JsonPrimitive(""),

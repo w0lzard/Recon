@@ -135,4 +135,19 @@ class GeminiWebClientTest {
     private suspend fun assertFails(reason: FailureReason, block: suspend () -> Unit) {
         try { block(); fail("expected $reason") } catch (e: AnalyzerException) { assertEquals(reason, e.reason) }
     }
+
+    @Test fun `consent and challenge pages are told apart from a plain sign-in page`() {
+        listOf(
+            "https://consent.google.com/ml?continue=https://gemini.google.com/app",
+            "https://accounts.google.com/v3/signin/challenge/pwd?TL=x",
+            "https://accounts.google.com/signin/v2/challenge/selection",
+            "https://accounts.google.co.in/speedbump/idvreenable",
+        ).forEach { assertTrue(it, GeminiWebClient.isGoogleChallenge(it)) }
+        listOf(
+            "https://accounts.google.com/ServiceLogin?continue=https://gemini.google.com/app",
+            "https://gemini.google.com/app",
+            "https://evil.com/challenge",
+            "",
+        ).forEach { assertTrue(it, !GeminiWebClient.isGoogleChallenge(it)) }
+    }
 }

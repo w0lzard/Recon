@@ -5,6 +5,7 @@ import dev.wolzard.recon.core.model.AnalyzerException
 import dev.wolzard.recon.core.model.FailureReason
 import dev.wolzard.recon.core.port.Secret
 import dev.wolzard.recon.core.port.SecretStore
+import dev.wolzard.recon.data.gemini.GeminiWebClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -51,5 +52,19 @@ class SignInViewModelTest {
         vm.onIntent(SignInIntent.CookiesReceived("NID=1; SID=2"))
         assertEquals(SetupCopy.NO_SESSION_COOKIE, vm.state.value.error)
         assertEquals(false, checked)
+    }
+
+    @Test fun eachFailedCheckHasItsOwnMessage() {
+        fun errorFor(e: AnalyzerException): String? {
+            val vm = SignInViewModel(FakeSecrets()) { throw e }
+            vm.onIntent(SignInIntent.CookiesReceived("__Secure-1PSID=abc"))
+            return vm.state.value.error
+        }
+        val rejected = errorFor(AnalyzerException(FailureReason.API_KEY_INVALID))
+        val network = errorFor(AnalyzerException(FailureReason.NETWORK))
+        val challenge = errorFor(AnalyzerException(FailureReason.API_KEY_INVALID, message = GeminiWebClient.GOOGLE_CHALLENGE))
+        assertEquals(SetupCopy.GOOGLE_CHALLENGE, challenge)
+        assertEquals(SetupCopy.signInFailed(FailureReason.NETWORK), network)
+        assertEquals(3, setOf(rejected, network, challenge).size)
     }
 }

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- D25: API 30 and lower; same exclusions as data_extraction_rules.xml. -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="secrets.xml" />
+    <exclude domain="root" path="app_webview/" />
+</full-backup-content>

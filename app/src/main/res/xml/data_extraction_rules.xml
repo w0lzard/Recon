@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- D25: the encrypted secrets (its key never leaves the Keystore anyway) and the WebView's Google cookies never leave the phone. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="secrets.xml" />
+        <exclude domain="root" path="app_webview/" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="secrets.xml" />
+        <exclude domain="root" path="app_webview/" />
+    </device-transfer>
+</data-extraction-rules>

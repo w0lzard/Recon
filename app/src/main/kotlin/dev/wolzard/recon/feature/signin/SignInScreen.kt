@@ -1,10 +1,8 @@
 package dev.wolzard.recon.feature.signin
 
 import dev.wolzard.recon.core.copy.SetupCopy
-import android.annotation.SuppressLint
 import android.webkit.CookieManager
 import android.webkit.WebView
-import android.webkit.WebViewClient
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.draw.clip
@@ -79,14 +77,12 @@ fun SignInScreen(state: SignInState, onIntent: (SignInIntent) -> Unit) {
     }
 }
 
-@SuppressLint("SetJavaScriptEnabled") // Google's sign-in page needs JavaScript
 @Composable
 private fun SignInWebView(modifier: Modifier, onCookies: (String) -> Unit) {
     AndroidView(modifier = modifier, factory = { ctx ->
         WebView(ctx).apply {
-            settings.javaScriptEnabled = true
-            settings.domStorageEnabled = true
-            webViewClient = object : WebViewClient() {
+            SignInWeb.lockDown(this)
+            webViewClient = object : SignInWeb.Client(ctx) {
                 override fun onPageFinished(view: WebView, url: String) {
                     if (!url.startsWith("https://gemini.google.com/")) return
                     CookieManager.getInstance().getCookie("https://gemini.google.com")

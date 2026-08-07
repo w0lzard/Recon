@@ -22,7 +22,7 @@ sealed interface SettingsIntent {
 sealed interface SettingsEffect {
     data object NavigateToSignIn : SettingsEffect
     data object NavigateToNotice : SettingsEffect
-    /** The sign-in WebView keeps its own copy of the Google cookies; the route clears it. */
+    /** The sign-in WebView keeps its own copy of the Google cookies and storage; the route clears them (D25). */
     data object ClearWebViewCookies : SettingsEffect
     data class OpenInBrowser(val url: String) : SettingsEffect
     data class OpenCustomTab(val url: String) : SettingsEffect

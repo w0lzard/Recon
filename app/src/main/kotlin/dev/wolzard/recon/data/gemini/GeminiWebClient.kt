@@ -191,7 +191,10 @@ class GeminiWebClient(
         val r = try {
             http.newCall(if (withCookies) request.newBuilder().header("Cookie", jar).build() else request).await()
         } catch (e: IOException) {
-            throw AnalyzerException(FailureReason.NETWORK, cause = e)
+            // No cause: a stack trace in a crash report must not carry anything from the request (D25).
+            throw AnalyzerException(FailureReason.NETWORK, message = CookieHeader.redact("${e::class.simpleName}: ${e.message}"))
+        } catch (_: IllegalArgumentException) {
+            throw AnalyzerException(FailureReason.API_KEY_INVALID, message = "saved Cookie header is malformed") // OkHttp refused the header
         }
         val merged = mergeCookies(jar, r.headers.values("Set-Cookie"))
         if (merged != jar) secrets.put(Secret.GEMINI_COOKIES, merged)

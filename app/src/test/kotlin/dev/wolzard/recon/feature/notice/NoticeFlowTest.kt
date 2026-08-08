@@ -82,6 +82,9 @@ class NoticeFlowTest {
         compose.setContent { NoticeScreen { accepted = true } }
         compose.onNodeWithText("Recon is a personal tool", substring = true).assertExists()
         compose.onNodeWithText("Google's terms apply", substring = true).assertExists()
+        compose.onNodeWithText("your own Google account through Gemini web", substring = true).assertExists()
+        compose.onNodeWithText("The account-ban risk is yours", substring = true).assertExists()
+        compose.onNodeWithText("secondary Google account", substring = true).assertExists()
         compose.onAllNodes(hasClickAction()).assertCountEquals(1)
         compose.onNodeWithText("I understand").performClick()
         assertTrue(accepted)

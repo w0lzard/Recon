@@ -8,10 +8,10 @@ object SetupCopy {
 
     // --- Gemini web sign-in (D22)
     const val SIGN_IN_URL = "https://accounts.google.com/ServiceLogin?continue=https%3A%2F%2Fgemini.google.com%2Fapp"
-    const val SIGN_IN_EXPLAINER = "Recon uses Gemini with your Google account, the same way gemini.google.com does. " +
-        "Your sign-in is stored encrypted on this phone and only sent to Google."
-    const val ACCOUNT_RISK = "Recon talks to Gemini through its website, not an official API. Google doesn't support this " +
-        "and may limit or suspend accounts that use it. Use an account you can afford to lose access to."
+    const val SIGN_IN_EXPLAINER = "Recon uses your own Google account through Gemini web (gemini.google.com), the way your " +
+        "browser does. Your sign-in is stored encrypted on this phone and only sent to Google."
+    const val ACCOUNT_RISK = "Gemini web is not an official API. Google doesn't support apps using it and may limit, " +
+        "suspend or ban the account. That risk is yours, not Recon's. Use a secondary Google account, not your main one."
     const val PASTE_HELP = "If Google won't sign you in here, open gemini.google.com in a desktop browser, copy the Cookie " +
         "header of any request to gemini.google.com from the developer tools, and paste it below."
     const val NO_SESSION_COOKIE = "That doesn't contain the __Secure-1PSID cookie. Copy the whole Cookie header."

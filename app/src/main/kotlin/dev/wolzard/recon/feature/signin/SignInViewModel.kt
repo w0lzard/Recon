@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dev.wolzard.recon.core.model.AnalyzerException
 import dev.wolzard.recon.core.port.Secret
 import dev.wolzard.recon.core.port.SecretStore
+import dev.wolzard.recon.data.gemini.CookieHeader
 import dev.wolzard.recon.data.gemini.GeminiWebClient
 import dev.wolzard.recon.mvi.MviViewModel
 import kotlinx.coroutines.launch
@@ -20,10 +21,11 @@ class SignInViewModel(private val secrets: SecretStore, private val verify: susp
 
     private fun onCookies(raw: String) {
         if (state.value.checking || signedIn) return
-        val cookies = raw.trim().removePrefix("Cookie:").trim()
-        if (!cookies.contains("__Secure-1PSID=")) {
-            setState { copy(error = SetupCopy.NO_SESSION_COOKIE) }
-            return
+        val cookies = when (val p = CookieHeader.parse(raw)) {
+            is CookieHeader.Parsed.Ok -> p.header
+            CookieHeader.Parsed.Empty -> return setState { copy(error = SetupCopy.PASTE_EMPTY) }
+            is CookieHeader.Parsed.Malformed -> return setState { copy(error = SetupCopy.pasteMalformed(p.name)) }
+            CookieHeader.Parsed.NoSession -> return setState { copy(error = SetupCopy.NO_SESSION_COOKIE) }
         }
         setState { copy(checking = true, error = null) }
         secrets.put(Secret.GEMINI_COOKIES, cookies)

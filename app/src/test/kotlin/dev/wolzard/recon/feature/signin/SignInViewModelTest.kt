@@ -67,4 +67,16 @@ class SignInViewModelTest {
         assertEquals(SetupCopy.signInFailed(FailureReason.NETWORK), network)
         assertEquals(3, setOf(rejected, network, challenge).size)
     }
+
+    @Test fun malformedPasteIsRefusedBeforeSavingOrChecking() {
+        var checked = false
+        val secrets = FakeSecrets()
+        val vm = SignInViewModel(secrets) { checked = true }
+        vm.onIntent(SignInIntent.CookiesReceived("__Secure-1PSID=two words"))
+        assertEquals(SetupCopy.pasteMalformed("__Secure-1PSID"), vm.state.value.error)
+        vm.onIntent(SignInIntent.CookiesReceived(" "))
+        assertEquals(SetupCopy.PASTE_EMPTY, vm.state.value.error)
+        assertEquals(false, checked)
+        assertNull(secrets.map[Secret.GEMINI_COOKIES])
+    }
 }

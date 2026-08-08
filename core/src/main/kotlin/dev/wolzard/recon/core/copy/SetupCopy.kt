@@ -15,6 +15,9 @@ object SetupCopy {
     const val PASTE_HELP = "If Google won't sign you in here, open gemini.google.com in a desktop browser, copy the Cookie " +
         "header of any request to gemini.google.com from the developer tools, and paste it below."
     const val NO_SESSION_COOKIE = "That doesn't contain the __Secure-1PSID cookie. Copy the whole Cookie header."
+    const val PASTE_EMPTY = "Paste the Cookie header first."
+    fun pasteMalformed(name: String?): String = "That isn't a Cookie header" + (name?.let { " (stopped at \"$it\")" } ?: "") +
+        ". It should look like NAME=value; NAME2=value2, copied as one piece."
 
     const val GOOGLE_CHALLENGE = "Google wants you to confirm something first (a consent or \"verify it's you\" page). " +
         "Sign in here and finish that page, or do it in a browser and paste the new cookies."

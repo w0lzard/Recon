@@ -1,6 +1,10 @@
 package dev.wolzard.recon.feature.signin
 
 import dev.wolzard.recon.core.copy.SetupCopy
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.os.Build
 import android.webkit.CookieManager
 import android.webkit.WebView
 import androidx.compose.foundation.border
@@ -28,9 +32,13 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -39,7 +47,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 @Composable
 fun SignInScreen(state: SignInState, onIntent: (SignInIntent) -> Unit) {
     var paste by rememberSaveable { mutableStateOf(false) }
-    var pasted by rememberSaveable { mutableStateOf("") }
+    var pasted by remember { mutableStateOf("") } // not saveable: the cookie never goes into the saved-state Bundle
+    val ctx = LocalContext.current
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -65,10 +74,15 @@ fun SignInScreen(state: SignInState, onIntent: (SignInIntent) -> Unit) {
         if (paste) {
             Text(SetupCopy.PASTE_HELP, style = MaterialTheme.typography.bodyMedium)
             OutlinedTextField(
-                value = pasted, onValueChange = { pasted = it }, label = { Text("Cookie header") },
+                value = pasted, onValueChange = { pasted = it }, label = { Text("Cookie header") }, isError = state.error != null,
+                placeholder = { Text("__Secure-1PSID=…; __Secure-1PSIDTS=…") },
+                keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Password),
                 visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.small,
             )
-            Button(onClick = { onIntent(SignInIntent.CookiesReceived(pasted)) }, Modifier.fillMaxWidth().height(48.dp), enabled = pasted.isNotBlank() && !state.checking, shape = MaterialTheme.shapes.small) { Text("Use these cookies") }
+            Button(
+                onClick = { onIntent(SignInIntent.CookiesReceived(pasted)); clearPastedClip(ctx, pasted); pasted = "" },
+                Modifier.fillMaxWidth().height(48.dp), enabled = pasted.isNotBlank() && !state.checking, shape = MaterialTheme.shapes.small,
+            ) { Text("Use these cookies") }
             TextButton(onClick = { paste = false }) { Text("Sign in here instead") }
         } else {
             SignInWebView(Modifier.fillMaxWidth().height(560.dp).clip(MaterialTheme.shapes.medium).border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium), { onIntent(SignInIntent.CookiesReceived(it)) })
@@ -92,4 +106,12 @@ private fun SignInWebView(modifier: Modifier, onCookies: (String) -> Unit) {
             loadUrl(SetupCopy.SIGN_IN_URL)
         }
     })
+}
+
+/** D25: once used, the pasted cookies don't stay on the clipboard for other apps (only if the clip is still ours). */
+private fun clearPastedClip(ctx: Context, pasted: String) {
+    val cm = ctx.getSystemService(ClipboardManager::class.java) ?: return
+    val clip = runCatching { cm.primaryClip?.getItemAt(0)?.coerceToText(ctx)?.toString() }.getOrNull() ?: return
+    if (clip.trim() != pasted.trim()) return
+    if (Build.VERSION.SDK_INT >= 28) cm.clearPrimaryClip() else cm.setPrimaryClip(ClipData.newPlainText("", ""))
 }

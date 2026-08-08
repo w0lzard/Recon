@@ -1,5 +1,6 @@
 package dev.wolzard.recon.feature.settings
 
+import dev.wolzard.recon.data.gemini.GeminiSession
 import android.content.Context
 import android.webkit.CookieManager
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -26,7 +27,7 @@ class SignOutClearsTest {
 
     @Test fun signOutClearsSecretStoreAndWebViewCookies() {
         val secrets = KeystoreSecretStore(ctx)
-        secrets.put(Secret.GEMINI_COOKIES, "__Secure-1PSID=test-not-real")
+        GeminiSession.save(secrets, "__Secure-1PSID=test-not-real")
         val cookies = CookieManager.getInstance()
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             cookies.setCookie("https://gemini.google.com", "__Secure-1PSID=test-not-real; Secure")
@@ -40,6 +41,7 @@ class SignOutClearsTest {
 
         compose.waitUntil(5_000) { cookies.getCookie("https://gemini.google.com") == null && cookies.getCookie("https://accounts.google.com") == null }
         assertNull(secrets.get(Secret.GEMINI_COOKIES))
+        assertNull(secrets.get(Secret.GEMINI_VERIFIED))
         assertTrue(compose.onNodeWithText("Not signed in.").fetchSemanticsNode().layoutInfo.isPlaced)
     }
 }

@@ -49,6 +49,8 @@ class GeminiWebClient(
     private val json = Json { isLenient = true }
     private val lock = Mutex()
     private var session: Session? = null
+    // ponytail: one candidate jar for the whole client; a job running during a sign-in check would use it too. Pass the jar down if that matters.
+    @Volatile private var candidate: String? = null
     private var reqId = Random.nextInt(10_000, 100_000)
 
     /** Uploads one file and returns the id that [generate] takes. */
@@ -75,12 +77,22 @@ class GeminiWebClient(
     }
 
     /**
-     * Sign-in check: re-reads the app page with the saved cookies, one cheap GET. @throws AnalyzerException:
+     * Sign-in check for [cookies] that are not saved yet: one cheap GET of the app page with them (D25).
+     * Returns the cookies to save (Google may have rotated some). @throws AnalyzerException:
      * NETWORK, or API_KEY_INVALID (message [GOOGLE_CHALLENGE] when Google answered with a consent or verify page).
      */
-    suspend fun verify() {
-        session = null
-        session()
+    suspend fun verify(cookies: String): String {
+        candidate = cookies
+        try {
+            session = null
+            session()
+            return candidate ?: cookies
+        } catch (e: AnalyzerException) {
+            session = null
+            throw e
+        } finally {
+            candidate = null
+        }
     }
 
     // --- session: GET /app carries the access token (SNlM0e) and request parameters in the page
@@ -192,7 +204,7 @@ class GeminiWebClient(
     // --- HTTP with the cookie jar (one header string; Set-Cookie updates are merged back and saved)
 
     private suspend fun send(request: Request, withCookies: Boolean = true): HttpResult {
-        val jar = secrets.get(Secret.GEMINI_COOKIES) ?: throw AnalyzerException(FailureReason.API_KEY_MISSING)
+        val jar = candidate ?: secrets.get(Secret.GEMINI_COOKIES) ?: throw AnalyzerException(FailureReason.API_KEY_MISSING)
         val r = try {
             http.newCall(if (withCookies) request.newBuilder().header("Cookie", jar).build() else request).await()
         } catch (e: IOException) {
@@ -202,7 +214,7 @@ class GeminiWebClient(
             throw AnalyzerException(FailureReason.API_KEY_INVALID, message = "saved Cookie header is malformed") // OkHttp refused the header
         }
         val merged = mergeCookies(jar, r.headers.values("Set-Cookie"))
-        if (merged != jar) secrets.put(Secret.GEMINI_COOKIES, merged)
+        if (merged != jar) if (candidate != null) candidate = merged else secrets.put(Secret.GEMINI_COOKIES, merged)
         return r
     }
 

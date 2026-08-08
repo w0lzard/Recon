@@ -20,8 +20,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
-import dev.wolzard.recon.core.port.Secret
 import dev.wolzard.recon.core.port.SecretStore
+import dev.wolzard.recon.data.gemini.GeminiSession
 import dev.wolzard.recon.data.update.UpdateChecker
 import dev.wolzard.recon.designsystem.openCustomTab
 import dev.wolzard.recon.designsystem.openInBrowser
@@ -86,8 +86,8 @@ class MainActivity : ComponentActivity() {
         shares.held = savedInstanceState?.let { BundleCompat.getParcelable(it, HELD_SHARE, Intent::class.java) }
         if (savedInstanceState == null) handle(intent)
         lifecycleScope.launch { updates.check() } // throttled to once per 24 h; errors stay silent
-        val signedIn = { secrets.get(Secret.GEMINI_COOKIES) != null }
-        val start = startDestination(notice.needed, signedIn())
+        val signedIn = { GeminiSession.signedIn(secrets) }
+        val start = startDestination(notice.needed, GeminiSession.atLaunch(secrets))
         setContent {
             ReconTheme {
                 LaunchedEffect(Unit) { firstFrameDrawn = true }

@@ -150,4 +150,23 @@ class GeminiWebClientTest {
             "",
         ).forEach { assertTrue(it, !GeminiWebClient.isGoogleChallenge(it)) }
     }
+
+    @Test fun `verify checks the candidate cookies and returns rotated ones without touching the saved jar`() = runTest {
+        secrets.map.clear()
+        server.enqueue(ok("<html>no token</html>"))
+        server.enqueue(MockResponse.Builder().body("").addHeader("Set-Cookie", "__Secure-1PSIDTS=new; Secure").build())
+        server.enqueue(ok(appPage))
+
+        assertEquals("__Secure-1PSID=cand; __Secure-1PSIDTS=new", client().verify("__Secure-1PSID=cand"))
+
+        assertEquals("__Secure-1PSID=cand", server.takeRequest().headers["Cookie"])
+        assertTrue(secrets.map.isEmpty())
+    }
+
+    @Test fun `failed verify saves nothing`() = runTest {
+        secrets.map.clear()
+        repeat(3) { server.enqueue(ok("<html>no token</html>")) }
+        try { client().verify("__Secure-1PSID=bad"); fail() } catch (e: AnalyzerException) { assertEquals(FailureReason.API_KEY_INVALID, e.reason) }
+        assertTrue(secrets.map.isEmpty())
+    }
 }

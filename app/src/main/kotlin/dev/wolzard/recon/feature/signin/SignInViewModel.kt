@@ -3,15 +3,15 @@ package dev.wolzard.recon.feature.signin
 import dev.wolzard.recon.core.copy.SetupCopy
 import androidx.lifecycle.viewModelScope
 import dev.wolzard.recon.core.model.AnalyzerException
-import dev.wolzard.recon.core.port.Secret
 import dev.wolzard.recon.core.port.SecretStore
 import dev.wolzard.recon.data.gemini.CookieHeader
+import dev.wolzard.recon.data.gemini.GeminiSession
 import dev.wolzard.recon.data.gemini.GeminiWebClient
 import dev.wolzard.recon.mvi.MviViewModel
 import kotlinx.coroutines.launch
 
 /** Saves the Google cookies from the sign-in WebView (or pasted) and checks Gemini accepts them before leaving (D22, D25). */
-class SignInViewModel(private val secrets: SecretStore, private val verify: suspend () -> Unit) :
+class SignInViewModel(private val secrets: SecretStore, private val verify: suspend (String) -> String) :
     MviViewModel<SignInState, SignInIntent, SignInEffect>(SignInState()) {
     private var signedIn = false
 
@@ -28,14 +28,13 @@ class SignInViewModel(private val secrets: SecretStore, private val verify: susp
             CookieHeader.Parsed.NoSession -> return setState { copy(error = SetupCopy.NO_SESSION_COOKIE) }
         }
         setState { copy(checking = true, error = null) }
-        secrets.put(Secret.GEMINI_COOKIES, cookies)
         viewModelScope.launch {
+            // D25: nothing is saved until Google accepted the cookies, so a kill during the check leaves the app signed out.
             val error = try {
-                verify(); null
+                GeminiSession.save(secrets, verify(cookies)); null
             } catch (e: AnalyzerException) {
                 if (e.message == GeminiWebClient.GOOGLE_CHALLENGE) SetupCopy.GOOGLE_CHALLENGE else SetupCopy.signInFailed(e.reason)
             }
-            if (error != null) secrets.put(Secret.GEMINI_COOKIES, null)
             signedIn = error == null
             setState { copy(checking = false, error = error) }
             if (signedIn) send(SignInEffect.SignedIn)

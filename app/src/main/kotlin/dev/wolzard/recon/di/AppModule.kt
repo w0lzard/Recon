@@ -83,7 +83,7 @@ val appModule = module {
     }
     single<JobRunner> { val runJob: RunJob = get(); JobRunner { id, action -> runJob(id, action) } }
     single { ShareIntake(androidContext(), get(), get()) }
-    viewModel { SignInViewModel(get()) { get<GeminiWebClient>().verify() } }
+    viewModel { SignInViewModel(get()) { get<GeminiWebClient>().verify(it) } }
     single {
         UpdateChecker(
             get(), androidContext().getSharedPreferences("update", Context.MODE_PRIVATE), BuildConfig.VERSION_NAME,

@@ -1,5 +1,6 @@
 package dev.wolzard.recon.feature.settings
 
+import dev.wolzard.recon.data.gemini.GeminiSession
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -26,7 +27,7 @@ class SettingsScreenTest {
     }
 
     @Test fun signedInOffersSignOut() {
-        show(FakeSecrets().apply { put(Secret.GEMINI_COOKIES, "__Secure-1PSID=x") })
+        show(FakeSecrets().also { GeminiSession.save(it, "__Secure-1PSID=x") })
         compose.onNodeWithText("Signed in", substring = true).assertExists()
         compose.onNodeWithText("Sign out").assertExists()
     }

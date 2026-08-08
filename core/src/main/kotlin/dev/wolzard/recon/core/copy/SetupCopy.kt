@@ -14,6 +14,7 @@ object SetupCopy {
         "suspend or ban the account. That risk is yours, not Recon's. Use a secondary Google account, not your main one."
     const val PASTE_HELP = "If Google won't sign you in here, open gemini.google.com in a desktop browser, copy the Cookie " +
         "header of any request to gemini.google.com from the developer tools, and paste it below."
+    const val WEBVIEW_BLOCKED_HELP = "If Google says this browser isn't secure, or the page won't load, use Paste cookies below."
     const val NO_SESSION_COOKIE = "That doesn't contain the __Secure-1PSID cookie. Copy the whole Cookie header."
     const val PASTE_EMPTY = "Paste the Cookie header first."
     fun pasteMalformed(name: String?): String = "That isn't a Cookie header" + (name?.let { " (stopped at \"$it\")" } ?: "") +

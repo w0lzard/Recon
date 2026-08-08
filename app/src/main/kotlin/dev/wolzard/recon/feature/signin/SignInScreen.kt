@@ -86,7 +86,8 @@ fun SignInScreen(state: SignInState, onIntent: (SignInIntent) -> Unit) {
             TextButton(onClick = { paste = false }) { Text("Sign in here instead") }
         } else {
             SignInWebView(Modifier.fillMaxWidth().height(560.dp).clip(MaterialTheme.shapes.medium).border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium), { onIntent(SignInIntent.CookiesReceived(it)) })
-            TextButton(onClick = { paste = true }) { Text("Can't sign in here? Paste cookies") }
+            Text(SetupCopy.WEBVIEW_BLOCKED_HELP, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            TextButton(onClick = { paste = true }) { Text("Paste cookies") }
         }
     }
 }

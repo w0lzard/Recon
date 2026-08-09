@@ -1,5 +1,13 @@
 package dev.wolzard.recon.feature.job
 
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.material3.CardDefaults
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -105,7 +113,8 @@ fun JobScreen(job: Job, result: JobResult?, now: Long, onIntent: (JobIntent) -> 
         ) {
             val question = job.userContext
             // D23: the question is echoed in every state; once done, the answer card comes before the summary.
-            if (question != null) YourQuestion(question)
+            val done = job.state == JobState.DONE && result != null
+            if (question != null) YourQuestion(question, large = done)
             when {
                 job.state == JobState.FAILED -> Failed(job, now, onIntent)
                 job.state == JobState.DONE && result != null -> Done(result, question != null, onIntent)
@@ -199,35 +208,78 @@ private fun InfoCard(label: String, value: String) {
     }
 }
 
+/** Design 3c: a hairline left rule while the job runs; 3d: a larger quote heading the result. */
 @Composable
-private fun YourQuestion(text: String) {
-    SectionLabel("YOUR QUESTION")
-    Text(text, Modifier.testTag("your_question"), style = MaterialTheme.typography.bodyLarge)
-}
-
-@Composable
-private fun AnswerCard(answer: Answer?) {
-    val kind = when (answer?.status) {
-        AnswerStatus.VERIFIED -> ChipKind.Ok
-        AnswerStatus.UNVERIFIED -> ChipKind.Warn
-        else -> ChipKind.Unclear
-    }
-    OutlinedCard(Modifier.fillMaxWidth().testTag("answer_card"), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                SectionLabel("ANSWER", Modifier.weight(1f))
-                StatusChip(JobCopy.answerStatus(answer?.status ?: AnswerStatus.UNCLEAR), kind)
-                answer?.let { StatusChip("${(it.confidence * 100).roundToInt()}%", ChipKind.Neutral) }
-            }
-            Text(answer?.text ?: JobCopy.NO_ANSWER, style = MaterialTheme.typography.bodyLarge)
-            answer?.sources?.forEach { Text("• $it", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+private fun YourQuestion(text: String, large: Boolean) {
+    val quoted = "“$text”"
+    if (large) Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        SectionLabel("YOUR QUESTION")
+        Text(quoted, Modifier.testTag("your_question"), style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium, fontSize = 18.sp, lineHeight = 26.sp))
+    } else {
+        val rule = MaterialTheme.colorScheme.outlineVariant
+        Column(
+            Modifier.fillMaxWidth().drawBehind { drawLine(rule, Offset(0f, 0f), Offset(0f, size.height), 1.5.dp.toPx()) }.padding(start = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            SectionLabel("YOUR QUESTION")
+            Text(quoted, Modifier.testTag("your_question"), style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
 
+/** Design 3d/3f/3g. Answer sources are plain text (D23), numbered after the job's own sources in one shared list. */
+@Composable
+private fun AnswerCard(answer: Answer?, firstSourceNumber: Int) {
+    val status = answer?.status ?: AnswerStatus.UNCLEAR
+    val kind = when (status) {
+        AnswerStatus.VERIFIED -> ChipKind.Ok
+        AnswerStatus.UNVERIFIED -> ChipKind.Warn
+        AnswerStatus.UNCLEAR -> ChipKind.Unclear
+    }
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val line = MaterialTheme.colorScheme.outlineVariant
+    OutlinedCard(
+        Modifier.fillMaxWidth().testTag("answer_card"), shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer), border = BorderStroke(1.dp, line),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                SectionLabel("ANSWER", Modifier.weight(1f))
+                StatusChip(JobCopy.answerStatus(status), kind)
+                answer?.let { StatusChip("${(it.confidence * 100).roundToInt()}%", ChipKind.Neutral) }
+            }
+            Text(answer?.text ?: JobCopy.NO_ANSWER, style = MaterialTheme.typography.bodyLarge)
+            val sources = answer?.sources.orEmpty()
+            if (sources.isNotEmpty()) Column(Modifier.fillMaxWidth()) {
+                HorizontalDivider(color = line)
+                sources.forEachIndexed { k, src ->
+                    if (k > 0) HorizontalDivider(color = line)
+                    SourceLine(firstSourceNumber + k, src, minHeight = 44.dp)
+                }
+            } else if (status != AnswerStatus.UNCLEAR) Text(JobCopy.NO_SOURCE, color = muted, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+/** One numbered source row; [onOpen] null = plain text, never opened as a link. */
+@Composable
+private fun SourceLine(number: Int, text: String, minHeight: androidx.compose.ui.unit.Dp = 48.dp, onOpen: (() -> Unit)? = null) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = minHeight).then(if (onOpen != null) Modifier.clickable(role = Role.Button, onClick = onOpen) else Modifier),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("$number", Modifier.width(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = SourceText)
+        Text(text, Modifier.weight(1f), style = SourceText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (onOpen != null) Icon(StatusIcons.OpenInNew, contentDescription = "Opens in browser", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+private val SourceText = androidx.compose.ui.text.TextStyle(fontFamily = Mono, fontSize = 13.sp, lineHeight = 18.sp)
+
 @Composable
 private fun Done(result: JobResult, asked: Boolean, onIntent: (JobIntent) -> Unit) {
-    if (asked) AnswerCard(result.analysis.answer)
+    val answerSources = if (asked) result.analysis.answer?.sources.orEmpty() else emptyList()
+    if (asked) AnswerCard(result.analysis.answer, firstSourceNumber = result.sources.size + 1)
     SectionLabel("SUMMARY")
     Text(result.analysis.summary, style = MaterialTheme.typography.bodyLarge)
     result.degraded.forEach { (id, retryAt) ->
@@ -281,18 +333,16 @@ private fun Done(result: JobResult, asked: Boolean, onIntent: (JobIntent) -> Uni
         }
     }
 
-    if (result.sources.isNotEmpty()) {
-        SectionLabel("Sources")
+    val sourceCount = result.sources.size + answerSources.size
+    if (sourceCount > 0) {
+        SectionLabel("SOURCES · $sourceCount")
         Column {
             result.sources.forEachIndexed { i, src ->
-                Row(
-                    Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button) { onIntent(JobIntent.Open(src.uri)) },
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Text("${i + 1}", Modifier.width(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                    Text(src.title, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                    Icon(StatusIcons.OpenInNew, contentDescription = "Opens in browser", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                SourceLine(i + 1, src.title) { onIntent(JobIntent.Open(src.uri)) }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+            answerSources.forEachIndexed { k, src ->
+                SourceLine(result.sources.size + k + 1, src)
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
         }
@@ -321,7 +371,15 @@ private fun FindingCard(index: Int, f: Finding, onIntent: (JobIntent) -> Unit) {
                 Text(f.entity.type.wire.uppercase(), Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
                 StatusChip(JobCopy.verdict(f.verdict), verdictKind)
             }
-            Text(f.title, style = MaterialTheme.typography.titleMedium)
+            // Design 3e: a media title carries its year (and maker) beside it, in the muted ink.
+            val qualifier = f.entity.qualifier?.takeIf { f.entity.type == EntityType.MEDIA && it.isNotBlank() }
+            Text(
+                if (qualifier == null) AnnotatedString(f.title) else buildAnnotatedString {
+                    append(f.title); append(" ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)) { append(qualifier) }
+                },
+                style = MaterialTheme.typography.titleMedium,
+            )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 StatusChip(f.entity.evidence.wire.replaceFirstChar(Char::uppercase), ChipKind.Neutral)
                 if (f.entity.evidence == Evidence.INFERRED) StatusChip("Guess", ChipKind.Warn)

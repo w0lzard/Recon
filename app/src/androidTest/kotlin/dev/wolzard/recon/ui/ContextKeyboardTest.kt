@@ -45,7 +45,7 @@ class ContextKeyboardTest {
             var bottom = Float.MAX_VALUE
             runCatching {
                 compose.waitUntil(3_000) {
-                    target.performScrollTo()
+                    runCatching { target.performScrollTo() } // Start and Skip sit in the pinned bar, outside the scroll area
                     bottom = target.fetchSemanticsNode().boundsInWindow.bottom
                     bottom <= imeTop
                 }

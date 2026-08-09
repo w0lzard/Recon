@@ -61,6 +61,7 @@ object JobCopy {
     }
 
     const val NO_ANSWER = "Recon couldn't answer this from the video."
+    const val NO_SOURCE = "No source"
 
     fun basis(b: Basis) = when (b) {
         Basis.GITHUB_API -> "From GitHub"

@@ -1,79 +1,142 @@
 package dev.wolzard.recon.feature.context
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SuggestionChip
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import dev.wolzard.recon.designsystem.ChipKind
-import dev.wolzard.recon.designsystem.StatusChip
+import dev.wolzard.recon.designsystem.Mono
+import dev.wolzard.recon.designsystem.StatusIcons
+import java.net.URI
 
-/** Shown after a valid link is shared or pasted (D23). Skip starts with no context; Start sends the trimmed text. */
+/**
+ * Shown after a valid link is shared or pasted (D23). Skip starts with no context; Start sends the trimmed text.
+ * Layout from the design's 3a/3b: the Skip/Start bar is pinned under the scroll area, and imePadding() keeps it above the keyboard.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContextScreen(state: ContextState, onIntent: (ContextIntent) -> Unit) {
-    Column(Modifier.fillMaxSize().imePadding()) { // the keyboard shrinks the scroll area; nothing sits under it
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val line = MaterialTheme.colorScheme.outlineVariant
+    Column(Modifier.fillMaxSize().imePadding()) {
         TopAppBar(
-            title = {},
+            title = { Text(ContextCopy.TITLE, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)) },
             navigationIcon = { IconButton(onClick = { onIntent(ContextIntent.Back) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+            actions = { Text("OPTIONAL", Modifier.padding(end = 12.dp), color = muted, style = MaterialTheme.typography.labelSmall) },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             windowInsets = WindowInsets(0), // MainActivity's Scaffold already pads for the status bar
         )
         Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("LINK", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
-            StatusChip(state.host, ChipKind.Neutral, Modifier.testTag("context_host"))
-            Text(ContextCopy.TITLE, style = MaterialTheme.typography.titleLarge)
-            Text(ContextCopy.HINT, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            LinkCard(state.link, state.host)
             OutlinedTextField(
                 value = state.text, onValueChange = { onIntent(ContextIntent.TextChanged(it)) },
-                modifier = Modifier.fillMaxWidth().testTag("context_field"), shape = MaterialTheme.shapes.small,
-                minLines = 3, maxLines = 6, label = { Text("Your question or note") },
-                supportingText = { Text("${state.text.length}/300") },
+                modifier = Modifier.fillMaxWidth().testTag("context_field"), shape = RoundedField,
+                minLines = 3, maxLines = 6, textStyle = MaterialTheme.typography.bodyLarge,
+                placeholder = { Text(ContextCopy.PLACEHOLDER, style = MaterialTheme.typography.bodyLarge) },
+                colors = OutlinedTextFieldDefaults.colors(
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer, focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    unfocusedBorderColor = line, focusedBorderColor = MaterialTheme.colorScheme.onSurface,
+                ),
                 isError = state.error != null,
             )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth().padding(top = 0.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(ContextCopy.SENT_WITH_VIDEO, color = muted, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Normal, letterSpacing = MaterialTheme.typography.bodySmall.letterSpacing))
+                Text("${state.text.length}/300", color = muted, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Normal, letterSpacing = MaterialTheme.typography.bodySmall.letterSpacing))
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 0.dp).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 ContextCopy.SUGGESTIONS.forEach { s ->
-                    SuggestionChip(
-                        onClick = { onIntent(ContextIntent.Suggest(s)) }, label = { Text(s, style = MaterialTheme.typography.bodyMedium) },
-                        shape = MaterialTheme.shapes.small,
-                    )
+                    OutlinedButton(
+                        onClick = { onIntent(ContextIntent.Suggest(s)) }, Modifier.height(36.dp), shape = MaterialTheme.shapes.small,
+                        contentPadding = PaddingValues(horizontal = 12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, line),
+                    ) { Text(s, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = MaterialTheme.colorScheme.onSurface) }
                 }
             }
             state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            Button(
-                onClick = { onIntent(ContextIntent.Start) }, Modifier.fillMaxWidth().height(48.dp),
-                enabled = !state.starting, shape = MaterialTheme.shapes.small,
-            ) { Text("Start") }
+        }
+        HorizontalDivider(color = line)
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
-                onClick = { onIntent(ContextIntent.Skip) }, Modifier.fillMaxWidth().height(48.dp),
+                onClick = { onIntent(ContextIntent.Skip) }, Modifier.weight(1f).height(48.dp),
                 enabled = !state.starting, shape = MaterialTheme.shapes.small,
             ) { Text("Skip") }
+            Button(
+                onClick = { onIntent(ContextIntent.Start) }, Modifier.weight(1f).height(48.dp),
+                enabled = !state.starting, shape = MaterialTheme.shapes.small,
+            ) { Text("Start") }
         }
     }
+}
+
+private val RoundedField = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+
+/** Host and path inside the Recon corner ticks; a link glyph stands in for the thumbnail (Recon has none before the job runs). */
+@Composable
+private fun LinkCard(link: String, host: String) {
+    val tick = MaterialTheme.colorScheme.onSurface
+    val path = runCatching { URI(link).rawPath }.getOrNull()?.takeIf { it.isNotEmpty() && it != "/" }
+    Row(
+        Modifier.fillMaxWidth().cornerTicks(tick).padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(Modifier.size(40.dp).background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.extraSmall), contentAlignment = Alignment.Center) {
+            Icon(StatusIcons.Link, contentDescription = null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Column(Modifier.weight(1f)) {
+            Text(host, Modifier.testTag("context_host"), style = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono, fontWeight = FontWeight.Medium))
+            path?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        }
+    }
+}
+
+/** Four 10 dp corner ticks, 1.5 dp stroke, as on the design's link card. */
+private fun Modifier.cornerTicks(c: Color) = drawBehind {
+    val t = 10.dp.toPx(); val s = 1.5.dp.toPx(); val h = s / 2
+    val (w, ht) = size.width to size.height
+    fun corner(x: Float, y: Float, dx: Float, dy: Float) {
+        drawLine(c, Offset(x, y), Offset(x + dx * t, y), s)
+        drawLine(c, Offset(x, y), Offset(x, y + dy * t), s)
+    }
+    corner(h, h, 1f, 1f); corner(w - h, h, -1f, 1f); corner(h, ht - h, 1f, -1f); corner(w - h, ht - h, -1f, -1f)
 }

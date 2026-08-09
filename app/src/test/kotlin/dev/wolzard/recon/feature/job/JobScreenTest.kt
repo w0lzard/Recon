@@ -1,5 +1,6 @@
 package dev.wolzard.recon.feature.job
 
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -175,7 +176,7 @@ class JobScreenTest {
     @Test fun noSuggestionsViewWithoutHtml() {
         show(job(JobState.DONE), result(listOf(finding(entity(EntityType.APP, "X"), Verdict.BEST_MATCH, Basis.AI_KNOWLEDGE))))
         compose.onNodeWithTag("search-suggestions").assertDoesNotExist()
-        compose.onNodeWithText("Sources").assertDoesNotExist()
+        compose.onNodeWithText("SOURCES", substring = true).assertDoesNotExist()
     }
 
     @Test fun answeringModelsAreShown() {
@@ -218,12 +219,12 @@ class JobScreenTest {
         show(asked(JobState.ANALYSING))
         compose.onNodeWithText("YOUR QUESTION").assertExists()
         compose.onNodeWithTag("your_question").assertExists()
-        compose.onNodeWithText("What app is this?").assertExists()
+        compose.onNodeWithText("“What app is this?”").assertExists()
     }
 
     @Test fun questionIsEchoedWhenFailed() {
         show(asked(JobState.FAILED).copy(failure = FailureReason.NETWORK))
-        compose.onNodeWithText("What app is this?").assertExists()
+        compose.onNodeWithText("“What app is this?”").assertExists()
     }
 
     @Test fun noQuestionMeansNoQuestionBlockOrAnswerCard() {
@@ -238,7 +239,7 @@ class JobScreenTest {
         compose.onNodeWithText("It is Codeium.").assertExists()
         compose.onNodeWithText("Verified").assertExists()
         compose.onNodeWithText("90%").assertExists()
-        compose.onNodeWithText("• caption at the start").assertExists()
+        compose.onAllNodesWithText("caption at the start").assertCountEquals(2) // in the card and in the shared source list
         val y = { tag: String -> compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.top }
         val summaryTop = compose.onNodeWithText("SUMMARY").fetchSemanticsNode().boundsInRoot.top
         val entitiesTop = compose.onNodeWithText("ENTITIES FOUND · 1", substring = true).fetchSemanticsNode().boundsInRoot.top
@@ -265,6 +266,31 @@ class JobScreenTest {
         show(job(JobState.DONE), result(listOf(f)))
         compose.onNodeWithText("MEDIA").assertExists()
         compose.onNodeWithText("Watch or listen: how").assertExists()
+    }
+
+    // --- Design turn 3 (2026-10-14): shared source numbering, no-source line, media qualifier
+
+    @Test fun answerSourcesAreNumberedAfterTheJobSources() {
+        val a = dev.wolzard.recon.core.model.Answer("It is Codeium.", dev.wolzard.recon.core.model.AnswerStatus.VERIFIED, 0.9, listOf("caption at 0:04", "codeium.com pricing page"))
+        val r = answered(a).copy(sources = listOf(Source("Codeium docs", "https://codeium.com/docs")))
+        show(asked(), r)
+        compose.onNodeWithText("SOURCES · 3").performScrollTo().assertExists()
+        compose.onAllNodesWithText("2").assertCountEquals(2) // "caption at 0:04" in the card and in the list
+        compose.onAllNodesWithText("3").assertCountEquals(2)
+        compose.onAllNodesWithContentDescription("Opens in browser").assertCountEquals(1) // answer sources are plain text, never links
+    }
+
+    @Test fun unverifiedAnswerWithoutSourcesSaysSo() {
+        val a = dev.wolzard.recon.core.model.Answer("Probably Codeium.", dev.wolzard.recon.core.model.AnswerStatus.UNVERIFIED, 0.5)
+        show(asked(), answered(a))
+        compose.onNodeWithText("Unverified").assertExists()
+        compose.onNodeWithText(JobCopy.NO_SOURCE).assertExists()
+    }
+
+    @Test fun mediaTitleCarriesItsQualifier() {
+        val f = finding(entity(EntityType.MEDIA, "Paper Satellites").copy(qualifier = "film, 2019"), Verdict.CONFIRMED, Basis.WIKIPEDIA)
+        show(job(JobState.DONE), result(listOf(f)))
+        compose.onNodeWithText("Paper Satellites film, 2019").assertExists()
     }
 
     // --- D24: advice line and waiting without a time

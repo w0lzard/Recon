@@ -50,7 +50,7 @@ class ContextFlowTest {
     @Test fun skipStartsTheJobAtOnceWithNoContext() {
         show()
         compose.onNodeWithText("instagram.com").assertExists()
-        compose.onNodeWithText("Skip").performScrollTo().performClick()
+        compose.onNodeWithText("Skip").performClick()
         compose.waitUntil(5_000) { opened != null }
         val job = jobs().single()
         assertEquals(job.id, opened)
@@ -61,7 +61,7 @@ class ContextFlowTest {
     @Test fun startStoresTheTrimmedContextAndQueuesTheJob() {
         show()
         compose.onNodeWithTag("context_field").performTextInput("  Who is this?  ")
-        compose.onNodeWithText("Start").performScrollTo().performClick()
+        compose.onNodeWithText("Start").performClick()
         compose.waitUntil(5_000) { opened != null }
         val job = jobs().single()
         assertEquals("Who is this?", job.userContext)
@@ -72,14 +72,14 @@ class ContextFlowTest {
         show()
         compose.onNodeWithText("What song is this?").performScrollTo().performClick()
         compose.onNodeWithText("What song is this?".length.toString() + "/300").assertExists()
-        compose.onNodeWithText("Start").performScrollTo().performClick()
+        compose.onNodeWithText("Start").performClick()
         compose.waitUntil(5_000) { opened != null }
         assertEquals("What song is this?", jobs().single().userContext)
     }
 
     @Test fun invalidLinkAtStartShowsAnErrorAndCreatesNoJob() {
         show(link = "javascript:alert(1)")
-        compose.onNodeWithText("Start").performScrollTo().performClick()
+        compose.onNodeWithText("Start").performClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithTextCount(ContextCopy.INVALID_LINK) > 0 }
         assertTrue(jobs().isEmpty())
         assertTrue(queued.isEmpty())

@@ -38,10 +38,18 @@ class ContextKeyboardTest {
             }
             imeTop != Int.MAX_VALUE
         }
-        compose.waitForIdle()
+        // The root insets already hold the keyboard's final height, but imePadding() follows the show animation, and
+        // waitForIdle() can return before it ends (always on a cold keyboard after a fresh install). So each target gets
+        // up to 3 s to settle above the keyboard; a screen that really clips never does and still fails.
         for (target in listOf(compose.onNodeWithTag("context_field"), compose.onNodeWithText("Start"), compose.onNodeWithText("Skip"))) {
-            target.performScrollTo()
-            val bottom = target.fetchSemanticsNode().boundsInWindow.bottom
+            var bottom = Float.MAX_VALUE
+            runCatching {
+                compose.waitUntil(3_000) {
+                    target.performScrollTo()
+                    bottom = target.fetchSemanticsNode().boundsInWindow.bottom
+                    bottom <= imeTop
+                }
+            }
             assertTrue("bottom $bottom must be above the keyboard top $imeTop", bottom <= imeTop)
         }
     }

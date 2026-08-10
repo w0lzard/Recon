@@ -29,4 +29,8 @@ data class Answer(
     val status: AnswerStatus,
     val confidence: Double,                     // 0.0..1.0
     val sources: List<String> = emptyList(),    // where in the video / which reference; plain text, never opened as links
+    // D26: optional, model-tagged, shown only as a label and a title line; never used to decide the status.
+    val kind: EntityType? = null,               // allow-listed; OTHER and unknown words become null
+    val subtype: MediaType? = null,             // only with kind = MEDIA
+    val title: String? = null,                  // the thing the answer names, capped (ResultParser)
 )

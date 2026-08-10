@@ -47,6 +47,22 @@ enum class ClaimDomain(val wire: String, val sensitive: Boolean) {
     }
 }
 
+/** D26: what kind of media a media entity or answer is. Model-tagged; only these wire words are accepted. */
+@Serializable
+enum class MediaType(val wire: String) {
+    @SerialName("movie") MOVIE("movie"),
+    @SerialName("series") SERIES("series"),
+    @SerialName("song") SONG("song"),
+    @SerialName("game") GAME("game"),
+    @SerialName("anime") ANIME("anime"),
+    @SerialName("other") OTHER("other");
+
+    companion object {
+        /** Strict: anything not on the list is null, never a guess. */
+        fun fromWire(s: String?): MediaType? = s?.trim()?.lowercase()?.let { w -> entries.firstOrNull { it.wire == w } }
+    }
+}
+
 @Serializable
 data class Entity(
     val type: EntityType,

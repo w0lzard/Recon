@@ -3,6 +3,7 @@ package dev.wolzard.recon.core.json
 import dev.wolzard.recon.core.model.AnalysisResult
 import dev.wolzard.recon.core.model.Answer
 import dev.wolzard.recon.core.model.AnswerStatus
+import dev.wolzard.recon.core.model.MediaType
 import dev.wolzard.recon.core.model.AnalyzerException
 import dev.wolzard.recon.core.model.Basis
 import dev.wolzard.recon.core.model.ClaimDomain
@@ -32,6 +33,7 @@ object ResultParser {
     private const val MAX_STRING = 500
     private const val MAX_FACTS = 5
     private const val MAX_ANSWER_SOURCES = 4
+    const val MAX_TITLE = 80
 
     private val json = Json { isLenient = true; ignoreUnknownKeys = true }
     private val ownerRe = Regex("^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$")
@@ -71,7 +73,21 @@ object ResultParser {
             else -> AnswerStatus.UNCLEAR
         }
         val confidence = (o["confidence"] as? JsonPrimitive)?.doubleOrNull ?: 0.0
-        return Answer(text, status, confidence.coerceIn(0.0, 1.0), sources)
+        // D26: label fields are display-only and never touch the status above.
+        val kind = o.str("kind")?.trim()?.lowercase()?.let { w -> EntityType.entries.firstOrNull { it.wire == w } }?.takeIf { it != EntityType.OTHER }
+        val subtype = if (kind == EntityType.MEDIA) MediaType.fromWire(o.str("subtype")) else null
+        return Answer(text, status, confidence.coerceIn(0.0, 1.0), sources, kind, subtype, label(o.str("title")))
+    }
+
+    /**
+     * A short display title (D26): URLs, control characters and the viewer-text delimiters removed, whitespace collapsed,
+     * capped at [MAX_TITLE] with an ellipsis. Blank = null.
+     */
+    internal fun label(s: String?): String? {
+        val t = s.orEmpty().replace(urlRe, "").replace("<<<", "").replace(">>>", "")
+            .replace(Regex("[\\p{Cntrl}]"), " ").replace(Regex("\\s+"), " ").trim()
+        if (t.isEmpty()) return null
+        return if (t.length <= MAX_TITLE) t else t.take(MAX_TITLE - 1).trimEnd() + "…"
     }
 
     private fun entity(o: JsonObject): Entity? {

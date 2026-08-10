@@ -244,11 +244,14 @@ private fun AnswerCard(answer: Answer?, firstSourceNumber: Int) {
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                SectionLabel("ANSWER", Modifier.weight(1f))
+                SectionLabel(JobCopy.answerLabel(answer), Modifier.weight(1f).testTag("answer_label"))
                 StatusChip(JobCopy.answerStatus(status), kind)
                 answer?.let { StatusChip("${(it.confidence * 100).roundToInt()}%", ChipKind.Neutral) }
             }
-            Text(answer?.text ?: JobCopy.NO_ANSWER, style = MaterialTheme.typography.bodyLarge)
+            // Design 3d: with a title, the title line leads and the reply reads as its muted description.
+            val title = answer?.title
+            if (title != null) Text(title, Modifier.testTag("answer_title"), style = MaterialTheme.typography.titleMedium)
+            Text(answer?.text ?: JobCopy.NO_ANSWER, color = if (title != null) muted else Color.Unspecified, style = MaterialTheme.typography.bodyLarge)
             val sources = answer?.sources.orEmpty()
             if (sources.isNotEmpty()) Column(Modifier.fillMaxWidth()) {
                 HorizontalDivider(color = line)

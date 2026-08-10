@@ -63,6 +63,11 @@ object JobCopy {
     const val NO_ANSWER = "Recon couldn't answer this from the video."
     const val NO_SOURCE = "No source"
 
+    /** D26: "ANSWER · MEDIA · SONG". Only allow-listed parts appear (ResultParser); a missing part is left out, never guessed. */
+    fun answerLabel(a: dev.wolzard.recon.core.model.Answer?): String = listOfNotNull(
+        "ANSWER", a?.kind?.wire?.uppercase(), a?.subtype?.takeIf { it != dev.wolzard.recon.core.model.MediaType.OTHER }?.wire?.uppercase(),
+    ).joinToString(" · ")
+
     fun basis(b: Basis) = when (b) {
         Basis.GITHUB_API -> "From GitHub"
         Basis.WIKIPEDIA -> "From Wikipedia"

@@ -83,6 +83,9 @@ Also fill "answer" in the same JSON, as a reply to the viewer's text if it asks 
 - status: "verified" only if the video itself (spoken words, on-screen text, captions) or a reliable reference you can name supports it; "unverified" if it is your best knowledge without such support; "unclear" if you cannot tell. When you cannot tell, return "unclear" and say what is missing. Never guess to fill the gap.
 - confidence: 0.0 to 1.0.
 - sources: up to 4 short plain-text pointers, such as "caption at the start" or "spoken: ...". No URLs.
+- kind: if the reply names one thing, its type, using the same words as entity types (for example "media"); otherwise leave it out.
+- subtype: only when kind is "media": one of movie, series, song, game, anime, other.
+- title: only when the reply names one thing: its name alone, at most 80 characters, no URL. Otherwise leave it out.
 If the viewer's text asks who a real person is, answer ONLY from names in visible text, captions, name tags or speech in the video. Never identify a person from their face, body or voice. If the video does not name them, say that it is not enough to tell and use status "unclear".
 If the viewer's text is not a question, leave out "answer".
 """.trimIndent()
@@ -172,7 +175,10 @@ Respond only with a JSON object exactly in this shape, no other text:
         "text":       { "type": "string" },
         "status":     { "type": "string", "enum": ["verified","unverified","unclear"] },
         "confidence": { "type": "number" },
-        "sources":    { "type": "array", "items": { "type": "string" }, "maxItems": 4 }
+        "sources":    { "type": "array", "items": { "type": "string" }, "maxItems": 4 },
+        "kind":       { "type": "string", "enum": ["repo","app","product","book","person","place","recipe","media","claim","other"], "nullable": true },
+        "subtype":    { "type": "string", "enum": ["movie","series","song","game","anime","other"], "nullable": true },
+        "title":      { "type": "string", "nullable": true }
       },
       "required": ["text","status","confidence","sources"]
     }

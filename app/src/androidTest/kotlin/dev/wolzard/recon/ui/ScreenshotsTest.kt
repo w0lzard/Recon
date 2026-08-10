@@ -131,7 +131,8 @@ class ScreenshotsTest {
     @Test fun jobRunningWithQuestion() = shot("job_running_question") { JobScreen(asked(JobState.ANALYSING), null, now) {} }
 
     @Test fun jobAnswerVerified() = shot("job_answer") {
-        val a = Answer("It is “Blinding Lights” by The Weeknd, shown in the caption.", AnswerStatus.VERIFIED, 0.9, listOf("caption at the start", "spoken: “this is Blinding Lights”"))
+        val a = Answer("By The Weeknd. The caption names it and the chorus matches.", AnswerStatus.VERIFIED, 0.9, listOf("caption at the start", "spoken: “this is Blinding Lights”"),
+            EntityType.MEDIA, dev.wolzard.recon.core.model.MediaType.SONG, "Blinding Lights")
         val song = finding(EntityType.MEDIA, "Blinding Lights", Verdict.CONFIRMED, Basis.WIKIPEDIA, link = "https://en.wikipedia.org/wiki/Blinding_Lights")
         JobScreen(asked(JobState.DONE), answered(a, listOf(song)), now) {}
     }

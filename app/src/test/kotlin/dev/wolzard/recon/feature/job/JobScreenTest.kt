@@ -294,6 +294,26 @@ class JobScreenTest {
         compose.onNodeWithText("Paper Satellites film, 2019").assertExists()
     }
 
+    // --- D26: answer label and title
+
+    @Test fun answerCardShowsKindSubtypeAndTitle() {
+        val a = dev.wolzard.recon.core.model.Answer("Plays under the voiceover.", dev.wolzard.recon.core.model.AnswerStatus.VERIFIED, 0.8, listOf("lyrics at 0:09"),
+            EntityType.MEDIA, dev.wolzard.recon.core.model.MediaType.SONG, "Glass Harbour")
+        show(asked(), answered(a))
+        compose.onNodeWithText("ANSWER · MEDIA · SONG").assertExists()
+        compose.onNodeWithTag("answer_title").assertExists()
+        compose.onNodeWithText("Glass Harbour").assertExists()
+    }
+
+    @Test fun answerLabelLeavesOutMissingParts() {
+        fun label(kind: EntityType?, sub: dev.wolzard.recon.core.model.MediaType?) =
+            JobCopy.answerLabel(dev.wolzard.recon.core.model.Answer("x", dev.wolzard.recon.core.model.AnswerStatus.UNCLEAR, 0.1, emptyList(), kind, sub, null))
+        assertEquals("ANSWER", label(null, null))
+        assertEquals("ANSWER · BOOK", label(EntityType.BOOK, null))
+        assertEquals("ANSWER · MEDIA", label(EntityType.MEDIA, dev.wolzard.recon.core.model.MediaType.OTHER))
+        assertEquals("ANSWER", JobCopy.answerLabel(null))
+    }
+
     // --- D24: advice line and waiting without a time
 
     private fun claim(name: String, domain: dev.wolzard.recon.core.model.ClaimDomain?, verdict: Verdict = Verdict.UNCLEAR) =

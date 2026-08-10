@@ -141,6 +141,11 @@ class ScreenshotsTest {
         JobScreen(asked(JobState.DONE).copy(userContext = "Who is this?"), answered(a, emptyList()), now) {}
     }
 
+    @Test fun jobAnswerNoSource() = shot("job_answer_no_source") {
+        val a = Answer("Probably “Blinding Lights”, from the melody; nothing in the video names it.", AnswerStatus.UNVERIFIED, 0.5)
+        JobScreen(asked(JobState.DONE), answered(a, emptyList()), now) {}
+    }
+
     // --- D24
 
     @Test fun jobFailed() = shot("job_failed") {

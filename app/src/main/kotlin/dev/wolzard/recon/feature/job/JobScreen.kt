@@ -256,7 +256,12 @@ private fun AnswerCard(answer: Answer?, firstSourceNumber: Int) {
                     if (k > 0) HorizontalDivider(color = line)
                     SourceLine(firstSourceNumber + k, src, minHeight = 44.dp)
                 }
-            } else if (status != AnswerStatus.UNCLEAR) Text(JobCopy.NO_SOURCE, color = muted, style = MaterialTheme.typography.bodySmall)
+            } else if (status != AnswerStatus.UNCLEAR) Row(
+                Modifier.heightIn(min = 24.dp).testTag("no_source"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(StatusIcons.LinkOff, contentDescription = null, Modifier.size(16.dp), tint = muted)
+                Text(JobCopy.NO_SOURCE, color = muted, style = MaterialTheme.typography.bodySmall)
+            }
         }
     }
 }

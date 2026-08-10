@@ -285,6 +285,7 @@ class JobScreenTest {
         show(asked(), answered(a))
         compose.onNodeWithText("Unverified").assertExists()
         compose.onNodeWithText(JobCopy.NO_SOURCE).assertExists()
+        compose.onNodeWithTag("no_source").assertExists() // icon and text in one row
     }
 
     @Test fun mediaTitleCarriesItsQualifier() {

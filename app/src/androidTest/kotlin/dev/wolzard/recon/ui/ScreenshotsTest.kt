@@ -134,6 +134,7 @@ class ScreenshotsTest {
         val a = Answer("By The Weeknd. The caption names it and the chorus matches.", AnswerStatus.VERIFIED, 0.9, listOf("caption at the start", "spoken: “this is Blinding Lights”"),
             EntityType.MEDIA, dev.wolzard.recon.core.model.MediaType.SONG, "Blinding Lights")
         val song = finding(EntityType.MEDIA, "Blinding Lights", Verdict.CONFIRMED, Basis.WIKIPEDIA, link = "https://en.wikipedia.org/wiki/Blinding_Lights")
+            .let { it.copy(entity = it.entity.copy(qualifier = "2019, The Weeknd", subtype = dev.wolzard.recon.core.model.MediaType.SONG)) }
         JobScreen(asked(JobState.DONE), answered(a, listOf(song)), now) {}
     }
 

@@ -55,10 +55,11 @@ Return:
 1. entities — the specific things a viewer might want to look up, most important first, at most 8. Each has:
    - type: one of repo, app, product, book, person, place, recipe, media, claim, other.
      repo = a code repository (GitHub etc.); app = software or website; product = physical or commercial product;
-     media = a movie, TV show or song (name = its title);
+     media = a movie, TV show or song (name = its title); also a video game or anime;
      claim = a factual assertion the video presents as true (health, science, money, history, news) that a viewer could check.
    - name: the exact name. For repo, the repository name only. For claim, the claim restated as one neutral sentence.
    - qualifier: what disambiguates it — repo: owner (as in github.com/<owner>/<name>); book: author; app/product: maker or brand; place: city and country; media: release year, then director or artist if known (for example "2010, Christopher Nolan"). null if unknown. Never invent one.
+   - subtype: for media only, one of movie, series, song, game, anime, other; null for every other type.
    - evidence: "on-screen" if the name is visibly shown, "spoken" if said aloud but not shown, "inferred" if you deduce it from a description, logo or appearance.
    - saidInVideo: one sentence on what the video says about it.
    - domain: for claims only, what the claim is about: "health", "legal", "financial" or "other"; null for every other type. Medical, legal and money claims must be marked as such.
@@ -160,7 +161,8 @@ Respond only with a JSON object exactly in this shape, no other text:
           "qualifier":   { "type": "string", "nullable": true },
           "evidence":    { "type": "string", "enum": ["spoken","on-screen","inferred"] },
           "saidInVideo": { "type": "string" },
-          "domain":      { "type": "string", "enum": ["health","legal","financial","other"], "nullable": true }
+          "domain":      { "type": "string", "enum": ["health","legal","financial","other"], "nullable": true },
+          "subtype":     { "type": "string", "enum": ["movie","series","song","game","anime","other"], "nullable": true }
         },
         "required": ["type","name","qualifier","evidence","saidInVideo"]
       }

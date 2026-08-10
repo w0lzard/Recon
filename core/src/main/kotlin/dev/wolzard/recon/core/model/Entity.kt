@@ -71,4 +71,5 @@ data class Entity(
     val evidence: Evidence,
     val saidInVideo: String,   // one sentence: what the video says about it (device language)
     val domain: ClaimDomain? = null,   // claims only (D24)
+    val subtype: MediaType? = null,    // media only, allow-listed (D26)
 )

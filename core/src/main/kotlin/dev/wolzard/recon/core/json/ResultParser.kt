@@ -110,6 +110,7 @@ object ResultParser {
             evidence = Evidence.fromWire(o.str("evidence")),
             saidInVideo = o.str("saidInVideo")?.trim().orEmpty().take(MAX_STRING),
             domain = if (type == EntityType.CLAIM) ClaimDomain.fromWire(o.str("domain")) else null,
+            subtype = if (type == EntityType.MEDIA) MediaType.fromWire(o.str("subtype")) else null,
         )
     }
 

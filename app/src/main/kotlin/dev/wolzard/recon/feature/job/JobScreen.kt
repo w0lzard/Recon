@@ -1,5 +1,6 @@
 package dev.wolzard.recon.feature.job
 
+import dev.wolzard.recon.core.model.MediaType
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -244,6 +245,7 @@ private fun AnswerCard(answer: Answer?, firstSourceNumber: Int) {
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                answer?.kind?.let { Icon(icon(it, answer.subtype), contentDescription = null, Modifier.size(18.dp), tint = muted) }
                 SectionLabel(JobCopy.answerLabel(answer), Modifier.weight(1f).testTag("answer_label"))
                 StatusChip(JobCopy.answerStatus(status), kind)
                 answer?.let { StatusChip("${(it.confidence * 100).roundToInt()}%", ChipKind.Neutral) }
@@ -375,8 +377,9 @@ private fun FindingCard(index: Int, f: Finding, onIntent: (JobIntent) -> Unit) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             val verdictKind = verdictKind(f)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(icon(f.entity.type), contentDescription = f.entity.type.wire, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(f.entity.type.wire.uppercase(), Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                val typeLabel = JobCopy.typeLabel(f.entity.type, f.entity.subtype)
+                Icon(icon(f.entity.type, f.entity.subtype), contentDescription = typeLabel, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(typeLabel, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
                 StatusChip(JobCopy.verdict(f.verdict), verdictKind)
             }
             // Design 3e: a media title carries its year (and maker) beside it, in the muted ink.
@@ -456,7 +459,7 @@ private fun verdictKind(f: Finding) = when (f.verdict) {
 @Composable
 private fun SectionLabel(text: String, modifier: Modifier = Modifier) = Text(text, modifier, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
 
-private fun icon(t: EntityType): ImageVector = when (t) {
+private fun icon(t: EntityType, subtype: MediaType? = null): ImageVector = when (t) {
     EntityType.REPO -> Icons.Filled.Build
     EntityType.APP -> Icons.Filled.Phone
     EntityType.PRODUCT -> Icons.Filled.ShoppingCart
@@ -464,7 +467,14 @@ private fun icon(t: EntityType): ImageVector = when (t) {
     EntityType.PERSON -> Icons.Filled.Person
     EntityType.PLACE -> Icons.Filled.Place
     EntityType.RECIPE -> Icons.Filled.Favorite
-    EntityType.MEDIA -> Icons.Filled.PlayArrow
+    EntityType.MEDIA -> when (subtype) {
+        MediaType.MOVIE -> StatusIcons.Movie
+        MediaType.SERIES -> StatusIcons.Series
+        MediaType.SONG -> StatusIcons.Song
+        MediaType.GAME -> StatusIcons.Game
+        MediaType.ANIME -> StatusIcons.Anime
+        MediaType.OTHER, null -> Icons.Filled.PlayArrow
+    }
     EntityType.CLAIM -> Icons.Filled.Warning
     EntityType.OTHER -> Icons.Filled.Info
 }

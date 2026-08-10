@@ -63,6 +63,11 @@ object JobCopy {
     const val NO_ANSWER = "Recon couldn't answer this from the video."
     const val NO_SOURCE = "No source"
 
+    /** D26: "MEDIA · MOVIE"; the sub-type only for media, and never "OTHER". */
+    fun typeLabel(type: dev.wolzard.recon.core.model.EntityType, subtype: dev.wolzard.recon.core.model.MediaType?): String =
+        listOfNotNull(type.wire.uppercase(), subtype?.takeIf { type == dev.wolzard.recon.core.model.EntityType.MEDIA && it != dev.wolzard.recon.core.model.MediaType.OTHER }?.wire?.uppercase())
+            .joinToString(" · ")
+
     /** D26: "ANSWER · MEDIA · SONG". Only allow-listed parts appear (ResultParser); a missing part is left out, never guessed. */
     fun answerLabel(a: dev.wolzard.recon.core.model.Answer?): String = listOfNotNull(
         "ANSWER", a?.kind?.wire?.uppercase(), a?.subtype?.takeIf { it != dev.wolzard.recon.core.model.MediaType.OTHER }?.wire?.uppercase(),

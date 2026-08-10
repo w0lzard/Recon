@@ -314,6 +314,20 @@ class JobScreenTest {
         assertEquals("ANSWER", JobCopy.answerLabel(null))
     }
 
+    @Test fun mediaFindingShowsSubtypeLabelAndIcon() {
+        val f = finding(entity(EntityType.MEDIA, "Paper Satellites").copy(subtype = dev.wolzard.recon.core.model.MediaType.MOVIE), Verdict.CONFIRMED, Basis.WIKIPEDIA)
+        show(job(JobState.DONE), result(listOf(f)))
+        compose.onNodeWithText("MEDIA · MOVIE").assertExists()
+        compose.onNodeWithContentDescription("MEDIA · MOVIE").assertExists() // the per-type icon
+    }
+
+    @Test fun typeLabelOnlyAddsKnownMediaSubtypes() {
+        val m = dev.wolzard.recon.core.model.MediaType.entries
+        assertEquals(listOf("MEDIA · MOVIE", "MEDIA · SERIES", "MEDIA · SONG", "MEDIA · GAME", "MEDIA · ANIME", "MEDIA"), m.map { JobCopy.typeLabel(EntityType.MEDIA, it) })
+        assertEquals("MEDIA", JobCopy.typeLabel(EntityType.MEDIA, null))
+        assertEquals("APP", JobCopy.typeLabel(EntityType.APP, dev.wolzard.recon.core.model.MediaType.SONG))
+    }
+
     // --- D24: advice line and waiting without a time
 
     private fun claim(name: String, domain: dev.wolzard.recon.core.model.ClaimDomain?, verdict: Verdict = Verdict.UNCLEAR) =

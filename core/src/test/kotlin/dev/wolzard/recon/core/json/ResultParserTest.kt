@@ -366,4 +366,14 @@ class ResultParserTest {
         assertNull(ResultParser.label("  \n\t "))
         assertNull(ResultParser.label("https://only.a/url"))
     }
+
+    @Test fun mediaEntitySubtypeIsAllowListedAndMediaOnly() {
+        val r = ResultParser.parseAnalysis(analysis(
+            """{"type":"media","name":"Paper Satellites","qualifier":"2019","evidence":"on-screen","saidInVideo":"x","subtype":"Movie"}""",
+            """{"type":"media","name":"Unknown Thing","qualifier":null,"evidence":"spoken","saidInVideo":"x","subtype":"podcast"}""",
+            """{"type":"media","name":"No Subtype","qualifier":null,"evidence":"spoken","saidInVideo":"x"}""",
+            """{"type":"app","name":"Codeium","qualifier":null,"evidence":"spoken","saidInVideo":"x","subtype":"game"}""",
+        ))
+        assertEquals(listOf(dev.wolzard.recon.core.model.MediaType.MOVIE, null, null, null), r.entities.map { it.subtype })
+    }
 }

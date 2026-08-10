@@ -31,6 +31,9 @@ data class JobEntity(
     val createdAt: Long,
     val updatedAt: Long,
     val userContext: String? = null,   // D23
+    val videoTitle: String? = null,     // D26: link preview
+    val videoDurationSec: Long? = null,
+    val thumbnailUrl: String? = null,
 )
 
 @Dao
@@ -44,7 +47,7 @@ interface JobDao {
     @Query("DELETE FROM jobs WHERE id = :id") suspend fun delete(id: String)
 }
 
-@Database(entities = [JobEntity::class], version = 2, exportSchema = true)
+@Database(entities = [JobEntity::class], version = 3, exportSchema = true)
 abstract class ReconDb : RoomDatabase() {
     abstract fun jobs(): JobDao
 }
@@ -54,5 +57,14 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
     override fun migrate(db: SupportSQLiteDatabase) = db.execSQL("ALTER TABLE jobs ADD COLUMN userContext TEXT")
 }
 
-fun JobEntity.toJob() = Job(id, sharedText, url, localUri, state, failure, failureDetail, retryAtEpochMs, progress, analysisJson, resultJson, createdAt, updatedAt, userContext)
-fun Job.toEntity() = JobEntity(id, sharedText, url, localUri, state, failure, failureDetail, retryAtEpochMs, progress, analysisJson, resultJson, createdAt, updatedAt, userContext)
+/** D26: jobs gain the link preview shown on Home and the Job screen. Existing rows keep NULL = no preview. */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE jobs ADD COLUMN videoTitle TEXT")
+        db.execSQL("ALTER TABLE jobs ADD COLUMN videoDurationSec INTEGER")
+        db.execSQL("ALTER TABLE jobs ADD COLUMN thumbnailUrl TEXT")
+    }
+}
+
+fun JobEntity.toJob() = Job(id, sharedText, url, localUri, state, failure, failureDetail, retryAtEpochMs, progress, analysisJson, resultJson, createdAt, updatedAt, userContext, videoTitle, videoDurationSec, thumbnailUrl)
+fun Job.toEntity() = JobEntity(id, sharedText, url, localUri, state, failure, failureDetail, retryAtEpochMs, progress, analysisJson, resultJson, createdAt, updatedAt, userContext, videoTitle, videoDurationSec, thumbnailUrl)

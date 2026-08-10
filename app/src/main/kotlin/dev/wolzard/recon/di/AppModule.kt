@@ -11,6 +11,7 @@ import dev.wolzard.recon.core.port.LinkResolver
 import dev.wolzard.recon.core.port.SecretStore
 import dev.wolzard.recon.core.port.VideoAnalyzer
 import dev.wolzard.recon.data.db.MIGRATION_1_2
+import dev.wolzard.recon.data.db.MIGRATION_2_3
 import dev.wolzard.recon.data.db.ReconDb
 import dev.wolzard.recon.data.db.RoomJobStore
 import dev.wolzard.recon.data.gemini.GeminiWebBackend
@@ -25,7 +26,9 @@ import dev.wolzard.recon.core.research.ResearchChain
 import dev.wolzard.recon.core.research.WikipediaResearcher
 import dev.wolzard.recon.core.port.WikipediaClient
 import dev.wolzard.recon.data.wiki.OkHttpWikipediaClient
+import dev.wolzard.recon.data.link.LinkPreviewFetcher
 import dev.wolzard.recon.data.link.OkHttpLinkResolver
+import dev.wolzard.recon.data.link.ThumbnailLoader
 import dev.wolzard.recon.data.media.AndroidFrameSampler
 import dev.wolzard.recon.data.media.ContentUriFetcher
 import dev.wolzard.recon.core.port.FrameSampler
@@ -54,7 +57,7 @@ import org.koin.dsl.module
 
 val appModule = module {
     single { OkHttpClient() }
-    single { Room.databaseBuilder(androidContext(), ReconDb::class.java, "recon.db").addMigrations(MIGRATION_1_2).build() }
+    single { Room.databaseBuilder(androidContext(), ReconDb::class.java, "recon.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3).build() }
     single<JobStore> { RoomJobStore(get()) }
     single<LinkResolver> { OkHttpLinkResolver(get()) }
     single<SecretStore> { KeystoreSecretStore(androidContext()) }
@@ -93,6 +96,8 @@ val appModule = module {
     viewModel { SettingsViewModel(get(), get()) }
     single { JobActions(get(), { job -> JobQueue.cancel(androidContext(), job) }) { id, action -> JobQueue.enqueue(androidContext(), id, action) } }
     viewModel { params -> JobViewModel(params.get(), get(), get()) }
-    viewModel { params -> ContextViewModel(params.get(), get()) }
+    single { LinkPreviewFetcher({ url -> get<YtDlpRunner>().run(url, listOf("--dump-json", "--skip-download", "--no-playlist"), "preview-${java.util.UUID.randomUUID()}") {} }) }
+    single { ThumbnailLoader(get()) }
+    viewModel { params -> ContextViewModel(params.get(), get(), get<LinkPreviewFetcher>()::fetch) }
     viewModel { HomeViewModel(get(), get()) }
 }

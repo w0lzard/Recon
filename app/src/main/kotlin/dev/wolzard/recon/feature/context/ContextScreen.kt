@@ -1,5 +1,7 @@
 package dev.wolzard.recon.feature.context
 
+import dev.wolzard.recon.core.model.LinkPreview
+import dev.wolzard.recon.designsystem.Thumb
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -65,7 +67,7 @@ fun ContextScreen(state: ContextState, onIntent: (ContextIntent) -> Unit) {
             Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            LinkCard(state.link, state.host)
+            LinkCard(state.link, state.host, state.preview)
             OutlinedTextField(
                 value = state.text, onValueChange = { onIntent(ContextIntent.TextChanged(it)) },
                 modifier = Modifier.fillMaxWidth().testTag("context_field"), shape = RoundedField,
@@ -111,21 +113,21 @@ fun ContextScreen(state: ContextState, onIntent: (ContextIntent) -> Unit) {
 
 private val RoundedField = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
 
-/** Host and path inside the Recon corner ticks; a link glyph stands in for the thumbnail (Recon has none before the job runs). */
+/** Host, path and length inside the Recon corner ticks; the link glyph shows until the thumbnail arrives, and stays if it never does (D26). */
 @Composable
-private fun LinkCard(link: String, host: String) {
+private fun LinkCard(link: String, host: String, preview: LinkPreview?) {
     val tick = MaterialTheme.colorScheme.onSurface
     val path = runCatching { URI(link).rawPath }.getOrNull()?.takeIf { it.isNotEmpty() && it != "/" }
+    val length = LinkPreview.formatDuration(preview?.durationSec)?.let { "$it video" }
+    val detail = listOfNotNull(path, length).joinToString(" · ").ifEmpty { null }
     Row(
         Modifier.fillMaxWidth().cornerTicks(tick).padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Box(Modifier.size(40.dp).background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.extraSmall), contentAlignment = Alignment.Center) {
-            Icon(StatusIcons.Link, contentDescription = null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        Thumb(preview?.thumbnailUrl, 40.dp, 40.dp)
         Column(Modifier.weight(1f)) {
             Text(host, Modifier.testTag("context_host"), style = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono, fontWeight = FontWeight.Medium))
-            path?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            detail?.let { Text(it, Modifier.testTag("context_detail"), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
         }
     }
 }

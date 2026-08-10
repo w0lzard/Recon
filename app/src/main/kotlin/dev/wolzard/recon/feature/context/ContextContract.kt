@@ -1,5 +1,6 @@
 package dev.wolzard.recon.feature.context
 
+import dev.wolzard.recon.core.model.LinkPreview
 import dev.wolzard.recon.core.model.UserContext
 
 /** [link] is already validated (share/paste); Start validates it again. */
@@ -9,6 +10,7 @@ data class ContextState(
     val text: String = "",
     val starting: Boolean = false,
     val error: String? = null,
+    val preview: LinkPreview? = null,   // D26: best effort; null until (and unless) the metadata call returns
 ) {
     val remaining get() = UserContext.MAX_LENGTH - text.length
 }

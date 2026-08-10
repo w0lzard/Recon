@@ -1,5 +1,8 @@
 package dev.wolzard.recon
 
+import androidx.compose.runtime.CompositionLocalProvider
+import dev.wolzard.recon.data.link.ThumbnailLoader
+import dev.wolzard.recon.designsystem.LocalThumbnails
 import dev.wolzard.recon.data.notice.Notice
 import android.Manifest
 import android.content.Intent
@@ -59,6 +62,7 @@ class MainActivity : ComponentActivity() {
     private val intake: ShareIntake by inject()
     private val clock: () -> Long by inject()
     private val updates: UpdateChecker by inject()
+    private val thumbnails: ThumbnailLoader by inject()
     private val notice by lazy { Notice(getSharedPreferences(Notice.PREFS, MODE_PRIVATE)) }
     private val shares by lazy { ShareGate(notice, intake::accept) }
     /** A job to open: from a share or a notification's deep link. */
@@ -91,12 +95,14 @@ class MainActivity : ComponentActivity() {
         setContent {
             ReconTheme {
                 LaunchedEffect(Unit) { firstFrameDrawn = true }
-                ReconNavHost(
-                    start, openJob, openContext, clock,
-                    noticeNeeded = { notice.needed },
-                    signedIn = signedIn,
-                    onNoticeAccepted = { lifecycleScope.launch { show(shares.accepted()) } },
-                )
+                CompositionLocalProvider(LocalThumbnails provides thumbnails::load) {
+                    ReconNavHost(
+                        start, openJob, openContext, clock,
+                        noticeNeeded = { notice.needed },
+                        signedIn = signedIn,
+                        onNoticeAccepted = { lifecycleScope.launch { show(shares.accepted()) } },
+                    )
+                }
             }
         }
     }

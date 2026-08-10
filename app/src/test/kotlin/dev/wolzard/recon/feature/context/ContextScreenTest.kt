@@ -1,5 +1,6 @@
 package dev.wolzard.recon.feature.context
 
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -50,5 +51,12 @@ class ContextScreenTest {
         compose.onNodeWithText("3/300").assertExists()
         compose.onNodeWithText("Start").performClick()
         assertEquals(emptyList<ContextIntent>(), intents)
+    }
+
+    @Test fun linkIconUntilAThumbnailAndLengthInTheDetailLine() { // D26
+        val p = dev.wolzard.recon.core.model.LinkPreview("Glass Harbour", 38, "https://i.ytimg.com/vi/x/hq.jpg")
+        compose.setContent { ContextScreen(base.copy(preview = p)) { intents += it } } // no loader provided: the fallback stays
+        compose.onNodeWithTag("thumb_fallback").assertExists()
+        compose.onNodeWithTag("context_detail").assertTextEquals("/reel/abc/ · 0:38 video")
     }
 }

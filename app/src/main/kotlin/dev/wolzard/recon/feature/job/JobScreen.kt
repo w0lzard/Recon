@@ -1,5 +1,7 @@
 package dev.wolzard.recon.feature.job
 
+import dev.wolzard.recon.core.model.LinkPreview
+import dev.wolzard.recon.designsystem.Thumb
 import dev.wolzard.recon.core.model.MediaType
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -115,6 +117,7 @@ fun JobScreen(job: Job, result: JobResult?, now: Long, onIntent: (JobIntent) -> 
             val question = job.userContext
             // D23: the question is echoed in every state; once done, the answer card comes before the summary.
             val done = job.state == JobState.DONE && result != null
+            if (done) VideoHeader(job)
             if (question != null) YourQuestion(question, large = done)
             when {
                 job.state == JobState.FAILED -> Failed(job, now, onIntent)
@@ -174,7 +177,7 @@ private fun Failed(job: Job, now: Long, onIntent: (JobIntent) -> Unit) {
     var help by rememberSaveable { mutableStateOf(false) }
     StatusChip("Failed", ChipKind.Bad, icon = StatusIcons.Error)
     Text(JobCopy.failureMessage(reason, job.retryAtEpochMs, job.failureDetail), style = MaterialTheme.typography.titleLarge)
-    InfoCard("TARGET", job.displayHost())
+    InfoCard("TARGET", job.displayHost(), job.thumbnailUrl)
     val retryEnabled = job.retryAtEpochMs?.let { now >= it } ?: true
     val sharedFile = job.localUri != null
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -202,10 +205,29 @@ private fun Failed(job: Job, now: Long, onIntent: (JobIntent) -> Unit) {
 
 /** Mono label over a mono value on a hairline card (design: TARGET, EXPECTED RESET). */
 @Composable
-private fun InfoCard(label: String, value: String) {
-    Column(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        SectionLabel(label)
-        Text(value, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono, fontWeight = FontWeight.Medium))
+private fun InfoCard(label: String, value: String, thumbnailUrl: String? = null) {
+    Row(
+        Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium).padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (thumbnailUrl != null) Thumb(thumbnailUrl, 48.dp, 64.dp) // D26, design 1f
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            SectionLabel(label)
+            Text(value, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono, fontWeight = FontWeight.Medium))
+        }
+    }
+}
+
+/** D26, design 1g: the video's thumbnail, title and length head the result when Add context fetched them. */
+@Composable
+private fun VideoHeader(job: Job) {
+    if (job.videoTitle == null && job.thumbnailUrl == null) return
+    Row(Modifier.fillMaxWidth().testTag("video_header"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Thumb(job.thumbnailUrl, 40.dp, 54.dp)
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            job.videoTitle?.let { Text(it, style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp, lineHeight = 22.sp), maxLines = 2, overflow = TextOverflow.Ellipsis) }
+            Text(listOfNotNull(LinkPreview.formatDuration(job.videoDurationSec), job.displayHost()).joinToString(" · "), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        }
     }
 }
 

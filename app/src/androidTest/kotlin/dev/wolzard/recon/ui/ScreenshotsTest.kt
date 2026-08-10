@@ -1,5 +1,6 @@
 package dev.wolzard.recon.ui
 
+import androidx.compose.ui.graphics.asImageBitmap
 import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -126,6 +127,32 @@ class ScreenshotsTest {
 
     @Test fun contextFilled() = shot("context_filled") {
         ContextScreen(ContextState("https://www.instagram.com/reel/abc/", "instagram.com", text = "What song is this, and who sings it?")) {}
+    }
+
+    // --- D26: link preview on Add context (loaded, and the fallback when the image never arrives)
+
+    private val preview = dev.wolzard.recon.core.model.LinkPreview("Glass Harbour (live session)", 38, "https://i.ytimg.com/vi/x/hq.jpg")
+
+    /** A stand-in thumbnail: a two-tone diagonal, so the shot shows a real image in the slot without any network. */
+    private fun fakeThumb(): androidx.compose.ui.graphics.ImageBitmap {
+        val b = Bitmap.createBitmap(160, 160, Bitmap.Config.ARGB_8888)
+        val c = android.graphics.Canvas(b)
+        c.drawColor(0xFF2E4A3A.toInt())
+        c.drawPath(android.graphics.Path().apply { moveTo(0f, 160f); lineTo(160f, 0f); lineTo(160f, 160f); close() }, android.graphics.Paint().apply { color = 0xFFA8E06C.toInt() })
+        return b.asImageBitmap()
+    }
+
+    @Test fun contextThumbnail() = shot("context_thumbnail") {
+        val img = fakeThumb()
+        androidx.compose.runtime.CompositionLocalProvider(dev.wolzard.recon.designsystem.LocalThumbnails provides { _ -> img }) {
+            ContextScreen(ContextState("https://www.instagram.com/reel/abc/", "instagram.com", text = "What song is this?", preview = preview)) {}
+        }
+    }
+
+    @Test fun contextFallback() = shot("context_fallback") {
+        androidx.compose.runtime.CompositionLocalProvider(dev.wolzard.recon.designsystem.LocalThumbnails provides { _ -> null }) {
+            ContextScreen(ContextState("https://www.instagram.com/reel/abc/", "instagram.com", text = "What song is this?", preview = preview)) {}
+        }
     }
 
     @Test fun jobRunningWithQuestion() = shot("job_running_question") { JobScreen(asked(JobState.ANALYSING), null, now) {} }

@@ -114,4 +114,32 @@ class ContextViewModelTest {
         v.onIntent(ContextIntent.Skip)
         assertEquals(ContextEffect.OpenJob(jobs().single().id), v.effects.first())
     }
+
+    // --- D26: link preview
+
+    @Test fun previewFillsTheStateWhenItArrives() {
+        val p = dev.wolzard.recon.core.model.LinkPreview("Glass Harbour", 38, "https://i.ytimg.com/vi/x/hq.jpg")
+        val v = ContextViewModel("https://www.instagram.com/reel/abc/", actions) { p }
+        assertEquals(p, v.state.value.preview)
+    }
+
+    @Test fun startDoesNotWaitForASlowPreview() {
+        val never = kotlinx.coroutines.CompletableDeferred<dev.wolzard.recon.core.model.LinkPreview?>()
+        val v = ContextViewModel("https://www.instagram.com/reel/abc/", actions) { never.await() }
+        v.onIntent(ContextIntent.Start)
+        val job = runBlocking { kotlinx.coroutines.withTimeout(5_000) { while (jobs().isEmpty()) kotlinx.coroutines.delay(10); jobs().single() } }
+        assertNull(job.videoTitle); assertNull(job.thumbnailUrl)
+        assertEquals(1, queued.size)
+    }
+
+    @Test fun startKeepsThePreviewOnTheJobButNeverAnHttpThumbnail() {
+        val v = ContextViewModel("https://www.instagram.com/reel/abc/", actions) {
+            dev.wolzard.recon.core.model.LinkPreview("Glass Harbour", 38, "http://cdn.example/x.jpg")
+        }
+        v.onIntent(ContextIntent.Skip)
+        val job = runBlocking { kotlinx.coroutines.withTimeout(5_000) { while (jobs().isEmpty() || jobs().single().videoTitle == null) kotlinx.coroutines.delay(10); jobs().single() } }
+        assertEquals("Glass Harbour", job.videoTitle)
+        assertEquals(38L, job.videoDurationSec)
+        assertNull(job.thumbnailUrl)
+    }
 }

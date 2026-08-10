@@ -1,5 +1,6 @@
 package dev.wolzard.recon.feature.home
 
+import dev.wolzard.recon.designsystem.Thumb
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.material3.OutlinedButton
@@ -55,7 +56,10 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-data class HomeRow(val id: String, val state: String, val host: String, val summary: String?, val time: String, val kind: ChipKind = ChipKind.Neutral, val icon: ImageVector? = null) {
+data class HomeRow(
+    val id: String, val state: String, val host: String, val summary: String?, val time: String, val kind: ChipKind = ChipKind.Neutral, val icon: ImageVector? = null,
+    val thumbnailUrl: String? = null,   // D26
+) {
     companion object {
         private val fmt = DateTimeFormatter.ofPattern("d MMM, HH:mm").withZone(ZoneId.systemDefault())
 
@@ -64,7 +68,8 @@ data class HomeRow(val id: String, val state: String, val host: String, val summ
             val summary = job.resultJson?.let {
                 runCatching { Json.parseToJsonElement(it).jsonObject["analysis"]!!.jsonObject["summary"]!!.jsonPrimitive.content.lineSequence().first() }.getOrNull()
             }
-            return HomeRow(job.id, stateLabel(job.state), host, summary, fmt.format(Instant.ofEpochMilli(job.createdAt)), chipKind(job.state), stateIcon(job.state))
+            // D26: the video's own title, when Add context fetched one, leads the row as in the design.
+            return HomeRow(job.id, stateLabel(job.state), host, job.videoTitle ?: summary, fmt.format(Instant.ofEpochMilli(job.createdAt)), chipKind(job.state), stateIcon(job.state), job.thumbnailUrl)
         }
 
         fun stateIcon(s: JobState) = when (s) {
@@ -146,6 +151,7 @@ fun HomeScreen(state: HomeState, onIntent: (HomeIntent) -> Unit) {
                     Modifier.fillMaxWidth().heightIn(min = 72.dp).clickable { onIntent(HomeIntent.OpenJob(r.id)) }.padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
+                    Thumb(r.thumbnailUrl, 48.dp, 48.dp, shape = MaterialTheme.shapes.small)
                     Column(Modifier.weight(1f)) {
                         if (r.summary != null) Text(r.summary, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium))
                         Text(r.host, maxLines = 1, style = if (r.summary != null) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono, fontWeight = FontWeight.Medium))

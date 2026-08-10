@@ -20,8 +20,8 @@ import org.junit.runner.RunWith
 import java.io.File
 
 /**
- * D23: a real version-1 database (built from the exported schemas/…/1.json, not from today's entity) is opened by
- * Room with MIGRATION_1_2. Room validates the migrated tables against the current entity when it opens, so a column
+ * D23/D26: real version-1 and version-2 databases (built from the exported schemas/…/1.json and 2.json, not from
+ * today's entity) are opened by Room with MIGRATION_1_2 and MIGRATION_2_3. Room validates the migrated tables against the current entity when it opens, so a column
  * that is missing or has the wrong type fails here.
  */
 @RunWith(AndroidJUnit4::class)
@@ -32,19 +32,23 @@ class MigrationTest {
     @Before fun setUp() { ctx.deleteDatabase(name) }
     @After fun tearDown() { ctx.deleteDatabase(name) }
 
-    private fun createV1(insertRow: Boolean) {
-        val schema = Json.parseToJsonElement(File("schemas/dev.wolzard.recon.data.db.ReconDb/1.json").readText()).jsonObject["database"]!!.jsonObject
-        val db = SQLiteDatabase.openOrCreateDatabase(ctx.getDatabasePath(name), null)
-        schema["entities"]!!.jsonArray.forEach { db.execSQL(it.jsonObject["createSql"]!!.jsonPrimitive.content.replace("\${TABLE_NAME}", it.jsonObject["tableName"]!!.jsonPrimitive.content)) }
+    private fun createV1(insertRow: Boolean) = create(1) { db ->
         if (insertRow) db.execSQL(
             "INSERT INTO jobs (id, sharedText, url, localUri, state, failure, failureDetail, retryAtEpochMs, progress, analysisJson, resultJson, createdAt, updatedAt) " +
                 "VALUES ('j1', 'look https://youtu.be/a', 'https://youtu.be/a', NULL, 'DONE', NULL, NULL, NULL, NULL, '{\"a\":1}', '{\"r\":1}', 10, 20)",
         )
-        db.version = 1
+    }
+
+    private fun create(version: Int, fill: (SQLiteDatabase) -> Unit) {
+        val schema = Json.parseToJsonElement(File("schemas/dev.wolzard.recon.data.db.ReconDb/$version.json").readText()).jsonObject["database"]!!.jsonObject
+        val db = SQLiteDatabase.openOrCreateDatabase(ctx.getDatabasePath(name), null)
+        schema["entities"]!!.jsonArray.forEach { db.execSQL(it.jsonObject["createSql"]!!.jsonPrimitive.content.replace("\${TABLE_NAME}", it.jsonObject["tableName"]!!.jsonPrimitive.content)) }
+        fill(db)
+        db.version = version
         db.close()
     }
 
-    private fun open() = Room.databaseBuilder(ctx, ReconDb::class.java, name).addMigrations(MIGRATION_1_2).allowMainThreadQueries().build()
+    private fun open() = Room.databaseBuilder(ctx, ReconDb::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3).allowMainThreadQueries().build()
 
     @Test fun v1RowsKeepTheirDataAndGetNoContext() {
         createV1(insertRow = true)
@@ -81,6 +85,53 @@ class MigrationTest {
         db.rawQuery("PRAGMA table_info(jobs)", null).use { c ->
             val cols = generateSequence { if (c.moveToNext()) c.getString(1) else null }.toList()
             assertEquals(false, "userContext" in cols)
+        }
+        db.close()
+    }
+
+    // --- D26: version 2 to 3 adds the link preview columns
+
+    @Test fun v2RowsKeepTheirContextAndGetNoPreview() {
+        create(2) { db ->
+            db.execSQL(
+                "INSERT INTO jobs (id, sharedText, url, localUri, state, failure, failureDetail, retryAtEpochMs, progress, analysisJson, resultJson, createdAt, updatedAt, userContext) " +
+                    "VALUES ('j2', 'https://youtu.be/b', 'https://youtu.be/b', NULL, 'DONE', NULL, NULL, NULL, NULL, NULL, '{\"r\":2}', 30, 40, 'What song is this?')",
+            )
+        }
+        val room = open()
+        try {
+            val job = runBlocking { RoomJobStore(room).get("j2") }!!
+            assertEquals("What song is this?", job.userContext)
+            assertEquals("{\"r\":2}", job.resultJson)
+            assertNull(job.videoTitle); assertNull(job.videoDurationSec); assertNull(job.thumbnailUrl)
+        } finally {
+            room.close()
+        }
+    }
+
+    @Test fun migratedV2DatabaseStoresAPreview() {
+        create(2) { }
+        val room = open()
+        try {
+            val store = RoomJobStore(room)
+            val id = runBlocking { store.create("https://youtu.be/b", null, null) }
+            runBlocking { store.update(id) { it.copy(videoTitle = "Glass Harbour", videoDurationSec = 38, thumbnailUrl = "https://i.ytimg.com/vi/b/hq.jpg") } }
+            val job = runBlocking { store.get(id) }!!
+            assertEquals("Glass Harbour", job.videoTitle)
+            assertEquals(38L, job.videoDurationSec)
+            assertEquals("https://i.ytimg.com/vi/b/hq.jpg", job.thumbnailUrl)
+        } finally {
+            room.close()
+        }
+    }
+
+    @Test fun v2SchemaHasNoPreviewColumns() { // guards the test itself
+        create(2) { }
+        val db = SQLiteDatabase.openDatabase(ctx.getDatabasePath(name).path, null, SQLiteDatabase.OPEN_READONLY)
+        db.rawQuery("PRAGMA table_info(jobs)", null).use { c ->
+            val cols = generateSequence { if (c.moveToNext()) c.getString(1) else null }.toList()
+            assertEquals(true, "userContext" in cols)
+            assertEquals(false, "videoTitle" in cols || "thumbnailUrl" in cols || "videoDurationSec" in cols)
         }
         db.close()
     }

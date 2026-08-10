@@ -3,6 +3,7 @@ package dev.wolzard.recon.feature.job
 import androidx.lifecycle.viewModelScope
 import dev.wolzard.recon.core.job.UserAction
 import dev.wolzard.recon.core.link.LinkRouter
+import dev.wolzard.recon.core.model.LinkPreview
 import dev.wolzard.recon.core.model.UserContext
 import dev.wolzard.recon.core.model.FailureReason
 import dev.wolzard.recon.core.model.GhRepo
@@ -29,9 +30,13 @@ class JobActions(private val store: JobStore, private val cancelWork: (Job) -> U
      * D23 Start/Skip: validates the link again (it came from a share or paste, possibly long ago), then creates and
      * queues the job with the cleaned context. Null = the link is not usable and nothing was created.
      */
-    suspend fun start(shared: String, context: String?): String? {
+    suspend fun start(shared: String, context: String?, preview: LinkPreview? = null): String? {
         val link = LinkRouter.validLink(shared) ?: return null
         val id = store.create(link, null, UserContext.clean(context))
+        // D26: kept for Home and the Job screen; the thumbnail only if https.
+        if (preview != null) store.update(id) {
+            it.copy(videoTitle = preview.title, videoDurationSec = preview.durationSec, thumbnailUrl = preview.thumbnailUrl?.takeIf { u -> u.startsWith("https://") })
+        }
         enqueue(id, UserAction.RUN)
         return id
     }

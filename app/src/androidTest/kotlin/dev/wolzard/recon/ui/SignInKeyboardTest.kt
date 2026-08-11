@@ -25,8 +25,9 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /**
- * D27: with the keyboard open on the WebView step, a Next button pinned to the bottom of the page (as on Google's
- * mobile sign-in) is still above the keyboard. A local page stands in for Google's, so the test needs no network.
+ * D27: with the keyboard open on the WebView step, the Next button under the field (in the page flow, as on Google's
+ * sign-in page) is visible: inside the WebView and above the keyboard. A local page stands in for Google's, so the test
+ * needs no network.
  */
 @RunWith(AndroidJUnit4::class)
 class SignInKeyboardTest {
@@ -35,9 +36,12 @@ class SignInKeyboardTest {
 
     private val page = "data:text/html," + android.net.Uri.encode(
         """<html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-        <body style="margin:0;height:100vh">
-        <input id="email" style="position:absolute;top:24px;left:16px;width:80%;height:48px;font-size:18px">
-        <button id="next" style="position:fixed;bottom:16px;right:16px;height:40px">Next</button>
+        <body style="margin:0;min-height:100vh;font-size:18px">
+        <div style="height:280px">Sign in</div>
+        <input id="email" style="margin:0 16px;width:80%;height:56px;font-size:18px">
+        <div style="height:220px">Forgot email? Guest mode text.</div>
+        <button id="next" style="margin:0 16px;height:48px">Next</button>
+        <div style="height:120px">Help Privacy Terms</div>
         </body></html>""",
     )
 
@@ -87,7 +91,7 @@ class SignInKeyboardTest {
         val loc = IntArray(2)
         instrumentation.runOnMainSync { web.getLocationOnScreen(loc) }
         val d = web.resources.displayMetrics.density
-        val x = loc[0] + 40 * d; val y = loc[1] + 48 * d
+        val x = loc[0] + 60 * d; val y = loc[1] + 308 * d
         val t = SystemClock.uptimeMillis()
         instrumentation.sendPointerSync(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, x, y, 0))
         instrumentation.sendPointerSync(MotionEvent.obtain(t, t + 50, MotionEvent.ACTION_UP, x, y, 0))
@@ -96,7 +100,9 @@ class SignInKeyboardTest {
         // The WebView shrinks with the keyboard's show animation; give the page up to 3 s to reflow.
         var bottom = Float.MAX_VALUE
         val top = imeTop()
-        runCatching { compose.waitUntil(3_000) { bottom = nextBottom(web) ?: Float.MAX_VALUE; bottom <= top } }
+        fun webBottom(): Int { val l = IntArray(2); var h = 0; instrumentation.runOnMainSync { web.getLocationInWindow(l); h = web.height }; return l[1] + h }
+        runCatching { compose.waitUntil(3_000) { bottom = nextBottom(web) ?: Float.MAX_VALUE; bottom <= minOf(top, webBottom()) } }
         assertTrue("Next bottom $bottom must be above the keyboard top $top", bottom <= top)
+        assertTrue("Next bottom $bottom must be inside the WebView (bottom ${webBottom()})", bottom <= webBottom())
     }
 }

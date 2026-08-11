@@ -16,6 +16,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -38,6 +42,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -138,18 +144,32 @@ private fun SlimBar(title: String, onBack: () -> Unit, action: (@Composable () -
 }
 
 /**
- * Google's page fills everything under the bar. imePadding() shrinks the WebView above the keyboard, so the page
- * reflows and its Next button stays visible (SignInKeyboardTest).
+ * Google's page fills everything under the bar. imePadding() shrinks the WebView to the space above the keyboard
+ * (the Scaffold already padded for the navigation bar, so that inset is consumed first, or it would count twice).
+ * Google's Next button sits in the page flow under the field, not pinned, so when the keyboard opens the focused field
+ * is scrolled to the top of the WebView, which brings Next into view (SignInKeyboardTest, and the live page on recon30).
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun WebStep(state: SignInState, url: String, onIntent: (SignInIntent) -> Unit, onBack: () -> Unit, onPaste: () -> Unit) {
-    Column(Modifier.fillMaxSize().imePadding()) {
+    var web by remember { mutableStateOf<WebView?>(null) }
+    val imeVisible = WindowInsets.isImeVisible
+    LaunchedEffect(imeVisible, web) {
+        if (!imeVisible) return@LaunchedEffect
+        delay(350) // let the WebView finish shrinking with the keyboard animation
+        web?.evaluateJavascript(SCROLL_FOCUSED_TO_TOP, null)
+    }
+    Column(Modifier.fillMaxSize().consumeWindowInsets(WindowInsets.navigationBars).imePadding()) {
         SlimBar("Sign in to Google", onBack) { TextButton(onClick = onPaste) { Text("Paste cookies") } }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         if (state.checking || state.error != null) Status(state, Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-        SignInWebView(Modifier.fillMaxWidth().weight(1f).testTag("sign_in_webview"), url) { onIntent(SignInIntent.CookiesReceived(it)) }
+        SignInWebView(Modifier.fillMaxWidth().weight(1f).testTag("sign_in_webview"), url, onCreated = { web = it }) { onIntent(SignInIntent.CookiesReceived(it)) }
     }
 }
+
+// A fixed scroll, nothing read or written: the focused field moves to the top so what follows it (Next) is visible.
+private const val SCROLL_FOCUSED_TO_TOP =
+    "(function(){var e=document.activeElement;if(e&&e!==document.body){var r=e.getBoundingClientRect();window.scrollBy(0,r.top-16);}})()"
 
 @Composable
 private fun PasteStep(state: SignInState, onIntent: (SignInIntent) -> Unit, onBack: () -> Unit) {
@@ -179,9 +199,10 @@ private fun PasteStep(state: SignInState, onIntent: (SignInIntent) -> Unit, onBa
 }
 
 @Composable
-private fun SignInWebView(modifier: Modifier, url: String, onCookies: (String) -> Unit) {
+private fun SignInWebView(modifier: Modifier, url: String, onCreated: (WebView) -> Unit = {}, onCookies: (String) -> Unit) {
     AndroidView(modifier = modifier, factory = { ctx ->
         WebView(ctx).apply {
+            onCreated(this)
             SignInWeb.lockDown(this)
             webViewClient = object : SignInWeb.Client(ctx) {
                 override fun onPageFinished(view: WebView, url: String) {

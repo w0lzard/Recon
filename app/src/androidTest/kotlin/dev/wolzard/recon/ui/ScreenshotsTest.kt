@@ -1,5 +1,6 @@
 package dev.wolzard.recon.ui
 
+import androidx.compose.ui.test.performClick
 import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -55,10 +56,11 @@ class ScreenshotsTest {
     private val suffix = InstrumentationRegistry.getArguments().getString("suffix", "")
     private val dir = File(InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null), "screenshots").apply { mkdirs() }
 
-    private fun shot(name: String, scrollTo: String? = null, scrollToTag: String? = null, content: @Composable () -> Unit) {
+    private fun shot(name: String, scrollTo: String? = null, scrollToTag: String? = null, clickText: String? = null, content: @Composable () -> Unit) {
         // The real app gets its background from the Scaffold in ReconNavHost; the harness needs its own.
         compose.setContent { ReconTheme { androidx.compose.material3.Surface(color = androidx.compose.material3.MaterialTheme.colorScheme.background) { content() } } }
         compose.waitForIdle()
+        clickText?.let { compose.onNodeWithText(it).performClick(); compose.waitForIdle() }
         scrollTo?.let { compose.onNodeWithText(it).performScrollTo() }
         scrollToTag?.let { compose.onNodeWithTag(it).performScrollTo() }
         val bmp = compose.onRoot().captureToImage().asAndroidBitmap()
@@ -166,6 +168,12 @@ class ScreenshotsTest {
 
     @Test fun signIn() {
         shot("sign_in") { SignInScreen(SignInState()) {} }
+    }
+
+    @Test fun signInPaste() { // D27: the paste step, reached from "Paste cookies instead"
+        shot("sign_in_paste", clickText = "Paste cookies instead") {
+            SignInScreen(SignInState(error = dev.wolzard.recon.core.copy.SetupCopy.NO_SESSION_COOKIE)) {}
+        }
     }
 
     @Test fun settings() {

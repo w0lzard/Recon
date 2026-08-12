@@ -20,9 +20,9 @@ apps, books, places, repos, products, with sources where it can.
 <br>
 
 <img src="docs/screenshots/readme-home.png" alt="Home" width="190">&nbsp;
-<img src="docs/screenshots/readme-job_running.png" alt="Job in progress" width="190">&nbsp;
-<img src="docs/screenshots/readme-job_candidates.png" alt="Result with repo candidates" width="190">&nbsp;
-<img src="docs/screenshots/readme-settings.png" alt="Settings" width="190">
+<img src="docs/screenshots/readme-context.png" alt="Add context, with the video's thumbnail and length" width="190">&nbsp;
+<img src="docs/screenshots/readme-job_answer.png" alt="Result with the answer to your question" width="190">&nbsp;
+<img src="docs/screenshots/readme-sign_in.png" alt="Sign in" width="190">
 
 </div>
 
@@ -41,11 +41,15 @@ See [`docs/plan.md`](docs/plan.md) for the full plan.
 
 > [!WARNING]
 > **Personal use.** Recon is a personal tool. To analyse a video it downloads a temporary copy, then deletes it when
-> the analysis finishes. Instagram, TikTok, X and other platforms may forbid downloading in their terms of service.
-> You are responsible for what you share with Recon. Only share content you're allowed to process.
+> the analysis finishes. When you share a link, it first asks the platform for the video's title, length and thumbnail
+> to show them. Instagram, TikTok, X and other platforms may forbid downloading in their terms of service. You are
+> responsible for what you share with Recon. Only share content you're allowed to process.
 >
-> Videos and screenshots are sent to Gemini with your Google account, through its website rather than an official
-> API. Google's terms apply.
+> Recon uses your own Google account through Gemini web (gemini.google.com), not an official API. Videos and
+> screenshots are sent there with your account. Google's terms apply.
+>
+> Google doesn't support apps using Gemini web and may limit, suspend or ban the account. The account-ban risk is
+> yours. Sign in with a secondary Google account, not the one you rely on.
 
 ## Install
 

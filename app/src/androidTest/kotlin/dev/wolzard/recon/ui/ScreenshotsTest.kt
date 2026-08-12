@@ -1,10 +1,13 @@
 package dev.wolzard.recon.ui
 
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.test.performClick
 import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollTo
@@ -54,10 +57,13 @@ class ScreenshotsTest {
     private val suffix = InstrumentationRegistry.getArguments().getString("suffix", "")
     private val dir = File(InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null), "screenshots").apply { mkdirs() }
 
-    private fun shot(name: String, scrollTo: String? = null, content: @Composable () -> Unit) {
-        compose.setContent { ReconTheme { content() } }
+    private fun shot(name: String, scrollTo: String? = null, scrollToTag: String? = null, clickText: String? = null, content: @Composable () -> Unit) {
+        // The real app gets its background from the Scaffold in ReconNavHost; the harness needs its own.
+        compose.setContent { ReconTheme { androidx.compose.material3.Surface(color = androidx.compose.material3.MaterialTheme.colorScheme.background) { content() } } }
         compose.waitForIdle()
+        clickText?.let { compose.onNodeWithText(it).performClick(); compose.waitForIdle() }
         scrollTo?.let { compose.onNodeWithText(it).performScrollTo() }
+        scrollToTag?.let { compose.onNodeWithTag(it).performScrollTo() }
         val bmp = compose.onRoot().captureToImage().asAndroidBitmap()
         File(dir, "$name$suffix.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
@@ -125,11 +131,39 @@ class ScreenshotsTest {
         ContextScreen(ContextState("https://www.instagram.com/reel/abc/", "instagram.com", text = "What song is this, and who sings it?")) {}
     }
 
+    // --- D26: link preview on Add context (loaded, and the fallback when the image never arrives)
+
+    private val preview = dev.wolzard.recon.core.model.LinkPreview("Glass Harbour (live session)", 38, "https://i.ytimg.com/vi/x/hq.jpg")
+
+    /** A stand-in thumbnail: a two-tone diagonal, so the shot shows a real image in the slot without any network. */
+    private fun fakeThumb(): androidx.compose.ui.graphics.ImageBitmap {
+        val b = Bitmap.createBitmap(160, 160, Bitmap.Config.ARGB_8888)
+        val c = android.graphics.Canvas(b)
+        c.drawColor(0xFF2E4A3A.toInt())
+        c.drawPath(android.graphics.Path().apply { moveTo(0f, 160f); lineTo(160f, 0f); lineTo(160f, 160f); close() }, android.graphics.Paint().apply { color = 0xFFA8E06C.toInt() })
+        return b.asImageBitmap()
+    }
+
+    @Test fun contextThumbnail() = shot("context_thumbnail") {
+        val img = fakeThumb()
+        androidx.compose.runtime.CompositionLocalProvider(dev.wolzard.recon.designsystem.LocalThumbnails provides { _ -> img }) {
+            ContextScreen(ContextState("https://www.instagram.com/reel/abc/", "instagram.com", text = "What song is this?", preview = preview)) {}
+        }
+    }
+
+    @Test fun contextFallback() = shot("context_fallback") {
+        androidx.compose.runtime.CompositionLocalProvider(dev.wolzard.recon.designsystem.LocalThumbnails provides { _ -> null }) {
+            ContextScreen(ContextState("https://www.instagram.com/reel/abc/", "instagram.com", text = "What song is this?", preview = preview)) {}
+        }
+    }
+
     @Test fun jobRunningWithQuestion() = shot("job_running_question") { JobScreen(asked(JobState.ANALYSING), null, now) {} }
 
     @Test fun jobAnswerVerified() = shot("job_answer") {
-        val a = Answer("It is “Blinding Lights” by The Weeknd, shown in the caption.", AnswerStatus.VERIFIED, 0.9, listOf("caption at the start", "spoken: “this is Blinding Lights”"))
+        val a = Answer("By The Weeknd. The caption names it and the chorus matches.", AnswerStatus.VERIFIED, 0.9, listOf("caption at the start", "spoken: “this is Blinding Lights”"),
+            EntityType.MEDIA, dev.wolzard.recon.core.model.MediaType.SONG, "Blinding Lights")
         val song = finding(EntityType.MEDIA, "Blinding Lights", Verdict.CONFIRMED, Basis.WIKIPEDIA, link = "https://en.wikipedia.org/wiki/Blinding_Lights")
+            .let { it.copy(entity = it.entity.copy(qualifier = "2019, The Weeknd", subtype = dev.wolzard.recon.core.model.MediaType.SONG)) }
         JobScreen(asked(JobState.DONE), answered(a, listOf(song)), now) {}
     }
 
@@ -138,8 +172,42 @@ class ScreenshotsTest {
         JobScreen(asked(JobState.DONE).copy(userContext = "Who is this?"), answered(a, emptyList()), now) {}
     }
 
+    @Test fun jobAnswerNoSource() = shot("job_answer_no_source") {
+        val a = Answer("Probably “Blinding Lights”, from the melody; nothing in the video names it.", AnswerStatus.UNVERIFIED, 0.5)
+        JobScreen(asked(JobState.DONE), answered(a, emptyList()), now) {}
+    }
+
+    // --- D24
+
+    @Test fun jobFailed() = shot("job_failed") {
+        JobScreen(job(JobState.FAILED).copy(failure = dev.wolzard.recon.core.model.FailureReason.VIDEO_UNREADABLE), null, now) {}
+    }
+
+    @Test fun jobClaims() = shot("job_claims", scrollToTag = "advice_footer") {
+        fun claim(name: String, v: Verdict, basis: Basis, d: dev.wolzard.recon.core.model.ClaimDomain?) =
+            finding(EntityType.CLAIM, name, v, basis).let { it.copy(entity = it.entity.copy(domain = d), source = if (v == Verdict.DISPUTED) "Project benchmarks" else null) }
+        JobScreen(job(JobState.DONE), result(listOf(
+            claim("It cuts shell startup time in half.", Verdict.DISPUTED, Basis.WEB_SOURCES, dev.wolzard.recon.core.model.ClaimDomain.OTHER),
+            claim("It runs on macOS, Linux and Windows.", Verdict.SUPPORTED, Basis.WEB_SOURCES, dev.wolzard.recon.core.model.ClaimDomain.OTHER),
+            claim("Sitting under six hours a day halves back-pain risk.", Verdict.UNCLEAR, Basis.AI_KNOWLEDGE, dev.wolzard.recon.core.model.ClaimDomain.HEALTH),
+        )), now) {}
+    }
+
+    @Test fun quotaWaitingNoTime() = shot("job_quota_waiting_no_time") { JobScreen(job(JobState.WAITING_QUOTA), null, now) {} }
+
+    @Test fun homeUpdate() = shot("home_update") {
+        val info = dev.wolzard.recon.data.update.UpdateInfo("0.2.0", "https://github.com/w0lzard/recon/releases/download/v0.2.0/a.apk", "https://github.com/w0lzard/recon/releases/tag/v0.2.0")
+        HomeScreen(HomeState(update = info)) {}
+    }
+
     @Test fun signIn() {
         shot("sign_in") { SignInScreen(SignInState()) {} }
+    }
+
+    @Test fun signInPaste() { // D27: the paste step, reached from "Paste cookies instead"
+        shot("sign_in_paste", clickText = "Paste cookies instead") {
+            SignInScreen(SignInState(error = dev.wolzard.recon.core.copy.SetupCopy.NO_SESSION_COOKIE)) {}
+        }
     }
 
     @Test fun settings() {

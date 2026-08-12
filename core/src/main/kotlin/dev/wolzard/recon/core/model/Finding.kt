@@ -30,6 +30,7 @@ data class Finding(
     val stars: Int? = null,        // repos only
     val basis: Basis,
     val candidates: List<GhRepo> = emptyList(),   // repos: 2–3 fuzzy GitHub matches for the user to pick
+    val source: String? = null,    // claims (D24): the one source the verdict rests on, by name; never a link
 )
 
 @Serializable

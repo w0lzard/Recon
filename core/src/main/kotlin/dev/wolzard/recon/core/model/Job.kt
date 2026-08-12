@@ -24,6 +24,10 @@ data class Job(
     val createdAt: Long,
     val updatedAt: Long,
     val userContext: String? = null,    // D23: optional viewer note/question, ≤ 300 chars, kept for Retry and "Try sharper video"
+    // D26: link preview from Add context, for Home, the Job target card and the result header; display-only.
+    val videoTitle: String? = null,
+    val videoDurationSec: Long? = null,
+    val thumbnailUrl: String? = null,       // https only (checked before it is stored and again before it is loaded)
 )
 
 /** Persisted as JSON in JobEntity.resultJson. */

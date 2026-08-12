@@ -1,5 +1,6 @@
 package dev.wolzard.recon.feature.home
 
+import dev.wolzard.recon.designsystem.Thumb
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.material3.OutlinedButton
@@ -18,7 +19,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import dev.wolzard.recon.designsystem.ChipKind
 import dev.wolzard.recon.designsystem.Reticle
+import androidx.compose.ui.graphics.vector.ImageVector
 import dev.wolzard.recon.designsystem.StatusChip
+import dev.wolzard.recon.designsystem.StatusIcons
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import dev.wolzard.recon.designsystem.Wordmark
 import dev.wolzard.recon.designsystem.dotGrid
 import dev.wolzard.recon.designsystem.Mono
@@ -51,7 +56,10 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-data class HomeRow(val id: String, val state: String, val host: String, val summary: String?, val time: String, val kind: ChipKind = ChipKind.Neutral) {
+data class HomeRow(
+    val id: String, val state: String, val host: String, val summary: String?, val time: String, val kind: ChipKind = ChipKind.Neutral, val icon: ImageVector? = null,
+    val thumbnailUrl: String? = null,   // D26
+) {
     companion object {
         private val fmt = DateTimeFormatter.ofPattern("d MMM, HH:mm").withZone(ZoneId.systemDefault())
 
@@ -60,7 +68,15 @@ data class HomeRow(val id: String, val state: String, val host: String, val summ
             val summary = job.resultJson?.let {
                 runCatching { Json.parseToJsonElement(it).jsonObject["analysis"]!!.jsonObject["summary"]!!.jsonPrimitive.content.lineSequence().first() }.getOrNull()
             }
-            return HomeRow(job.id, stateLabel(job.state), host, summary, fmt.format(Instant.ofEpochMilli(job.createdAt)), chipKind(job.state))
+            // D26: the video's own title, when Add context fetched one, leads the row as in the design.
+            return HomeRow(job.id, stateLabel(job.state), host, job.videoTitle ?: summary, fmt.format(Instant.ofEpochMilli(job.createdAt)), chipKind(job.state), stateIcon(job.state), job.thumbnailUrl)
+        }
+
+        fun stateIcon(s: JobState) = when (s) {
+            JobState.DONE -> StatusIcons.Done
+            JobState.FAILED -> StatusIcons.Error
+            JobState.WAITING_QUOTA -> StatusIcons.Waiting
+            else -> StatusIcons.Running
         }
 
         fun chipKind(s: JobState) = when (s) {
@@ -89,7 +105,11 @@ private fun PasteBar(error: String?, onIntent: (HomeIntent) -> Unit) {
         OutlinedButton(
             onClick = { onIntent(HomeIntent.PasteLink(clipboardText(ctx))) },
             Modifier.fillMaxWidth().height(48.dp), shape = MaterialTheme.shapes.small,
-        ) { Text("Paste a video link") }
+        ) {
+            Icon(StatusIcons.Link, contentDescription = null, Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Paste a video link")
+        }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
     }
 }
@@ -118,10 +138,12 @@ fun HomeScreen(state: HomeState, onIntent: (HomeIntent) -> Unit) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Reticle(Modifier.size(48.dp), tick = MaterialTheme.colorScheme.onSurfaceVariant, dot = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Share a video link to Recon from any app", Modifier.background(MaterialTheme.colorScheme.background), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+                    Text("Or paste a link above.", Modifier.background(MaterialTheme.colorScheme.background), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
                 }
             }
             return
         }
+        Text("RECENT · ${rows.size}", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         LazyColumn {
             items(rows, key = { it.id }) { r ->
@@ -129,12 +151,13 @@ fun HomeScreen(state: HomeState, onIntent: (HomeIntent) -> Unit) {
                     Modifier.fillMaxWidth().heightIn(min = 72.dp).clickable { onIntent(HomeIntent.OpenJob(r.id)) }.padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
+                    Thumb(r.thumbnailUrl, 48.dp, 48.dp, shape = MaterialTheme.shapes.small)
                     Column(Modifier.weight(1f)) {
                         if (r.summary != null) Text(r.summary, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium))
                         Text(r.host, maxLines = 1, style = if (r.summary != null) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono, fontWeight = FontWeight.Medium))
                         Text(r.time, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                     }
-                    StatusChip(r.state, r.kind)
+                    StatusChip(r.state, r.kind, icon = r.icon)
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }

@@ -48,7 +48,7 @@
 <div style="height:64px;flex:none;display:flex;align-items:center;padding:0 4px 0 16px;gap:10px"><div style="position:relative;width:18px;height:18px;flex:none"><div style="position:absolute;left:0;top:0;width:6px;height:6px;border-left:1.5px solid var(--tx);border-top:1.5px solid var(--tx)"></div><div style="position:absolute;right:0;top:0;width:6px;height:6px;border-right:1.5px solid var(--tx);border-top:1.5px solid var(--tx)"></div><div style="position:absolute;left:0;bottom:0;width:6px;height:6px;border-left:1.5px solid var(--tx);border-bottom:1.5px solid var(--tx)"></div><div style="position:absolute;right:0;bottom:0;width:6px;height:6px;border-right:1.5px solid var(--tx);border-bottom:1.5px solid var(--tx)"></div><div style="position:absolute;left:7.5px;top:7.5px;width:3px;height:3px;background:var(--acc);border-radius:2px"></div></div><span style="font:500 18px/1 'JetBrains Mono',monospace;flex:1">Recon</span><button onClick="{{ goSettings }}" style="width:48px;height:48px;border:0;background:none;border-radius:24px;color:var(--tx);font:300 24px/1 'Material Symbols Outlined';cursor:pointer" style-hover="background:var(--s2)">settings</button></div>
 <div style="flex:none;padding:4px 16px 16px;display:flex;flex-direction:column;gap:8px">
 <div style="height:56px;display:flex;align-items:center;gap:4px;padding:0 4px 0 12px;background:var(--s1);border:1px solid var(--line);border-radius:10px"><span style="font:300 20px/1 'Material Symbols Outlined';color:var(--tx2)">link</span><input value="{{ url }}" onChange="{{ onUrl }}" placeholder="Paste a video link" style="flex:1;min-width:0;height:100%;background:none;border:0;outline:none;color:var(--tx);font:400 15px/1 Inter,sans-serif;padding:0 8px"><button onClick="{{ pasteUrl }}" aria-label="Paste" style="width:48px;height:48px;border:0;background:none;border-radius:24px;color:var(--tx);font:300 22px/1 'Material Symbols Outlined';cursor:pointer" style-hover="background:var(--s2)">content_paste</button></div>
-<button onClick="{{ goJob }}" style="height:48px;border:0;border-radius:10px;background:var(--acc);color:var(--onacc);font:600 15px/1 Inter,sans-serif;cursor:pointer">Start recon</button>
+<button onClick="{{ goContext }}" style="height:48px;border:0;border-radius:10px;background:var(--acc);color:var(--onacc);font:600 15px/1 Inter,sans-serif;cursor:pointer">Start recon</button>
 <div style="font:400 12px/16px 'JetBrains Mono',monospace;color:var(--tx2)">Or share a link to Recon from any app.</div>
 </div>
 <sc-if value="{{ isHome }}" hint-placeholder-val="{{ false }}">
@@ -66,10 +66,36 @@
 </sc-if>
 </sc-if>
 
+<sc-if value="{{ isContext }}" hint-placeholder-val="{{ false }}">
+<div style="height:56px;flex:none;display:flex;align-items:center;padding:0 4px;gap:4px"><button onClick="{{ goHome }}" style="width:48px;height:48px;border:0;background:none;border-radius:24px;color:var(--tx);font:300 24px/1 'Material Symbols Outlined';cursor:pointer" style-hover="background:var(--s2)">arrow_back</button><span style="font:600 18px/24px Inter,sans-serif;flex:1">Add context</span><span style="font:500 11px/16px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--tx2);padding-right:12px">OPTIONAL</span></div>
+<div style="flex:1;min-height:0;overflow:auto;padding:4px 16px 8px;display:flex;flex-direction:column;gap:12px">
+<div style="position:relative;flex:none;padding:10px 12px;display:flex;align-items:center;gap:12px"><i style="position:absolute;left:0;top:0;width:10px;height:10px;border-left:1.5px solid var(--tx);border-top:1.5px solid var(--tx)"></i><i style="position:absolute;right:0;top:0;width:10px;height:10px;border-right:1.5px solid var(--tx);border-top:1.5px solid var(--tx)"></i><i style="position:absolute;left:0;bottom:0;width:10px;height:10px;border-left:1.5px solid var(--tx);border-bottom:1.5px solid var(--tx)"></i><i style="position:absolute;right:0;bottom:0;width:10px;height:10px;border-right:1.5px solid var(--tx);border-bottom:1.5px solid var(--tx)"></i><div style="width:40px;height:40px;flex:none;border-radius:6px;background:repeating-linear-gradient(135deg,var(--s2) 0 5px,var(--s1) 5px 10px)"></div><div style="flex:1;min-width:0"><div style="font:500 14px/20px 'JetBrains Mono',monospace">instagram.com</div><div style="font:400 12px/16px 'JetBrains Mono',monospace;color:var(--tx2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">/reel/C9xQ2… · 0:38 video</div></div></div>
+<div style="display:flex;flex-direction:column;gap:4px;flex:none">
+<sc-if value="{{ showKb }}" hint-placeholder-val="{{ false }}"><textarea value="{{ text }}" onChange="{{ onText }}" maxLength="300" placeholder="Ask something about this video (optional)" style="height:72px;box-sizing:border-box;resize:none;background:var(--s1);border:1.5px solid var(--tx);border-radius:10px;color:var(--tx);padding:9px 11px;font:400 15px/22px Inter,sans-serif;outline:none"></textarea></sc-if>
+<sc-if value="{{ noKb }}" hint-placeholder-val="{{ true }}"><textarea value="{{ text }}" onChange="{{ onText }}" onFocus="{{ openKb }}" maxLength="300" placeholder="Ask something about this video (optional)" style="height:72px;box-sizing:border-box;resize:none;background:var(--s1);border:1px solid var(--line);border-radius:10px;color:var(--tx);padding:10px 12px;font:400 15px/22px Inter,sans-serif;outline:none"></textarea></sc-if>
+<div style="display:flex;justify-content:space-between;gap:8px;font:400 11px/16px 'JetBrains Mono',monospace;color:var(--tx2)"><span>Sent to Gemini with the video</span><span>{{ count }}/300</span></div>
+</div>
+<div style="flex:none;display:flex;gap:8px;overflow-x:auto;margin:0 -16px;padding:0 16px;scrollbar-width:none">
+<sc-for list="{{ chips }}" as="c" hint-placeholder-count="4"><button onClick="{{ c.pick }}" style="flex:none;height:36px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:none;color:var(--tx);font:500 13px/1 Inter,sans-serif;white-space:nowrap;cursor:pointer" style-hover="background:var(--s1)">{{ c.label }}</button></sc-for>
+</div>
+</div>
+<div style="flex:none;padding:8px 16px;border-top:1px solid var(--line);display:flex;gap:8px"><button onClick="{{ skip }}" style="flex:1;height:48px;border:1px solid var(--line);border-radius:10px;background:none;color:var(--tx);font:500 15px/1 Inter,sans-serif;cursor:pointer" style-hover="background:var(--s1)">Skip</button><button onClick="{{ start }}" style="flex:1;height:48px;border:0;border-radius:10px;background:var(--acc);color:var(--onacc);font:600 15px/1 Inter,sans-serif;cursor:pointer">Start</button></div>
+<sc-if value="{{ showKb }}" hint-placeholder-val="{{ false }}">
+<div style="flex:none;background:var(--s2);padding:0 6px 8px;display:flex;flex-direction:column;gap:8px">
+<div style="height:40px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;font:300 22px/1 'Material Symbols Outlined';color:var(--tx2)"><span>apps</span><span>sentiment_satisfied</span><span>content_paste</span><span>settings</span><span onClick="{{ closeKb }}" style="cursor:pointer">keyboard_hide</span></div>
+<div style="display:flex;gap:4px"><sc-for list="{{ kb1 }}" as="k" hint-placeholder-count="10"><span style="flex:1;height:40px;border-radius:6px;background:var(--line);display:flex;align-items:center;justify-content:center;font:400 18px/1 Inter,sans-serif">{{ k }}</span></sc-for></div>
+<div style="display:flex;gap:4px;padding:0 16px"><sc-for list="{{ kb2 }}" as="k" hint-placeholder-count="9"><span style="flex:1;height:40px;border-radius:6px;background:var(--line);display:flex;align-items:center;justify-content:center;font:400 18px/1 Inter,sans-serif">{{ k }}</span></sc-for></div>
+<div style="display:flex;gap:4px"><span style="flex:1.5;height:40px;border-radius:6px;background:var(--line);display:flex;align-items:center;justify-content:center;font:300 20px/1 'Material Symbols Outlined'">shift</span><sc-for list="{{ kb3 }}" as="k" hint-placeholder-count="7"><span style="flex:1;height:40px;border-radius:6px;background:var(--line);display:flex;align-items:center;justify-content:center;font:400 18px/1 Inter,sans-serif">{{ k }}</span></sc-for><span style="flex:1.5;height:40px;border-radius:6px;background:var(--line);display:flex;align-items:center;justify-content:center;font:300 20px/1 'Material Symbols Outlined'">backspace</span></div>
+<div style="display:flex;gap:4px"><span style="flex:1.5;height:40px;border-radius:6px;background:var(--line);display:flex;align-items:center;justify-content:center;font:500 13px/1 Inter,sans-serif">?123</span><span style="flex:1;height:40px;border-radius:6px;background:var(--line);display:flex;align-items:center;justify-content:center;font:400 18px/1 Inter,sans-serif">,</span><span style="flex:5;height:40px;border-radius:6px;background:var(--line)"></span><span style="flex:1;height:40px;border-radius:6px;background:var(--line);display:flex;align-items:center;justify-content:center;font:400 18px/1 Inter,sans-serif">.</span><span style="flex:1.5;height:40px;border-radius:6px;background:var(--acc);color:var(--onacc);display:flex;align-items:center;justify-content:center;font:400 20px/1 'Material Symbols Outlined'">keyboard_return</span></div>
+</div>
+</sc-if>
+</sc-if>
+
 <sc-if value="{{ isJob }}" hint-placeholder-val="{{ false }}">
 <div style="height:64px;flex:none;display:flex;align-items:center;padding:0 4px;gap:4px"><button onClick="{{ goHome }}" style="width:48px;height:48px;border:0;background:none;border-radius:24px;color:var(--tx);font:300 24px/1 'Material Symbols Outlined';cursor:pointer" style-hover="background:var(--s2)">arrow_back</button><div style="display:flex;flex-direction:column"><span style="font:500 15px/20px 'JetBrains Mono',monospace">instagram.com</span><span style="font:400 11px/16px 'JetBrains Mono',monospace;color:var(--tx2);letter-spacing:.04em">JOB 7F3A-21</span></div></div>
 <div style="flex:1;min-height:0;overflow:auto;padding:4px 16px 16px;display:flex;flex-direction:column;gap:16px">
 <div style="display:flex;gap:16px;align-items:center"><div style="position:relative;padding:6px;flex:none"><div style="position:absolute;left:0;top:0;width:10px;height:10px;border-left:1.5px solid var(--tx);border-top:1.5px solid var(--tx)"></div><div style="position:absolute;right:0;top:0;width:10px;height:10px;border-right:1.5px solid var(--tx);border-top:1.5px solid var(--tx)"></div><div style="position:absolute;left:0;bottom:0;width:10px;height:10px;border-left:1.5px solid var(--tx);border-bottom:1.5px solid var(--tx)"></div><div style="position:absolute;right:0;bottom:0;width:10px;height:10px;border-right:1.5px solid var(--tx);border-bottom:1.5px solid var(--tx)"></div><div style="width:48px;height:64px;border-radius:6px;background:repeating-linear-gradient(135deg,var(--s2) 0 5px,var(--s1) 5px 10px)"></div></div><div style="min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font:500 11px/16px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--tx2)">TARGET</span><span style="font:400 13px/18px 'JetBrains Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">instagram.com/reel/C9xQ2…</span><span style="font:400 12px/16px 'JetBrains Mono',monospace;color:var(--tx2)">Link received 14:01</span></div></div>
+<sc-if value="{{ hasQ }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:4px;padding-left:12px;border-left:1.5px solid var(--line)"><span style="font:500 11px/16px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--tx2)">YOUR QUESTION</span><span style="font:400 14px/20px Inter,sans-serif;text-wrap:pretty">{{ qQuoted }}</span></div></sc-if>
 <div style="background:var(--s1);border:1px solid var(--line);border-radius:12px">
 <div style="display:flex;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)"><span style="font:300 20px/20px 'Material Symbols Outlined';color:var(--tx)">check</span><div style="flex:1"><div style="font-weight:500">Downloading</div><div style="font:400 12px/16px 'JetBrains Mono',monospace;color:var(--tx2)">4.2 MB · 0:38 video</div></div><span style="font:400 12px/20px 'JetBrains Mono',monospace;color:var(--tx2)">0:04</span></div>
 <div style="display:flex;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)"><span style="font:300 20px/20px 'Material Symbols Outlined';color:var(--tx)">check</span><div style="flex:1"><div style="font-weight:500">Sampling frames</div><div style="font:400 12px/16px 'JetBrains Mono',monospace;color:var(--tx2)">24 frames · audio track</div></div><span style="font:400 12px/20px 'JetBrains Mono',monospace;color:var(--tx2)">0:07</span></div>
@@ -98,11 +124,47 @@
 <sc-if value="{{ isResultAny }}" hint-placeholder-val="{{ false }}">
 <div style="height:64px;flex:none;display:flex;align-items:center;padding:0 4px;gap:4px"><button onClick="{{ goHome }}" style="width:48px;height:48px;border:0;background:none;border-radius:24px;color:var(--tx);font:300 24px/1 'Material Symbols Outlined';cursor:pointer" style-hover="background:var(--s2)">arrow_back</button><div style="flex:1;display:flex;flex-direction:column"><span style="font:500 15px/20px 'JetBrains Mono',monospace">instagram.com</span><span style="font:400 11px/16px 'JetBrains Mono',monospace;color:var(--tx2);letter-spacing:.04em">{{ jobId }}</span></div><button aria-label="Open original" style="width:48px;height:48px;border:0;background:none;border-radius:24px;color:var(--tx);font:300 22px/1 'Material Symbols Outlined';cursor:pointer" style-hover="background:var(--s2)">open_in_new</button><button aria-label="More" style="width:48px;height:48px;border:0;background:none;border-radius:24px;color:var(--tx);font:300 22px/1 'Material Symbols Outlined';cursor:pointer" style-hover="background:var(--s2)">more_vert</button></div>
 <div style="flex:1;min-height:0;overflow:auto;padding:4px 16px 24px;display:flex;flex-direction:column;gap:24px">
+<sc-if value="{{ hasQ }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font:500 11px/16px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--tx2)">YOUR QUESTION</span><span style="font:500 18px/26px Inter,sans-serif;text-wrap:pretty">{{ qQuoted }}</span></div>
+<sc-if value="{{ ansVerified }}" hint-placeholder-val="{{ true }}">
+<div style="background:var(--s1);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:6px"><span style="font:300 18px/1 'Material Symbols Outlined';color:var(--tx2)">music_note</span><span style="font:500 11px/16px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--tx2);flex:1">ANSWER · MEDIA · SONG</span><span style="display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 7px;border:1px solid var(--ok);border-radius:6px;color:var(--ok);font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.08em"><span style="font:400 14px/1 'Material Symbols Outlined';letter-spacing:0">check_circle</span>VERIFIED</span></div>
+<div style="font:600 17px/22px Inter,sans-serif">Glass Harbour <span style="font-weight:400;color:var(--tx2)">Lowtide Radio, 2024</span></div>
+<div style="color:var(--tx2)">Plays under the voiceover for the whole clip. Lyrics heard at 0:09 match the track page.</div>
+<div style="display:flex;flex-direction:column;border-top:1px solid var(--line)">
+<a href="#" style="min-height:44px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line);font:400 13px/18px 'JetBrains Mono',monospace;color:var(--tx);text-decoration:none"><span style="color:var(--tx2)">6</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">music.lowtide.fm/glass-harbour</span><span style="font:300 18px/1 'Material Symbols Outlined';color:var(--tx2)">open_in_new</span></a>
+<a href="#" style="min-height:44px;display:flex;align-items:center;gap:10px;font:400 13px/18px 'JetBrains Mono',monospace;color:var(--tx);text-decoration:none"><span style="color:var(--tx2)">7</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">lyricsindex.org/lowtide-radio</span><span style="font:300 18px/1 'Material Symbols Outlined';color:var(--tx2)">open_in_new</span></a>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{ ansUnverified }}" hint-placeholder-val="{{ false }}">
+<div style="background:var(--s1);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:6px"><span style="font:300 18px/1 'Material Symbols Outlined';color:var(--tx2)">music_note</span><span style="font:500 11px/16px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--tx2);flex:1">ANSWER · MEDIA · SONG</span><span style="display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 7px;border:1px solid var(--warn);border-radius:6px;color:var(--warn);font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.08em"><span style="font:400 14px/1 'Material Symbols Outlined';letter-spacing:0">psychology_alt</span>UNVERIFIED</span></div>
+<div style="font:600 17px/22px Inter,sans-serif">Glass Harbour <span style="font-weight:400;color:var(--tx2)">Lowtide Radio</span></div>
+<div style="color:var(--tx2)">Named from AI knowledge of the melody. No source confirmed the match.</div>
+<div style="min-height:24px;display:flex;align-items:center;gap:6px;font:400 12px/16px 'JetBrains Mono',monospace;color:var(--tx2)"><span style="font:300 16px/1 'Material Symbols Outlined'">link_off</span>No source</div>
+</div>
+</sc-if>
+<sc-if value="{{ ansUnclear }}" hint-placeholder-val="{{ false }}">
+<div style="background:var(--s1);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:6px"><span style="font:300 18px/1 'Material Symbols Outlined';color:var(--tx2)">music_note</span><span style="font:500 11px/16px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--tx2);flex:1">ANSWER</span><span style="display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 7px;border:1px solid var(--unk);border-radius:6px;color:var(--unk);font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.08em"><span style="font:400 14px/1 'Material Symbols Outlined';letter-spacing:0">help</span>UNCLEAR</span></div>
+<div style="font:600 17px/22px Inter,sans-serif">No confident match</div>
+<div style="color:var(--tx2)">The music sits under loud speech and no lyrics are audible. Try sharper video, or share a clip with clearer audio.</div>
+</div>
+</sc-if>
+</div>
+</sc-if>
 <div style="display:flex;gap:14px;align-items:center"><div style="position:relative;padding:5px;flex:none"><div style="position:absolute;left:0;top:0;width:8px;height:8px;border-left:1.5px solid var(--tx);border-top:1.5px solid var(--tx)"></div><div style="position:absolute;right:0;top:0;width:8px;height:8px;border-right:1.5px solid var(--tx);border-top:1.5px solid var(--tx)"></div><div style="position:absolute;left:0;bottom:0;width:8px;height:8px;border-left:1.5px solid var(--tx);border-bottom:1.5px solid var(--tx)"></div><div style="position:absolute;right:0;bottom:0;width:8px;height:8px;border-right:1.5px solid var(--tx);border-bottom:1.5px solid var(--tx)"></div><div style="width:40px;height:54px;border-radius:5px;background:repeating-linear-gradient(135deg,var(--s2) 0 5px,var(--s1) 5px 10px)"></div></div><div style="min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font:600 16px/22px Inter,sans-serif;text-wrap:pretty">{{ videoTitle }}</span><span style="font:400 12px/16px 'JetBrains Mono',monospace;color:var(--tx2)">{{ videoMeta }}</span></div></div>
 <div style="display:flex;flex-direction:column;gap:8px"><span style="font:500 11px/16px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--tx2)">SUMMARY</span><div style="font-size:15px;line-height:23px;text-wrap:pretty">{{ summary }}</div></div>
 
 <sc-if value="{{ isResult }}" hint-placeholder-val="{{ false }}">
-<div style="display:flex;flex-direction:column;gap:12px"><span style="font:500 11px/16px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--tx2)">ENTITIES FOUND · 4</span>
+<div style="display:flex;flex-direction:column;gap:12px"><span style="font:500 11px/16px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--tx2)">ENTITIES FOUND · 5</span>
+<div style="background:var(--s1);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;align-items:center;gap:6px"><span style="font:300 18px/1 'Material Symbols Outlined';color:var(--tx2)">theaters</span><span style="font:500 11px/16px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--tx2);flex:1">MEDIA · MOVIE</span><span style="display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 7px;border:1px solid var(--ok);border-radius:6px;color:var(--ok);font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.08em"><span style="font:400 14px/1 'Material Symbols Outlined';letter-spacing:0">check_circle</span>VERIFIED</span></div>
+<div style="font:600 17px/22px Inter,sans-serif">Paper Satellites <span style="font-weight:400;color:var(--tx2)">film, 2019</span></div><div style="color:var(--tx2)">Poster on the wall behind the desk at 0:15. Title and year match the film's listing.</div>
+<a href="#" style="min-height:40px;display:flex;align-items:center;gap:6px;font:400 13px/18px 'JetBrains Mono',monospace;color:var(--tx);text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--tx2)"><span style="font:300 16px/1 'Material Symbols Outlined'">open_in_new</span>papersatellitesfilm.com</a>
+</div>
 <div style="background:var(--s1);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px">
 <div style="display:flex;align-items:center;gap:6px"><span style="font:300 18px/1 'Material Symbols Outlined';color:var(--tx2)">code</span><span style="font:500 11px/16px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--tx2);flex:1">REPO</span><span style="display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 7px;border:1px solid var(--ok);border-radius:6px;color:var(--ok);font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.08em"><span style="font:400 14px/1 'Material Symbols Outlined';letter-spacing:0">check_circle</span>VERIFIED</span></div>
 <div style="font:600 17px/22px Inter,sans-serif">{{ repoName }}</div>
@@ -134,11 +196,16 @@
 <div style="padding:14px 16px;display:flex;flex-direction:column;gap:8px"><span style="align-self:flex-start;display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 7px;border:1px solid var(--unk);border-radius:6px;color:var(--unk);font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.08em"><span style="font:400 14px/1 'Material Symbols Outlined';letter-spacing:0">help</span>UNCLEAR</span><div>“Sitting under six hours a day halves your risk of back pain.”</div><div style="display:flex;gap:8px;padding:8px 10px;background:var(--s2);border-radius:8px;font-size:13px;line-height:18px"><span style="font:300 18px/18px 'Material Symbols Outlined';color:var(--tx2)">medical_information</span><span>Health claim. Not professional advice; ask a qualified professional.</span></div></div>
 </div>
 </div>
-<div style="display:flex;flex-direction:column;gap:4px"><span style="font:500 11px/16px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--tx2);padding-bottom:4px">SOURCES · 4</span>
+<div style="display:flex;flex-direction:column;gap:4px"><span style="font:500 11px/16px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--tx2);padding-bottom:4px">{{ sourceCount }}</span>
 <a href="#" style="min-height:48px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line);font:400 13px/18px 'JetBrains Mono',monospace;color:var(--tx);text-decoration:none"><span style="color:var(--tx2);width:20px">1</span><span style="flex:1">github.com/kmori/stowly</span><span style="font:300 18px/1 'Material Symbols Outlined';color:var(--tx2)">open_in_new</span></a>
 <a href="#" style="min-height:48px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line);font:400 13px/18px 'JetBrains Mono',monospace;color:var(--tx);text-decoration:none"><span style="color:var(--tx2);width:20px">2</span><span style="flex:1">stowly.dev/docs/install</span><span style="font:300 18px/1 'Material Symbols Outlined';color:var(--tx2)">open_in_new</span></a>
 <a href="#" style="min-height:48px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line);font:400 13px/18px 'JetBrains Mono',monospace;color:var(--tx);text-decoration:none"><span style="color:var(--tx2);width:20px">3</span><span style="flex:1">github.com/kmori/stowly/bench</span><span style="font:300 18px/1 'Material Symbols Outlined';color:var(--tx2)">open_in_new</span></a>
 <a href="#" style="min-height:48px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line);font:400 13px/18px 'JetBrains Mono',monospace;color:var(--tx);text-decoration:none"><span style="color:var(--tx2);width:20px">4</span><span style="flex:1">github.com/kmori</span><span style="font:300 18px/1 'Material Symbols Outlined';color:var(--tx2)">open_in_new</span></a>
+<a href="#" style="min-height:48px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line);font:400 13px/18px 'JetBrains Mono',monospace;color:var(--tx);text-decoration:none"><span style="color:var(--tx2);width:20px">5</span><span style="flex:1">papersatellitesfilm.com</span><span style="font:300 18px/1 'Material Symbols Outlined';color:var(--tx2)">open_in_new</span></a>
+<sc-if value="{{ qSources }}" hint-placeholder-val="{{ false }}">
+<a href="#" style="min-height:48px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line);font:400 13px/18px 'JetBrains Mono',monospace;color:var(--tx);text-decoration:none"><span style="color:var(--tx2);width:20px">6</span><span style="flex:1">music.lowtide.fm/glass-harbour</span><span style="font:300 18px/1 'Material Symbols Outlined';color:var(--tx2)">open_in_new</span></a>
+<a href="#" style="min-height:48px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line);font:400 13px/18px 'JetBrains Mono',monospace;color:var(--tx);text-decoration:none"><span style="color:var(--tx2);width:20px">7</span><span style="flex:1">lyricsindex.org/lowtide-radio</span><span style="font:300 18px/1 'Material Symbols Outlined';color:var(--tx2)">open_in_new</span></a>
+</sc-if>
 </div>
 </sc-if>
 
@@ -188,13 +255,34 @@
 <div style="height:20px;flex:none;display:flex;align-items:center;justify-content:center"><div style="width:108px;height:4px;border-radius:2px;background:var(--tx2);opacity:.6"></div></div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:360,&quot;height&quot;:800},&quot;screen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;firstRun&quot;,&quot;signIn&quot;,&quot;home&quot;,&quot;homeEmpty&quot;,&quot;job&quot;,&quot;waiting&quot;,&quot;result&quot;,&quot;resultEmpty&quot;,&quot;failed&quot;,&quot;settings&quot;],&quot;default&quot;:&quot;home&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:360,&quot;height&quot;:800},&quot;screen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;firstRun&quot;,&quot;signIn&quot;,&quot;home&quot;,&quot;homeEmpty&quot;,&quot;context&quot;,&quot;contextKb&quot;,&quot;job&quot;,&quot;waiting&quot;,&quot;result&quot;,&quot;resultEmpty&quot;,&quot;failed&quot;,&quot;settings&quot;],&quot;default&quot;:&quot;home&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;question&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;answerStatus&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;verified&quot;,&quot;unverified&quot;,&quot;unclear&quot;],&quot;default&quot;:&quot;verified&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
 class Component extends DCLogic {
-  state = { cur: null, repo: 0, cookie: false, url: '', update: true };
-  componentDidUpdate(p) { if (p.screen !== this.props.screen) this.setState({ cur: null }); }
+  state = { cur: null, repo: 0, cookie: false, url: '', update: true, text: null, kb: false, q: null, auto: false };
+  componentDidUpdate(p) {
+    if (p.screen !== this.props.screen || p.question !== this.props.question) this.setState({ cur: null, q: null, text: null, kb: false });
+    if (this.state.cur === 'job' && this.state.auto && !this._t) this._t = setTimeout(() => { this._t = null; if (this.state.cur === 'job') this.setState({ cur: 'result', auto: false }); }, 4000);
+  }
+  componentWillUnmount() { clearTimeout(this._t); }
   renderVals() {
     const s = this.state.cur || this.props.screen || 'home';
-    const go = k => () => this.setState({ cur: k });
+    const go = k => () => this.setState({ cur: k, auto: false });
+    const q = this.state.q ?? this.props.question ?? '';
+    const text = this.state.text ?? (s === 'contextKb' ? (this.props.question ?? '') : '');
+    const showKb = s === 'contextKb' || this.state.kb;
+    const ans = this.props.answerStatus ?? 'verified';
+    const extra = {
+      isContext: s === 'context' || s === 'contextKb', showKb, noKb: !showKb,
+      text, count: text.length, onText: e => this.setState({ text: e.target.value.slice(0, 300) }),
+      openKb: () => this.setState({ kb: true }), closeKb: () => this.setState({ kb: false, cur: s === 'contextKb' ? 'context' : s }),
+      chips: ['What movie is this?', 'What song is this?', 'Who or what is this?', 'Explain this'].map(c => ({ label: c, pick: () => this.setState({ text: c }) })),
+      start: () => this.setState({ q: text.trim(), cur: 'job', kb: false, auto: true }),
+      skip: () => this.setState({ q: '', cur: 'job', kb: false, auto: true }),
+      goContext: () => this.setState({ cur: 'context', text: null, kb: false }),
+      kb1: 'qwertyuiop'.split(''), kb2: 'asdfghjkl'.split(''), kb3: 'zxcvbnm'.split(''),
+      hasQ: !!q, qQuoted: `“${q}”`,
+      ansVerified: ans === 'verified', ansUnverified: ans === 'unverified', ansUnclear: ans === 'unclear',
+      qSources: !!q && ans === 'verified', sourceCount: `SOURCES · ${q && ans === 'verified' ? 7 : 5}`
+    };
     const repos = [
       { name: 'kmori/stowly', meta: '★ 4.1k · Go · matches 0:12', url: 'github.com/kmori/stowly', why: 'Name and terminal output on screen match the repository README.' },
       { name: 'stowly-dev/stowly-cli', meta: '★ 212 · fork of kmori/stowly', url: 'github.com/stowly-dev/stowly-cli', why: 'A fork of the tool shown. Picked by you.' },
@@ -203,6 +291,7 @@ class Component extends DCLogic {
     const sel = repos[this.state.repo];
     const empty = s === 'resultEmpty';
     return {
+      ...extra,
       label: s,
       isFirstRun: s === 'firstRun', isSignIn: s === 'signIn',
       isHomeAny: s === 'home' || s === 'homeEmpty', isHome: s === 'home', isHomeEmpty: s === 'homeEmpty',

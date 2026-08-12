@@ -1,5 +1,16 @@
 package dev.wolzard.recon.feature.job
 
+import dev.wolzard.recon.core.model.LinkPreview
+import dev.wolzard.recon.designsystem.Thumb
+import dev.wolzard.recon.core.model.MediaType
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.material3.CardDefaults
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import dev.wolzard.recon.designsystem.ChipKind
 import dev.wolzard.recon.designsystem.Reticle
 import dev.wolzard.recon.designsystem.StatusChip
+import dev.wolzard.recon.designsystem.StatusIcons
 import dev.wolzard.recon.designsystem.Mono
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -57,6 +69,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -73,6 +86,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import dev.wolzard.recon.core.model.Answer
+import dev.wolzard.recon.core.model.Basis
 import dev.wolzard.recon.core.model.AnswerStatus
 import kotlin.math.roundToInt
 import dev.wolzard.recon.core.model.EntityType
@@ -102,7 +116,9 @@ fun JobScreen(job: Job, result: JobResult?, now: Long, onIntent: (JobIntent) -> 
         ) {
             val question = job.userContext
             // D23: the question is echoed in every state; once done, the answer card comes before the summary.
-            if (question != null) YourQuestion(question)
+            val done = job.state == JobState.DONE && result != null
+            if (done) VideoHeader(job)
+            if (question != null) YourQuestion(question, large = done)
             when {
                 job.state == JobState.FAILED -> Failed(job, now, onIntent)
                 job.state == JobState.DONE && result != null -> Done(result, question != null, onIntent)
@@ -115,11 +131,21 @@ fun JobScreen(job: Job, result: JobResult?, now: Long, onIntent: (JobIntent) -> 
 @Composable
 private fun Running(job: Job, onIntent: (JobIntent) -> Unit) {
     if (job.state == JobState.WAITING_QUOTA) {
-        StatusChip("Waiting for quota", ChipKind.Warn)
+        StatusChip("Waiting for quota", ChipKind.Warn, icon = StatusIcons.Waiting)
         Text("Waiting for your free AI quota", style = MaterialTheme.typography.titleLarge)
         Text("Link: ${job.displayHost()}")
-        Text("Quota resets at ${job.retryAtEpochMs?.let(JobCopy::time) ?: "the next daily reset"}; this video starts then.")
-        OutlinedButton(shape = MaterialTheme.shapes.small, onClick = { onIntent(JobIntent.Cancel) }) { Text("Cancel") }
+        // A time is shown only when the backend gave one (retryAtEpochMs); never a guess.
+        val resetAt = job.retryAtEpochMs?.let(JobCopy::time)
+        Text(if (resetAt != null) "Quota resets at $resetAt; this video starts then." else "${JobCopy.TRY_LATER}. This video starts when your usage limit lifts.")
+        InfoCard("EXPECTED RESET", resetAt ?: JobCopy.TRY_LATER)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(shape = MaterialTheme.shapes.small, onClick = { onIntent(JobIntent.Cancel) }) { Text("Cancel") }
+            Button(shape = MaterialTheme.shapes.small, onClick = { onIntent(JobIntent.SignIn) }) { Text("Switch account") }
+        }
+        SectionLabel("WHAT YOU CAN DO")
+        Text("• Leave it queued. You get a notification when it finishes.", style = MaterialTheme.typography.bodyMedium)
+        Text("• Switch to another Google account and resume now.", style = MaterialTheme.typography.bodyMedium)
+        Text("• Cancel the job and share the link again later.", style = MaterialTheme.typography.bodyMedium)
         return
     }
     val steps = listOf(JobState.QUEUED to "Queued", JobState.DOWNLOADING to "Downloading", JobState.ANALYSING to "Analysing", JobState.RESEARCHING to "Looking things up")
@@ -130,7 +156,7 @@ private fun Running(job: Job, onIntent: (JobIntent) -> Unit) {
             Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
                 Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     when {
-                        i < current -> Text("✓", color = MaterialTheme.colorScheme.primary)
+                        i < current -> Icon(StatusIcons.Check, contentDescription = "Done", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.status.verified)
                         i == current -> Reticle(Modifier.size(18.dp))
                         else -> Text("·")
                     }
@@ -149,8 +175,9 @@ private fun Running(job: Job, onIntent: (JobIntent) -> Unit) {
 private fun Failed(job: Job, now: Long, onIntent: (JobIntent) -> Unit) {
     val reason = job.failure ?: FailureReason.UNKNOWN
     var help by rememberSaveable { mutableStateOf(false) }
-    StatusChip("Failed", ChipKind.Bad)
+    StatusChip("Failed", ChipKind.Bad, icon = StatusIcons.Error)
     Text(JobCopy.failureMessage(reason, job.retryAtEpochMs, job.failureDetail), style = MaterialTheme.typography.titleLarge)
+    InfoCard("TARGET", job.displayHost(), job.thumbnailUrl)
     val retryEnabled = job.retryAtEpochMs?.let { now >= it } ?: true
     val sharedFile = job.localUri != null
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -161,7 +188,9 @@ private fun Failed(job: Job, now: Long, onIntent: (JobIntent) -> Unit) {
                 if (!sharedFile) Button(shape = MaterialTheme.shapes.small, onClick = { onIntent(JobIntent.Retry) }) { Text("Retry") }
             }
             FailureReason.VIDEO_UNREADABLE -> OutlinedButton(shape = MaterialTheme.shapes.small, onClick = { help = true }) { Text("Share a different file") }
-            FailureReason.API_KEY_MISSING, FailureReason.API_KEY_INVALID -> Button(shape = MaterialTheme.shapes.small, onClick = { onIntent(JobIntent.SignIn) }) { Text("Sign in") }
+            FailureReason.API_KEY_MISSING, FailureReason.API_KEY_INVALID -> Button(shape = MaterialTheme.shapes.small, onClick = { onIntent(JobIntent.SignIn) }) {
+                Text(if (reason == FailureReason.API_KEY_INVALID) "Sign in again" else "Sign in")
+            }
             else -> if (!sharedFile) Button(shape = MaterialTheme.shapes.small, onClick = { onIntent(JobIntent.Retry) }, enabled = retryEnabled) { Text("Retry") }
         }
     }
@@ -174,35 +203,115 @@ private fun Failed(job: Job, now: Long, onIntent: (JobIntent) -> Unit) {
     )
 }
 
+/** Mono label over a mono value on a hairline card (design: TARGET, EXPECTED RESET). */
 @Composable
-private fun YourQuestion(text: String) {
-    SectionLabel("YOUR QUESTION")
-    Text(text, Modifier.testTag("your_question"), style = MaterialTheme.typography.bodyLarge)
-}
-
-@Composable
-private fun AnswerCard(answer: Answer?) {
-    val kind = when (answer?.status) {
-        AnswerStatus.VERIFIED -> ChipKind.Ok
-        AnswerStatus.UNVERIFIED -> ChipKind.Warn
-        else -> ChipKind.Unclear
-    }
-    OutlinedCard(Modifier.fillMaxWidth().testTag("answer_card"), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                SectionLabel("ANSWER", Modifier.weight(1f))
-                StatusChip(JobCopy.answerStatus(answer?.status ?: AnswerStatus.UNCLEAR), kind)
-                answer?.let { StatusChip("${(it.confidence * 100).roundToInt()}%", ChipKind.Neutral) }
-            }
-            Text(answer?.text ?: JobCopy.NO_ANSWER, style = MaterialTheme.typography.bodyLarge)
-            answer?.sources?.forEach { Text("• $it", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+private fun InfoCard(label: String, value: String, thumbnailUrl: String? = null) {
+    Row(
+        Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium).padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (thumbnailUrl != null) Thumb(thumbnailUrl, 48.dp, 64.dp) // D26, design 1f
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            SectionLabel(label)
+            Text(value, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono, fontWeight = FontWeight.Medium))
         }
     }
 }
 
+/** D26, design 1g: the video's thumbnail, title and length head the result when Add context fetched them. */
+@Composable
+private fun VideoHeader(job: Job) {
+    if (job.videoTitle == null && job.thumbnailUrl == null) return
+    Row(Modifier.fillMaxWidth().testTag("video_header"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Thumb(job.thumbnailUrl, 40.dp, 54.dp)
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            job.videoTitle?.let { Text(it, style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp, lineHeight = 22.sp), maxLines = 2, overflow = TextOverflow.Ellipsis) }
+            Text(listOfNotNull(LinkPreview.formatDuration(job.videoDurationSec), job.displayHost()).joinToString(" · "), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+/** Design 3c: a hairline left rule while the job runs; 3d: a larger quote heading the result. */
+@Composable
+private fun YourQuestion(text: String, large: Boolean) {
+    val quoted = "“$text”"
+    if (large) Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        SectionLabel("YOUR QUESTION")
+        Text(quoted, Modifier.testTag("your_question"), style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium, fontSize = 18.sp, lineHeight = 26.sp))
+    } else {
+        val rule = MaterialTheme.colorScheme.outlineVariant
+        Column(
+            Modifier.fillMaxWidth().drawBehind { drawLine(rule, Offset(0f, 0f), Offset(0f, size.height), 1.5.dp.toPx()) }.padding(start = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            SectionLabel("YOUR QUESTION")
+            Text(quoted, Modifier.testTag("your_question"), style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+/** Design 3d/3f/3g. Answer sources are plain text (D23), numbered after the job's own sources in one shared list. */
+@Composable
+private fun AnswerCard(answer: Answer?, firstSourceNumber: Int) {
+    val status = answer?.status ?: AnswerStatus.UNCLEAR
+    val kind = when (status) {
+        AnswerStatus.VERIFIED -> ChipKind.Ok
+        AnswerStatus.UNVERIFIED -> ChipKind.Warn
+        AnswerStatus.UNCLEAR -> ChipKind.Unclear
+    }
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val line = MaterialTheme.colorScheme.outlineVariant
+    OutlinedCard(
+        Modifier.fillMaxWidth().testTag("answer_card"), shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer), border = BorderStroke(1.dp, line),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                answer?.kind?.let { Icon(icon(it, answer.subtype), contentDescription = null, Modifier.size(18.dp), tint = muted) }
+                SectionLabel(JobCopy.answerLabel(answer), Modifier.weight(1f).testTag("answer_label"))
+                StatusChip(JobCopy.answerStatus(status), kind)
+                answer?.let { StatusChip("${(it.confidence * 100).roundToInt()}%", ChipKind.Neutral) }
+            }
+            // Design 3d: with a title, the title line leads and the reply reads as its muted description.
+            val title = answer?.title
+            if (title != null) Text(title, Modifier.testTag("answer_title"), style = MaterialTheme.typography.titleMedium)
+            Text(answer?.text ?: JobCopy.NO_ANSWER, color = if (title != null) muted else Color.Unspecified, style = MaterialTheme.typography.bodyLarge)
+            val sources = answer?.sources.orEmpty()
+            if (sources.isNotEmpty()) Column(Modifier.fillMaxWidth()) {
+                HorizontalDivider(color = line)
+                sources.forEachIndexed { k, src ->
+                    if (k > 0) HorizontalDivider(color = line)
+                    SourceLine(firstSourceNumber + k, src, minHeight = 44.dp)
+                }
+            } else if (status != AnswerStatus.UNCLEAR) Row(
+                Modifier.heightIn(min = 24.dp).testTag("no_source"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(StatusIcons.LinkOff, contentDescription = null, Modifier.size(16.dp), tint = muted)
+                Text(JobCopy.NO_SOURCE, color = muted, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+/** One numbered source row; [onOpen] null = plain text, never opened as a link. */
+@Composable
+private fun SourceLine(number: Int, text: String, minHeight: androidx.compose.ui.unit.Dp = 48.dp, onOpen: (() -> Unit)? = null) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = minHeight).then(if (onOpen != null) Modifier.clickable(role = Role.Button, onClick = onOpen) else Modifier),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("$number", Modifier.width(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = SourceText)
+        Text(text, Modifier.weight(1f), style = SourceText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (onOpen != null) Icon(StatusIcons.OpenInNew, contentDescription = "Opens in browser", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+private val SourceText = androidx.compose.ui.text.TextStyle(fontFamily = Mono, fontSize = 13.sp, lineHeight = 18.sp)
+
 @Composable
 private fun Done(result: JobResult, asked: Boolean, onIntent: (JobIntent) -> Unit) {
-    if (asked) AnswerCard(result.analysis.answer)
+    val answerSources = if (asked) result.analysis.answer?.sources.orEmpty() else emptyList()
+    if (asked) AnswerCard(result.analysis.answer, firstSourceNumber = result.sources.size + 1)
     SectionLabel("SUMMARY")
     Text(result.analysis.summary, style = MaterialTheme.typography.bodyLarge)
     result.degraded.forEach { (id, retryAt) ->
@@ -227,9 +336,27 @@ private fun Done(result: JobResult, asked: Boolean, onIntent: (JobIntent) -> Uni
     if (result.findings.isEmpty()) Box(
         Modifier.fillMaxWidth().heightIn(min = 200.dp).border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium).dotGrid(MaterialTheme.colorScheme.outlineVariant).padding(24.dp),
         contentAlignment = Alignment.Center,
-    ) { Text(JobCopy.NOTHING_FOUND, Modifier.background(MaterialTheme.colorScheme.background), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center) }
-    else SectionLabel("ENTITIES FOUND · ${result.findings.size}")
-    result.findings.forEachIndexed { i, f -> FindingCard(i, f, onIntent) }
+    ) {
+        Column(Modifier.background(MaterialTheme.colorScheme.background), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(JobCopy.NOTHING_FOUND, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+            Text(JobCopy.NOTHING_FOUND_DETAIL, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
+        }
+    }
+    val indexed = result.findings.withIndex()
+    val entities = indexed.filter { it.value.entity.type != EntityType.CLAIM }
+    val claims = indexed.filter { it.value.entity.type == EntityType.CLAIM }
+    if (entities.isNotEmpty()) SectionLabel("ENTITIES FOUND · ${entities.size}")
+    entities.forEach { (i, f) -> FindingCard(i, f, onIntent) }
+    if (claims.isNotEmpty()) {
+        SectionLabel("CLAIMS · ${claims.size}")
+        Column(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium)) {
+            claims.forEachIndexed { n, (_, f) ->
+                if (n > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                ClaimRow(f)
+            }
+        }
+        if (claims.any { it.value.entity.domain?.sensitive == true }) Text(JobCopy.NOT_ADVICE, Modifier.testTag("advice_footer"), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+    }
     if (sharperOffered) OutlinedCard(Modifier.fillMaxWidth(), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Text hard to read?", style = MaterialTheme.typography.labelLarge)
@@ -238,17 +365,16 @@ private fun Done(result: JobResult, asked: Boolean, onIntent: (JobIntent) -> Uni
         }
     }
 
-    if (result.sources.isNotEmpty()) {
-        SectionLabel("Sources")
+    val sourceCount = result.sources.size + answerSources.size
+    if (sourceCount > 0) {
+        SectionLabel("SOURCES · $sourceCount")
         Column {
             result.sources.forEachIndexed { i, src ->
-                Row(
-                    Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button) { onIntent(JobIntent.Open(src.uri)) },
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Text("${i + 1}", Modifier.width(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                    Text(src.title, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                }
+                SourceLine(i + 1, src.title) { onIntent(JobIntent.Open(src.uri)) }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+            answerSources.forEachIndexed { k, src ->
+                SourceLine(result.sources.size + k + 1, src)
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
         }
@@ -271,17 +397,22 @@ private fun OnScreenText(lines: List<String>) {
 private fun FindingCard(index: Int, f: Finding, onIntent: (JobIntent) -> Unit) {
     OutlinedCard(Modifier.fillMaxWidth(), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            val verdictKind = when (f.verdict) {
-                Verdict.DISPUTED -> ChipKind.Bad
-                Verdict.CONFIRMED -> ChipKind.Ok
-                else -> ChipKind.Unclear
-            }
+            val verdictKind = verdictKind(f)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(icon(f.entity.type), contentDescription = f.entity.type.wire, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(f.entity.type.wire.uppercase(), Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                val typeLabel = JobCopy.typeLabel(f.entity.type, f.entity.subtype)
+                Icon(icon(f.entity.type, f.entity.subtype), contentDescription = typeLabel, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(typeLabel, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
                 StatusChip(JobCopy.verdict(f.verdict), verdictKind)
             }
-            Text(f.title, style = MaterialTheme.typography.titleMedium)
+            // Design 3e: a media title carries its year (and maker) beside it, in the muted ink.
+            val qualifier = f.entity.qualifier?.takeIf { f.entity.type == EntityType.MEDIA && it.isNotBlank() }
+            Text(
+                if (qualifier == null) AnnotatedString(f.title) else buildAnnotatedString {
+                    append(f.title); append(" ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)) { append(qualifier) }
+                },
+                style = MaterialTheme.typography.titleMedium,
+            )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 StatusChip(f.entity.evidence.wire.replaceFirstChar(Char::uppercase), ChipKind.Neutral)
                 if (f.entity.evidence == Evidence.INFERRED) StatusChip("Guess", ChipKind.Warn)
@@ -301,6 +432,24 @@ private fun FindingCard(index: Int, f: Finding, onIntent: (JobIntent) -> Unit) {
 }
 
 @Composable
+private fun ClaimRow(f: Finding) {
+    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        StatusChip(JobCopy.verdict(f.verdict), verdictKind(f))
+        Text(f.title, style = MaterialTheme.typography.titleMedium)
+        if (f.whatItIs.isNotBlank()) Text(f.whatItIs, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        f.source?.let { Text("Source: $it", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Text(JobCopy.basis(f.basis), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        if (f.entity.domain?.sensitive == true) Row(
+            Modifier.fillMaxWidth().testTag("advice_line").background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.small).padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(StatusIcons.Info, contentDescription = null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(JobCopy.NOT_ADVICE, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
 private fun Candidates(index: Int, repos: List<GhRepo>, onIntent: (JobIntent) -> Unit) {
     val line = MaterialTheme.colorScheme.outlineVariant
     Column(Modifier.fillMaxWidth().border(1.dp, line, MaterialTheme.shapes.small).clip(MaterialTheme.shapes.small)) {
@@ -308,8 +457,13 @@ private fun Candidates(index: Int, repos: List<GhRepo>, onIntent: (JobIntent) ->
         repos.forEach { r ->
             HorizontalDivider(color = line)
             Column(Modifier.fillMaxWidth().heightIn(min = 52.dp).clickable(role = Role.Button) { onIntent(JobIntent.Pick(index, r)) }.padding(horizontal = 12.dp, vertical = 6.dp), verticalArrangement = Arrangement.Center) {
-                Text(r.fullName, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono, fontWeight = FontWeight.Medium))
-                Text(listOfNotNull("★ ${r.stars}", r.description).joinToString(" · "), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    RadioButton(selected = false, onClick = null) // the whole row picks; the radio only says "choose one"
+                    Column {
+                        Text(r.fullName, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono, fontWeight = FontWeight.Medium))
+                        Text(listOfNotNull("★ ${r.stars}", r.description).joinToString(" · "), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
             }
         }
         HorizontalDivider(color = line)
@@ -317,10 +471,17 @@ private fun Candidates(index: Int, repos: List<GhRepo>, onIntent: (JobIntent) ->
     }
 }
 
+// From AI memory alone nothing is verified: amber ink, as in the design.
+private fun verdictKind(f: Finding) = when (f.verdict) {
+    Verdict.DISPUTED -> ChipKind.Bad
+    Verdict.CONFIRMED, Verdict.SUPPORTED -> ChipKind.Ok
+    else -> if (f.basis == Basis.AI_KNOWLEDGE && f.verdict != Verdict.NOT_FOUND) ChipKind.Warn else ChipKind.Unclear
+}
+
 @Composable
 private fun SectionLabel(text: String, modifier: Modifier = Modifier) = Text(text, modifier, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
 
-private fun icon(t: EntityType): ImageVector = when (t) {
+private fun icon(t: EntityType, subtype: MediaType? = null): ImageVector = when (t) {
     EntityType.REPO -> Icons.Filled.Build
     EntityType.APP -> Icons.Filled.Phone
     EntityType.PRODUCT -> Icons.Filled.ShoppingCart
@@ -328,7 +489,14 @@ private fun icon(t: EntityType): ImageVector = when (t) {
     EntityType.PERSON -> Icons.Filled.Person
     EntityType.PLACE -> Icons.Filled.Place
     EntityType.RECIPE -> Icons.Filled.Favorite
-    EntityType.MEDIA -> Icons.Filled.PlayArrow
+    EntityType.MEDIA -> when (subtype) {
+        MediaType.MOVIE -> StatusIcons.Movie
+        MediaType.SERIES -> StatusIcons.Series
+        MediaType.SONG -> StatusIcons.Song
+        MediaType.GAME -> StatusIcons.Game
+        MediaType.ANIME -> StatusIcons.Anime
+        MediaType.OTHER, null -> Icons.Filled.PlayArrow
+    }
     EntityType.CLAIM -> Icons.Filled.Warning
     EntityType.OTHER -> Icons.Filled.Info
 }

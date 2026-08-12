@@ -1,5 +1,6 @@
 package dev.wolzard.recon.feature.settings
 
+import dev.wolzard.recon.data.gemini.GeminiSession
 import dev.wolzard.recon.core.port.Secret
 import dev.wolzard.recon.feature.signin.SignInViewModelTest.FakeSecrets
 import kotlinx.coroutines.flow.first
@@ -15,7 +16,7 @@ class SettingsViewModelTest {
     private val vm = SettingsViewModel(secrets)
 
     @Test fun startsFromWhatIsStored() {
-        secrets.put(Secret.GEMINI_COOKIES, "__Secure-1PSID=x")
+        GeminiSession.save(secrets, "__Secure-1PSID=x")
         val state = SettingsViewModel(secrets).state.value
         assertTrue(state.signedIn)
         assertFalse(state.hasGitHubToken)
@@ -31,10 +32,11 @@ class SettingsViewModelTest {
     }
 
     @Test fun signOutForgetsCookiesAndAsksTheRouteToClearTheWebView() {
-        secrets.put(Secret.GEMINI_COOKIES, "__Secure-1PSID=x")
+        GeminiSession.save(secrets, "__Secure-1PSID=x")
         val signedIn = SettingsViewModel(secrets)
         signedIn.onIntent(SettingsIntent.SignOut)
         assertNull(secrets.get(Secret.GEMINI_COOKIES))
+        assertNull(secrets.get(Secret.GEMINI_VERIFIED))
         assertFalse(signedIn.state.value.signedIn)
         assertEquals(SettingsEffect.ClearWebViewCookies, runBlocking { signedIn.effects.first() })
     }

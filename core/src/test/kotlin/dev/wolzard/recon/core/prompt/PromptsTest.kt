@@ -112,4 +112,26 @@ class PromptsTest {
         assertTrue(Prompts.ANALYZE_SCHEMA.contains("\"media\""))
         assertTrue(Prompts.ANALYZE_SCHEMA.contains("\"answer\""))
     }
+
+    // --- D24 claim domain and named source
+
+    @Test fun analyzeAsksForClaimDomainAndSchemaHasIt() {
+        val p = Prompts.analyze("English")
+        assertTrue(p.contains("domain: for claims only"))
+        assertTrue(p.contains("\"health\", \"legal\", \"financial\" or \"other\""))
+        assertTrue(Prompts.ANALYZE_SCHEMA.contains("\"domain\""))
+        // optional: not in the entity's required list
+        assertFalse(Prompts.ANALYZE_SCHEMA.contains("\"required\": [\"type\",\"name\",\"qualifier\",\"evidence\",\"saidInVideo\",\"domain\"]"))
+    }
+
+    @Test fun researchPromptRequiresANamedSourceForSensitiveClaims() {
+        val p = Prompts.research(ctx, listOf(ResearchItem(claim)))
+        assertTrue(p.contains("- source:"))
+        assertTrue(p.contains("A health, legal or financial claim without a named source must be \"unclear\""))
+        assertTrue(p.contains("\"source\":\"\""))
+    }
+
+    @Test fun knowledgePromptStillMakesEveryClaimUnclear() {
+        assertTrue(Prompts.knowledge(ctx, listOf(ResearchItem(claim))).contains("for claims: always \"unclear\""))
+    }
 }

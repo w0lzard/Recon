@@ -9,7 +9,8 @@ import java.io.IOException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-class HttpResult(val code: Int, val body: String, val headers: Headers)
+/** [url] is where the call ended after redirects. */
+class HttpResult(val code: Int, val body: String, val headers: Headers, val url: String = "")
 
 /** Executes the call off-thread; cancelling the coroutine cancels the HTTP call. */
 suspend fun Call.await(): HttpResult = suspendCancellableCoroutine { cont ->
@@ -18,7 +19,7 @@ suspend fun Call.await(): HttpResult = suspendCancellableCoroutine { cont ->
         override fun onFailure(call: Call, e: IOException) = cont.resumeWithException(e)
         override fun onResponse(call: Call, response: Response) {
             val result = try {
-                response.use { HttpResult(it.code, it.body.string(), it.headers) }
+                response.use { HttpResult(it.code, it.body.string(), it.headers, it.request.url.toString()) }
             } catch (e: IOException) {
                 cont.resumeWithException(e); return
             }

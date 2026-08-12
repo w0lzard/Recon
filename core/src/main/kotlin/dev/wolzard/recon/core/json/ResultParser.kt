@@ -3,8 +3,10 @@ package dev.wolzard.recon.core.json
 import dev.wolzard.recon.core.model.AnalysisResult
 import dev.wolzard.recon.core.model.Answer
 import dev.wolzard.recon.core.model.AnswerStatus
+import dev.wolzard.recon.core.model.MediaType
 import dev.wolzard.recon.core.model.AnalyzerException
 import dev.wolzard.recon.core.model.Basis
+import dev.wolzard.recon.core.model.ClaimDomain
 import dev.wolzard.recon.core.model.Entity
 import dev.wolzard.recon.core.model.EntityType
 import dev.wolzard.recon.core.model.Evidence
@@ -31,6 +33,7 @@ object ResultParser {
     private const val MAX_STRING = 500
     private const val MAX_FACTS = 5
     private const val MAX_ANSWER_SOURCES = 4
+    const val MAX_TITLE = 80
 
     private val json = Json { isLenient = true; ignoreUnknownKeys = true }
     private val ownerRe = Regex("^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$")
@@ -70,7 +73,21 @@ object ResultParser {
             else -> AnswerStatus.UNCLEAR
         }
         val confidence = (o["confidence"] as? JsonPrimitive)?.doubleOrNull ?: 0.0
-        return Answer(text, status, confidence.coerceIn(0.0, 1.0), sources)
+        // D26: label fields are display-only and never touch the status above.
+        val kind = o.str("kind")?.trim()?.lowercase()?.let { w -> EntityType.entries.firstOrNull { it.wire == w } }?.takeIf { it != EntityType.OTHER }
+        val subtype = if (kind == EntityType.MEDIA) MediaType.fromWire(o.str("subtype")) else null
+        return Answer(text, status, confidence.coerceIn(0.0, 1.0), sources, kind, subtype, label(o.str("title")))
+    }
+
+    /**
+     * A short display title (D26): URLs, control characters and the viewer-text delimiters removed, whitespace collapsed,
+     * capped at [MAX_TITLE] with an ellipsis. Blank = null.
+     */
+    internal fun label(s: String?): String? {
+        val t = s.orEmpty().replace(urlRe, "").replace("<<<", "").replace(">>>", "")
+            .replace(Regex("[\\p{Cntrl}]"), " ").replace(Regex("\\s+"), " ").trim()
+        if (t.isEmpty()) return null
+        return if (t.length <= MAX_TITLE) t else t.take(MAX_TITLE - 1).trimEnd() + "…"
     }
 
     private fun entity(o: JsonObject): Entity? {
@@ -92,6 +109,8 @@ object ResultParser {
             qualifier = qualifier?.take(MAX_STRING),
             evidence = Evidence.fromWire(o.str("evidence")),
             saidInVideo = o.str("saidInVideo")?.trim().orEmpty().take(MAX_STRING),
+            domain = if (type == EntityType.CLAIM) ClaimDomain.fromWire(o.str("domain")) else null,
+            subtype = if (type == EntityType.MEDIA) MediaType.fromWire(o.str("subtype")) else null,
         )
     }
 
@@ -127,10 +146,15 @@ object ResultParser {
             )
         }
         val knowledge = cap == VerdictCap.KNOWLEDGE
+        // Without sources there is nothing to name, so knowledge answers carry none whatever the model wrote.
+        val source = if (knowledge) null else clean(o.str("source")).takeIf { it.isNotEmpty() }
+        var verdict = verdict(item.entity.type, o.str("verdict"), cap)
+        // D24: a health, legal or financial claim is Supported or Disputed only on a named source.
+        if (item.entity.type == EntityType.CLAIM && item.entity.domain?.sensitive == true && source == null) verdict = Verdict.UNCLEAR
         return Finding(
             entity = item.entity,
             researcher = if (knowledge) "knowledge" else "web",
-            verdict = verdict(item.entity.type, o.str("verdict"), cap),
+            verdict = verdict,
             title = clean(o.str("title")).ifEmpty { item.entity.name },
             whatItIs = whatItIs,
             keyFacts = keyFacts,
@@ -138,6 +162,7 @@ object ResultParser {
             whyInVideo = whyInVideo,
             primaryLink = null,
             basis = if (knowledge) Basis.AI_KNOWLEDGE else Basis.WEB_SOURCES,
+            source = source,
         )
     }
 

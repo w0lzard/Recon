@@ -16,6 +16,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import okhttp3.FormBody
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
@@ -48,6 +49,8 @@ class GeminiWebClient(
     private val json = Json { isLenient = true }
     private val lock = Mutex()
     private var session: Session? = null
+    // ponytail: one candidate jar for the whole client; a job running during a sign-in check would use it too. Pass the jar down if that matters.
+    @Volatile private var candidate: String? = null
     private var reqId = Random.nextInt(10_000, 100_000)
 
     /** Uploads one file and returns the id that [generate] takes. */
@@ -73,10 +76,23 @@ class GeminiWebClient(
         return replyText(r.body)
     }
 
-    /** Sign-in check: re-reads the app page with the saved cookies. @throws AnalyzerException */
-    suspend fun verify() {
-        session = null
-        session()
+    /**
+     * Sign-in check for [cookies] that are not saved yet: one cheap GET of the app page with them (D25).
+     * Returns the cookies to save (Google may have rotated some). @throws AnalyzerException:
+     * NETWORK, or API_KEY_INVALID (message [GOOGLE_CHALLENGE] when Google answered with a consent or verify page).
+     */
+    suspend fun verify(cookies: String): String {
+        candidate = cookies
+        try {
+            session = null
+            session()
+            return candidate ?: cookies
+        } catch (e: AnalyzerException) {
+            session = null
+            throw e
+        } finally {
+            candidate = null
+        }
     }
 
     // --- session: GET /app carries the access token (SNlM0e) and request parameters in the page
@@ -88,6 +104,7 @@ class GeminiWebClient(
 
     private suspend fun initOnce(): Session? {
         val r = send(Request.Builder().url("$appUrl/app").get().header("Origin", ORIGIN).header("Referer", "$ORIGIN/").build())
+        if (isGoogleChallenge(r.url)) throw AnalyzerException(FailureReason.API_KEY_INVALID, message = GOOGLE_CHALLENGE)
         if (r.code != 200) return null
         fun field(name: String) = Regex("\"$name\":\\s*\"(.*?)\"").find(r.body)?.groupValues?.get(1)
         val at = field("SNlM0e") ?: return null // signed-out (guest) pages have none
@@ -187,14 +204,17 @@ class GeminiWebClient(
     // --- HTTP with the cookie jar (one header string; Set-Cookie updates are merged back and saved)
 
     private suspend fun send(request: Request, withCookies: Boolean = true): HttpResult {
-        val jar = secrets.get(Secret.GEMINI_COOKIES) ?: throw AnalyzerException(FailureReason.API_KEY_MISSING)
+        val jar = candidate ?: secrets.get(Secret.GEMINI_COOKIES) ?: throw AnalyzerException(FailureReason.API_KEY_MISSING)
         val r = try {
             http.newCall(if (withCookies) request.newBuilder().header("Cookie", jar).build() else request).await()
         } catch (e: IOException) {
-            throw AnalyzerException(FailureReason.NETWORK, cause = e)
+            // No cause: a stack trace in a crash report must not carry anything from the request (D25).
+            throw AnalyzerException(FailureReason.NETWORK, message = CookieHeader.redact("${e::class.simpleName}: ${e.message}"))
+        } catch (_: IllegalArgumentException) {
+            throw AnalyzerException(FailureReason.API_KEY_INVALID, message = "saved Cookie header is malformed") // OkHttp refused the header
         }
         val merged = mergeCookies(jar, r.headers.values("Set-Cookie"))
-        if (merged != jar) secrets.put(Secret.GEMINI_COOKIES, merged)
+        if (merged != jar) if (candidate != null) candidate = merged else secrets.put(Secret.GEMINI_COOKIES, merged)
         return r
     }
 
@@ -203,6 +223,14 @@ class GeminiWebClient(
 
     companion object {
         private const val ORIGIN = "https://gemini.google.com"
+        const val GOOGLE_CHALLENGE = "Google consent or challenge page"
+
+        /** Google sent the request to its cookie-consent page or a sign-in challenge (verify it's you, captcha). */
+        fun isGoogleChallenge(url: String): Boolean {
+            val u = url.toHttpUrlOrNull() ?: return false
+            return u.host == "consent.google.com" || u.host.startsWith("accounts.google.") &&
+                (u.encodedPath.contains("/challenge") || u.encodedPath.contains("/speedbump") || u.encodedPath.contains("/deniedsigninrejected"))
+        }
         private const val DEFAULT_PUSH_ID = "feeds/mcudyrk2a4khkz"
         private val DEFAULT_METADATA = listOf<JsonElement>(
             JsonPrimitive(""), JsonPrimitive(""), JsonPrimitive(""), JsonNull, JsonNull, JsonNull, JsonNull, JsonNull, JsonNull, JsonPrimitive(""),

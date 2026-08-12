@@ -3,7 +3,9 @@ package dev.wolzard.recon.feature.job
 import androidx.lifecycle.viewModelScope
 import dev.wolzard.recon.core.job.UserAction
 import dev.wolzard.recon.core.link.LinkRouter
+import dev.wolzard.recon.core.model.LinkPreview
 import dev.wolzard.recon.core.model.UserContext
+import dev.wolzard.recon.core.model.FailureReason
 import dev.wolzard.recon.core.model.GhRepo
 import dev.wolzard.recon.core.model.Job
 import dev.wolzard.recon.core.model.JobResult
@@ -28,9 +30,13 @@ class JobActions(private val store: JobStore, private val cancelWork: (Job) -> U
      * D23 Start/Skip: validates the link again (it came from a share or paste, possibly long ago), then creates and
      * queues the job with the cleaned context. Null = the link is not usable and nothing was created.
      */
-    suspend fun start(shared: String, context: String?): String? {
+    suspend fun start(shared: String, context: String?, preview: LinkPreview? = null): String? {
         val link = LinkRouter.validLink(shared) ?: return null
         val id = store.create(link, null, UserContext.clean(context))
+        // D26: kept for Home and the Job screen; the thumbnail only if https.
+        if (preview != null) store.update(id) {
+            it.copy(videoTitle = preview.title, videoDurationSec = preview.durationSec, thumbnailUrl = preview.thumbnailUrl?.takeIf { u -> u.startsWith("https://") })
+        }
         enqueue(id, UserAction.RUN)
         return id
     }
@@ -61,6 +67,8 @@ class JobActions(private val store: JobStore, private val cancelWork: (Job) -> U
 
 class JobViewModel(private val id: String, store: JobStore, private val actions: JobActions) :
     MviViewModel<JobViewState, JobIntent, JobEffect>(JobViewState()) {
+    private companion object { val SIGN_IN_FAILURES = setOf(FailureReason.API_KEY_MISSING, FailureReason.API_KEY_INVALID) }
+
     init {
         viewModelScope.launch {
             store.observe(id).collect { job -> setState { JobViewState(job, actions.result(job)) } }
@@ -76,6 +84,10 @@ class JobViewModel(private val id: String, store: JobStore, private val actions:
             else -> viewModelScope.launch {
                 when (intent) {
                     JobIntent.Retry -> actions.requeue(id, UserAction.RUN)
+                    // D25: a job that stopped on sign-in runs again with its saved link and context; a shared file's copy is gone.
+                    JobIntent.SignedInAgain -> state.value.job
+                        ?.takeIf { it.state == JobState.FAILED && it.failure in SIGN_IN_FAILURES && it.localUri == null }
+                        ?.let { actions.requeue(id, UserAction.RUN) }
                     JobIntent.CheckAgain, JobIntent.LookUp -> actions.requeue(id, UserAction.RESEARCH_ONLY)
                     JobIntent.TrySharper -> actions.requeue(id, UserAction.TRY_SHARPER)
                     is JobIntent.Pick -> actions.pick(id, intent.findingIndex, intent.repo)

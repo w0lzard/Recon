@@ -1,5 +1,6 @@
 package dev.wolzard.recon.feature.context
 
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -20,7 +21,8 @@ class ContextScreenTest {
 
     @Test fun showsHostTitleCounterChipsAndBothButtons() {
         compose.setContent { ContextScreen(base) { intents += it } }
-        compose.onNodeWithText("Add context (optional)").assertExists()
+        compose.onNodeWithText("Add context").assertExists()
+        compose.onNodeWithText("OPTIONAL").assertExists()
         compose.onNodeWithTag("context_host").assertExists()
         compose.onNodeWithText("instagram.com").assertExists()
         compose.onNodeWithText("0/300").assertExists()
@@ -32,8 +34,8 @@ class ContextScreenTest {
     @Test fun buttonsAndChipsSendIntents() {
         compose.setContent { ContextScreen(base) { intents += it } }
         compose.onNodeWithText("What song is this?").performScrollTo().performClick()
-        compose.onNodeWithText("Start").performScrollTo().performClick()
-        compose.onNodeWithText("Skip").performScrollTo().performClick()
+        compose.onNodeWithText("Start").performClick()
+        compose.onNodeWithText("Skip").performClick()
         assertEquals(listOf(ContextIntent.Suggest("What song is this?"), ContextIntent.Start, ContextIntent.Skip), intents)
     }
 
@@ -47,7 +49,14 @@ class ContextScreenTest {
         compose.setContent { ContextScreen(base.copy(error = ContextCopy.INVALID_LINK, text = "abc", starting = true)) { intents += it } }
         compose.onNodeWithText(ContextCopy.INVALID_LINK).assertExists()
         compose.onNodeWithText("3/300").assertExists()
-        compose.onNodeWithText("Start").performScrollTo().performClick()
+        compose.onNodeWithText("Start").performClick()
         assertEquals(emptyList<ContextIntent>(), intents)
+    }
+
+    @Test fun linkIconUntilAThumbnailAndLengthInTheDetailLine() { // D26
+        val p = dev.wolzard.recon.core.model.LinkPreview("Glass Harbour", 38, "https://i.ytimg.com/vi/x/hq.jpg")
+        compose.setContent { ContextScreen(base.copy(preview = p)) { intents += it } } // no loader provided: the fallback stays
+        compose.onNodeWithTag("thumb_fallback").assertExists()
+        compose.onNodeWithTag("context_detail").assertTextEquals("/reel/abc/ · 0:38 video")
     }
 }

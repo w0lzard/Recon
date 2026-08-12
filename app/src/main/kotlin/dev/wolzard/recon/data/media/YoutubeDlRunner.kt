@@ -70,7 +70,7 @@ class YoutubeDlRunner(private val context: Context) : YtDlpRunner {
     }
 
     companion object {
-        private val flagsWithoutValue = setOf("--no-playlist", "--no-simulate")
+        private val flagsWithoutValue = setOf("--no-playlist", "--no-simulate", "--dump-json", "--skip-download") // last two: D26 link preview
 
         /** http(s) only; the URL goes after "--" so yt-dlp can never read it as an option. */
         fun request(url: String, args: List<String>): YoutubeDLRequest {

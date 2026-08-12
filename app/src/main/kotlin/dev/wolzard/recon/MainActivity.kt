@@ -1,5 +1,8 @@
 package dev.wolzard.recon
 
+import androidx.compose.runtime.CompositionLocalProvider
+import dev.wolzard.recon.data.link.ThumbnailLoader
+import dev.wolzard.recon.designsystem.LocalThumbnails
 import dev.wolzard.recon.data.notice.Notice
 import android.Manifest
 import android.content.Intent
@@ -20,8 +23,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
-import dev.wolzard.recon.core.port.Secret
 import dev.wolzard.recon.core.port.SecretStore
+import dev.wolzard.recon.data.gemini.GeminiSession
 import dev.wolzard.recon.data.update.UpdateChecker
 import dev.wolzard.recon.designsystem.openCustomTab
 import dev.wolzard.recon.designsystem.openInBrowser
@@ -59,6 +62,7 @@ class MainActivity : ComponentActivity() {
     private val intake: ShareIntake by inject()
     private val clock: () -> Long by inject()
     private val updates: UpdateChecker by inject()
+    private val thumbnails: ThumbnailLoader by inject()
     private val notice by lazy { Notice(getSharedPreferences(Notice.PREFS, MODE_PRIVATE)) }
     private val shares by lazy { ShareGate(notice, intake::accept) }
     /** A job to open: from a share or a notification's deep link. */
@@ -86,17 +90,19 @@ class MainActivity : ComponentActivity() {
         shares.held = savedInstanceState?.let { BundleCompat.getParcelable(it, HELD_SHARE, Intent::class.java) }
         if (savedInstanceState == null) handle(intent)
         lifecycleScope.launch { updates.check() } // throttled to once per 24 h; errors stay silent
-        val signedIn = { secrets.get(Secret.GEMINI_COOKIES) != null }
-        val start = startDestination(notice.needed, signedIn())
+        val signedIn = { GeminiSession.signedIn(secrets) }
+        val start = startDestination(notice.needed, GeminiSession.atLaunch(secrets))
         setContent {
             ReconTheme {
                 LaunchedEffect(Unit) { firstFrameDrawn = true }
-                ReconNavHost(
-                    start, openJob, openContext, clock,
-                    noticeNeeded = { notice.needed },
-                    signedIn = signedIn,
-                    onNoticeAccepted = { lifecycleScope.launch { show(shares.accepted()) } },
-                )
+                CompositionLocalProvider(LocalThumbnails provides thumbnails::load) {
+                    ReconNavHost(
+                        start, openJob, openContext, clock,
+                        noticeNeeded = { notice.needed },
+                        signedIn = signedIn,
+                        onNoticeAccepted = { lifecycleScope.launch { show(shares.accepted()) } },
+                    )
+                }
             }
         }
     }

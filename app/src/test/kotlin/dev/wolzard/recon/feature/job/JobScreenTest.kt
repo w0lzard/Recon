@@ -1,9 +1,13 @@
 package dev.wolzard.recon.feature.job
 
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -59,7 +63,7 @@ class JobScreenTest {
     @Test fun downloadFailed() = assertFailure(FailureReason.DOWNLOAD_FAILED, "Share the video file instead", "Retry")
     @Test fun videoUnreadable() = assertFailure(FailureReason.VIDEO_UNREADABLE, "Share a different file")
     @Test fun apiKeyMissing() = assertFailure(FailureReason.API_KEY_MISSING, "Sign in")
-    @Test fun apiKeyInvalid() = assertFailure(FailureReason.API_KEY_INVALID, "Sign in")
+    @Test fun apiKeyInvalid() = assertFailure(FailureReason.API_KEY_INVALID, "Sign in again")
     @Test fun network() = assertFailure(FailureReason.NETWORK, "Retry")
     @Test fun modelOutputInvalid() = assertFailure(FailureReason.MODEL_OUTPUT_INVALID, "Retry")
     @Test fun modelBusy() = assertFailure(FailureReason.MODEL_BUSY, "Retry")
@@ -172,7 +176,7 @@ class JobScreenTest {
     @Test fun noSuggestionsViewWithoutHtml() {
         show(job(JobState.DONE), result(listOf(finding(entity(EntityType.APP, "X"), Verdict.BEST_MATCH, Basis.AI_KNOWLEDGE))))
         compose.onNodeWithTag("search-suggestions").assertDoesNotExist()
-        compose.onNodeWithText("Sources").assertDoesNotExist()
+        compose.onNodeWithText("SOURCES", substring = true).assertDoesNotExist()
     }
 
     @Test fun answeringModelsAreShown() {
@@ -215,12 +219,12 @@ class JobScreenTest {
         show(asked(JobState.ANALYSING))
         compose.onNodeWithText("YOUR QUESTION").assertExists()
         compose.onNodeWithTag("your_question").assertExists()
-        compose.onNodeWithText("What app is this?").assertExists()
+        compose.onNodeWithText("“What app is this?”").assertExists()
     }
 
     @Test fun questionIsEchoedWhenFailed() {
         show(asked(JobState.FAILED).copy(failure = FailureReason.NETWORK))
-        compose.onNodeWithText("What app is this?").assertExists()
+        compose.onNodeWithText("“What app is this?”").assertExists()
     }
 
     @Test fun noQuestionMeansNoQuestionBlockOrAnswerCard() {
@@ -235,7 +239,7 @@ class JobScreenTest {
         compose.onNodeWithText("It is Codeium.").assertExists()
         compose.onNodeWithText("Verified").assertExists()
         compose.onNodeWithText("90%").assertExists()
-        compose.onNodeWithText("• caption at the start").assertExists()
+        compose.onAllNodesWithText("caption at the start").assertCountEquals(2) // in the card and in the shared source list
         val y = { tag: String -> compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.top }
         val summaryTop = compose.onNodeWithText("SUMMARY").fetchSemanticsNode().boundsInRoot.top
         val entitiesTop = compose.onNodeWithText("ENTITIES FOUND · 1", substring = true).fetchSemanticsNode().boundsInRoot.top
@@ -262,5 +266,115 @@ class JobScreenTest {
         show(job(JobState.DONE), result(listOf(f)))
         compose.onNodeWithText("MEDIA").assertExists()
         compose.onNodeWithText("Watch or listen: how").assertExists()
+    }
+
+    // --- Design turn 3 (2026-10-14): shared source numbering, no-source line, media qualifier
+
+    @Test fun answerSourcesAreNumberedAfterTheJobSources() {
+        val a = dev.wolzard.recon.core.model.Answer("It is Codeium.", dev.wolzard.recon.core.model.AnswerStatus.VERIFIED, 0.9, listOf("caption at 0:04", "codeium.com pricing page"))
+        val r = answered(a).copy(sources = listOf(Source("Codeium docs", "https://codeium.com/docs")))
+        show(asked(), r)
+        compose.onNodeWithText("SOURCES · 3").performScrollTo().assertExists()
+        compose.onAllNodesWithText("2").assertCountEquals(2) // "caption at 0:04" in the card and in the list
+        compose.onAllNodesWithText("3").assertCountEquals(2)
+        compose.onAllNodesWithContentDescription("Opens in browser").assertCountEquals(1) // answer sources are plain text, never links
+    }
+
+    @Test fun unverifiedAnswerWithoutSourcesSaysSo() {
+        val a = dev.wolzard.recon.core.model.Answer("Probably Codeium.", dev.wolzard.recon.core.model.AnswerStatus.UNVERIFIED, 0.5)
+        show(asked(), answered(a))
+        compose.onNodeWithText("Unverified").assertExists()
+        compose.onNodeWithText(JobCopy.NO_SOURCE).assertExists()
+        compose.onNodeWithTag("no_source").assertExists() // icon and text in one row
+    }
+
+    @Test fun mediaTitleCarriesItsQualifier() {
+        val f = finding(entity(EntityType.MEDIA, "Paper Satellites").copy(qualifier = "film, 2019"), Verdict.CONFIRMED, Basis.WIKIPEDIA)
+        show(job(JobState.DONE), result(listOf(f)))
+        compose.onNodeWithText("Paper Satellites film, 2019").assertExists()
+    }
+
+    // --- D26: answer label and title
+
+    @Test fun answerCardShowsKindSubtypeAndTitle() {
+        val a = dev.wolzard.recon.core.model.Answer("Plays under the voiceover.", dev.wolzard.recon.core.model.AnswerStatus.VERIFIED, 0.8, listOf("lyrics at 0:09"),
+            EntityType.MEDIA, dev.wolzard.recon.core.model.MediaType.SONG, "Glass Harbour")
+        show(asked(), answered(a))
+        compose.onNodeWithText("ANSWER · MEDIA · SONG").assertExists()
+        compose.onNodeWithTag("answer_title").assertExists()
+        compose.onNodeWithText("Glass Harbour").assertExists()
+    }
+
+    @Test fun answerLabelLeavesOutMissingParts() {
+        fun label(kind: EntityType?, sub: dev.wolzard.recon.core.model.MediaType?) =
+            JobCopy.answerLabel(dev.wolzard.recon.core.model.Answer("x", dev.wolzard.recon.core.model.AnswerStatus.UNCLEAR, 0.1, emptyList(), kind, sub, null))
+        assertEquals("ANSWER", label(null, null))
+        assertEquals("ANSWER · BOOK", label(EntityType.BOOK, null))
+        assertEquals("ANSWER · MEDIA", label(EntityType.MEDIA, dev.wolzard.recon.core.model.MediaType.OTHER))
+        assertEquals("ANSWER", JobCopy.answerLabel(null))
+    }
+
+    @Test fun mediaFindingShowsSubtypeLabelAndIcon() {
+        val f = finding(entity(EntityType.MEDIA, "Paper Satellites").copy(subtype = dev.wolzard.recon.core.model.MediaType.MOVIE), Verdict.CONFIRMED, Basis.WIKIPEDIA)
+        show(job(JobState.DONE), result(listOf(f)))
+        compose.onNodeWithText("MEDIA · MOVIE").assertExists()
+        compose.onNodeWithContentDescription("MEDIA · MOVIE").assertExists() // the per-type icon
+    }
+
+    @Test fun typeLabelOnlyAddsKnownMediaSubtypes() {
+        val m = dev.wolzard.recon.core.model.MediaType.entries
+        assertEquals(listOf("MEDIA · MOVIE", "MEDIA · SERIES", "MEDIA · SONG", "MEDIA · GAME", "MEDIA · ANIME", "MEDIA"), m.map { JobCopy.typeLabel(EntityType.MEDIA, it) })
+        assertEquals("MEDIA", JobCopy.typeLabel(EntityType.MEDIA, null))
+        assertEquals("APP", JobCopy.typeLabel(EntityType.APP, dev.wolzard.recon.core.model.MediaType.SONG))
+    }
+
+    // --- D24: advice line and waiting without a time
+
+    private fun claim(name: String, domain: dev.wolzard.recon.core.model.ClaimDomain?, verdict: Verdict = Verdict.UNCLEAR) =
+        finding(entity(EntityType.CLAIM, name).copy(domain = domain), verdict, Basis.WEB_SOURCES)
+
+    @Test fun healthLegalAndFinancialClaimsShowTheAdviceLineAndOneFooter() {
+        val d = dev.wolzard.recon.core.model.ClaimDomain.values()
+        show(job(JobState.DONE), result(listOf(claim("h", d[0]), claim("l", d[1]), claim("f", d[2]))))
+        compose.onAllNodesWithTag("advice_line").assertCountEquals(3)
+        compose.onAllNodesWithText(JobCopy.NOT_ADVICE).assertCountEquals(4) // one per claim + the footer
+        compose.onNodeWithTag("advice_footer").performScrollTo().assertExists()
+    }
+
+    @Test fun otherOrUntaggedClaimsHaveNoAdviceLineOrFooter() {
+        show(job(JobState.DONE), result(listOf(claim("o", dev.wolzard.recon.core.model.ClaimDomain.OTHER, Verdict.SUPPORTED), claim("n", null, Verdict.DISPUTED))))
+        compose.onAllNodesWithTag("advice_line").assertCountEquals(0)
+        compose.onAllNodesWithTag("advice_footer").assertCountEquals(0)
+        compose.onAllNodesWithText(JobCopy.NOT_ADVICE).assertCountEquals(0)
+    }
+
+    @Test fun adviceLineIsOnlyOnTheSensitiveClaim() {
+        show(job(JobState.DONE), result(listOf(claim("sensitive", dev.wolzard.recon.core.model.ClaimDomain.HEALTH), claim("plain", dev.wolzard.recon.core.model.ClaimDomain.OTHER, Verdict.SUPPORTED))))
+        compose.onAllNodesWithTag("advice_line").assertCountEquals(1)
+        compose.onAllNodesWithText(JobCopy.NOT_ADVICE).assertCountEquals(2) // the line and the footer
+    }
+
+    @Test fun namedSourceIsShownOnTheClaim() {
+        val f = claim("c", dev.wolzard.recon.core.model.ClaimDomain.HEALTH, Verdict.DISPUTED).copy(source = "WHO fact sheet")
+        show(job(JobState.DONE), result(listOf(f)))
+        compose.onNodeWithText("Source: WHO fact sheet").assertExists()
+    }
+
+    @Test fun waitingWithoutATimeShowsTryAgainLaterAndNoClock() {
+        show(job(JobState.WAITING_QUOTA, retryAt = null))
+        compose.onAllNodesWithText(JobCopy.TRY_LATER, substring = true).assertCountEquals(2) // sentence + reset card
+        compose.onAllNodesWithText("Quota resets at", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("~", substring = true).assertCountEquals(0)
+        val clock = Regex("""\b\d{1,2}:\d{2}\b""")
+        val texts = compose.onRoot(useUnmergedTree = true).fetchSemanticsNode().let { n ->
+            fun walk(x: androidx.compose.ui.semantics.SemanticsNode): List<String> =
+                (x.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)?.map { t -> t.text }.orEmpty()) + x.children.flatMap(::walk)
+            walk(n)
+        }
+        assertEquals(emptyList<String>(), texts.filter { clock.containsMatchIn(it) })
+    }
+
+    @Test fun failedQuotaWithoutATimeDoesNotInventOne() {
+        assertEquals("You've reached your Gemini usage limit. Try again later.", JobCopy.failureMessage(FailureReason.QUOTA_EXCEEDED, null))
     }
 }

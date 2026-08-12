@@ -10,10 +10,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.toRoute
 import dev.wolzard.recon.feature.context.ContextRoute
 import dev.wolzard.recon.feature.home.HomeRoute
+import dev.wolzard.recon.feature.job.JobIntent
 import dev.wolzard.recon.feature.job.JobRoute
+import dev.wolzard.recon.feature.job.JobViewModel
 import dev.wolzard.recon.feature.notice.NoticeScreen
 import dev.wolzard.recon.feature.settings.SettingsRoute
 import dev.wolzard.recon.feature.signin.SignInRoute
@@ -28,6 +31,8 @@ import org.koin.core.parameter.parametersOf
 @Serializable object NoticeDestination
 @Serializable data class JobDestination(val id: String)
 @Serializable data class ContextDestination(val link: String)
+
+private const val SIGNED_IN_AGAIN = "signedInAgain"
 
 /** T16: the personal-use notice comes before everything, then Gemini sign-in if signed out (D22). */
 fun startDestination(noticeNeeded: Boolean, signedIn: Boolean): Any = when {
@@ -66,8 +71,13 @@ fun ReconNavHost(
             }
             composable<JobDestination> { entry ->
                 val id = entry.toRoute<JobDestination>().id
+                val vm: JobViewModel = koinViewModel(key = id) { parametersOf(id) }
+                val signedInAgain by entry.savedStateHandle.getStateFlow(SIGNED_IN_AGAIN, false).collectAsStateWithLifecycle()
+                LaunchedEffect(signedInAgain) {
+                    if (signedInAgain) { entry.savedStateHandle[SIGNED_IN_AGAIN] = false; vm.onIntent(JobIntent.SignedInAgain) }
+                }
                 JobRoute(
-                    koinViewModel(key = id) { parametersOf(id) }, clock,
+                    vm, clock,
                     onBack = { nav.popBackStack() },
                     onSignIn = { nav.navigate(SignInDestination) },
                     onSettings = { nav.navigate(SettingsDestination) },
@@ -89,7 +99,12 @@ fun ReconNavHost(
                 }
             }
             composable<SignInDestination> {
-                SignInRoute(koinViewModel()) { nav.navigate(HomeDestination) { popUpTo(nav.graph.id) { inclusive = true } } }
+                SignInRoute(koinViewModel()) {
+                    // D25: "Sign in again" on a job returns to that job, which runs again; otherwise start over at Home.
+                    val job = nav.previousBackStackEntry?.takeIf { it.destination.hasRoute<JobDestination>() }
+                    if (job != null) { job.savedStateHandle[SIGNED_IN_AGAIN] = true; nav.popBackStack() }
+                    else nav.navigate(HomeDestination) { popUpTo(nav.graph.id) { inclusive = true } }
+                }
             }
             composable<SettingsDestination> {
                 SettingsRoute(koinViewModel(), onNotice = { nav.navigate(NoticeDestination) }, onSignIn = { nav.navigate(SignInDestination) })

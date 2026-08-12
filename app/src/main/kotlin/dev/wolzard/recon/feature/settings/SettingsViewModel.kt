@@ -4,6 +4,7 @@ import androidx.lifecycle.viewModelScope
 import dev.wolzard.recon.BuildConfig
 import dev.wolzard.recon.core.port.Secret
 import dev.wolzard.recon.core.port.SecretStore
+import dev.wolzard.recon.data.gemini.GeminiSession
 import dev.wolzard.recon.data.update.UpdateChecker
 import dev.wolzard.recon.mvi.MviViewModel
 import dev.wolzard.recon.data.update.UpdateResult
@@ -28,14 +29,14 @@ class SettingsViewModel(
     private fun refresh() {
         setState {
             copy(
-                signedIn = secrets.get(Secret.GEMINI_COOKIES) != null,
+                signedIn = GeminiSession.signedIn(secrets),
                 hasGitHubToken = secrets.get(Secret.GITHUB_TOKEN) != null,
             )
         }
     }
 
     /** Forgets the saved Google cookies; the WebView's own copy is cleared by the route. */
-    private fun signOut() { secrets.put(Secret.GEMINI_COOKIES, null); refresh(); send(SettingsEffect.ClearWebViewCookies) }
+    private fun signOut() { GeminiSession.clear(secrets); refresh(); send(SettingsEffect.ClearWebViewCookies) }
 
     private fun saveGitHubToken(token: String?) { secrets.put(Secret.GITHUB_TOKEN, token?.trim()?.ifEmpty { null }); refresh() }
 

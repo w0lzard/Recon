@@ -14,11 +14,13 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import dev.wolzard.recon.R
 
 /** Status inks are app-level extensions, not M3 roles (design "Recon UI" 1a). */
 @Immutable
@@ -32,21 +34,21 @@ private val LightStatus = StatusColors(Color(0xFF3F6B12), Color(0xFF8A5A00), Col
 private val Lime = Color(0xFFA8E06C)
 private val Ink = Color(0xFF0E1110)
 
-// ponytail: system Sans/Monospace stand in for Inter/JetBrains Mono; bundle the fonts in res/font if exact match matters.
-val Mono = FontFamily.Monospace
-private val Sans = FontFamily.SansSerif
+// D24: Inter and JetBrains Mono (both SIL OFL, docs/licenses), subset to Latin, 369 KB in all. Other scripts fall back to the system font.
+val Mono = FontFamily(Font(R.font.jetbrains_mono_regular, FontWeight.Normal), Font(R.font.jetbrains_mono_medium, FontWeight.Medium))
+private val Sans = FontFamily(Font(R.font.inter_regular, FontWeight.Normal), Font(R.font.inter_medium, FontWeight.Medium), Font(R.font.inter_semibold, FontWeight.SemiBold))
 
 private val Dark = darkColorScheme(
     background = Ink, surface = Ink, onBackground = Color(0xFFE8ECE9), onSurface = Color(0xFFE8ECE9),
     surfaceContainer = Color(0xFF161A18), surfaceContainerHigh = Color(0xFF1F2421),
-    outlineVariant = Color(0xFF2C322F), outline = Color(0xFF2C322F), onSurfaceVariant = Color(0xFF9BA39E),
+    outlineVariant = Color(0xFF2C322F), outline = Color(0xFF6F7873), // outline = control borders, ≥ 3:1 (WCAG 1.4.11); outlineVariant = hairlines onSurfaceVariant = Color(0xFF9BA39E),
     primary = Lime, onPrimary = Ink, error = DarkStatus.bad, onError = Ink,
 )
 
 private val Light = lightColorScheme(
     background = Color(0xFFF4F5F2), surface = Color(0xFFF4F5F2), onBackground = Color(0xFF141816), onSurface = Color(0xFF141816),
     surfaceContainer = Color.White, surfaceContainerHigh = Color(0xFFECEEEA),
-    outlineVariant = Color(0xFFD5D9D4), outline = Color(0xFFD5D9D4), onSurfaceVariant = Color(0xFF545C57),
+    outlineVariant = Color(0xFFD5D9D4), outline = Color(0xFF7A827D), onSurfaceVariant = Color(0xFF545C57),
     primary = Lime, onPrimary = Ink, error = LightStatus.bad, onError = Color.White,
 )
 

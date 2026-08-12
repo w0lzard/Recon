@@ -20,9 +20,9 @@ apps, books, places, repos, products, with sources where it can.
 <br>
 
 <img src="docs/screenshots/readme-home.png" alt="Home" width="190">&nbsp;
-<img src="docs/screenshots/readme-job_running.png" alt="Job in progress" width="190">&nbsp;
-<img src="docs/screenshots/readme-job_candidates.png" alt="Result with repo candidates" width="190">&nbsp;
-<img src="docs/screenshots/readme-settings.png" alt="Settings" width="190">
+<img src="docs/screenshots/readme-context.png" alt="Add context, with the video's thumbnail and length" width="190">&nbsp;
+<img src="docs/screenshots/readme-job_answer.png" alt="Result with the answer to your question" width="190">&nbsp;
+<img src="docs/screenshots/readme-sign_in.png" alt="Sign in" width="190">
 
 </div>
 

@@ -10,5 +10,5 @@ import dev.wolzard.recon.mvi.CollectEffects
 fun SignInRoute(vm: SignInViewModel, onSignedIn: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     CollectEffects(vm.effects) { if (it == SignInEffect.SignedIn) onSignedIn() }
-    SignInScreen(state, vm::onIntent)
+    SignInScreen(state, onIntent = vm::onIntent)
 }

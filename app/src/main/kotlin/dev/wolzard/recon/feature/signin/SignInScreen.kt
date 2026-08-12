@@ -29,6 +29,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -160,7 +162,13 @@ private fun WebStep(state: SignInState, url: String, onIntent: (SignInIntent) ->
         web?.evaluateJavascript(SCROLL_FOCUSED_TO_TOP, null)
     }
     Column(Modifier.fillMaxSize().consumeWindowInsets(WindowInsets.navigationBars).imePadding()) {
-        SlimBar("Sign in to Google", onBack) { TextButton(onClick = onPaste) { Text("Paste cookies") } }
+        SlimBar("Sign in to Google", onBack) {
+            // Lime text only on the dark bar; on the light bar it would be ~1.5:1, so it takes the body ink there.
+            val light = MaterialTheme.colorScheme.background.luminance() > 0.5f
+            TextButton(onClick = onPaste, colors = ButtonDefaults.textButtonColors(contentColor = if (light) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary)) {
+                Text("Paste cookies")
+            }
+        }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         if (state.checking || state.error != null) Status(state, Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         SignInWebView(Modifier.fillMaxWidth().weight(1f).testTag("sign_in_webview"), url, onCreated = { web = it }) { onIntent(SignInIntent.CookiesReceived(it)) }

@@ -2,6 +2,9 @@ package dev.wolzard.recon.feature.signin
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.res.Configuration
+import android.os.Build
+import android.webkit.WebSettings
 import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebStorage
@@ -42,6 +45,14 @@ object SignInWeb {
         setSupportMultipleWindows(false)
         setGeolocationEnabled(false)
         @Suppress("DEPRECATION") saveFormData = false
+        // Dark mode. Current WebViews (targetSdk 33+) give the page prefers-color-scheme from the activity theme
+        // (Theme.Recon's isLightTheme follows the device), and may darken a page with no dark style on API 33+.
+        // Older WebViews ignore the theme and only know force-dark, set here from the device's night mode (API 29-32).
+        if (Build.VERSION.SDK_INT >= 33) isAlgorithmicDarkeningAllowed = true
+        else if (Build.VERSION.SDK_INT >= 29) {
+            val night = web.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+            @Suppress("DEPRECATION") forceDark = if (night) WebSettings.FORCE_DARK_ON else WebSettings.FORCE_DARK_OFF
+        }
     }
 
     /** Main-frame navigations off the allow-list never load here. */

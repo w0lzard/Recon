@@ -15,6 +15,8 @@ import java.util.UUID
 sealed interface ShareOutcome {
     data class Started(val jobId: String) : ShareOutcome
     data class NeedsContext(val link: String) : ShareOutcome
+    /** Share sheet: the video file is already copied to [localUri]; the job is created by Start or Skip. */
+    data class FileNeedsContext(val localUri: String, val sharedText: String) : ShareOutcome
 }
 
 /**
@@ -24,11 +26,12 @@ sealed interface ShareOutcome {
 class ShareIntake(private val context: Context, private val store: JobStore, private val copier: ContentUriFetcher) {
 
     /**
-     * A shared video file starts at once. Text with a valid web link creates nothing yet: the context screen
-     * starts the job (D23). Text without one still becomes a job, which fails with UNSUPPORTED_LINK and says so.
+     * A shared video file starts at once, or with [fileContext] (the share sheet) is only copied, and Start or Skip
+     * creates the job. Text with a valid web link creates nothing yet: the context screen starts the job (D23). Text
+     * without one still becomes a job, which fails with UNSUPPORTED_LINK and says so.
      * @return null if the intent isn't a usable share.
      */
-    suspend fun accept(intent: Intent): ShareOutcome? {
+    suspend fun accept(intent: Intent, fileContext: Boolean = false): ShareOutcome? {
         if (intent.action != Intent.ACTION_SEND) return null
         val type = intent.type.orEmpty()
         val id = if (type.startsWith("video/")) {
@@ -36,7 +39,9 @@ class ShareIntake(private val context: Context, private val store: JobStore, pri
             if (uri.scheme != "content") return null                      // never read file:// from another app
             val dir = File(context.filesDir, "${ContentUriFetcher.SHARED_DIR}/${UUID.randomUUID()}")
             val copy = copier.fetch(uri.toString(), dir).video
-            store.create(intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty(), copy.path)
+            val text = intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
+            if (fileContext) return ShareOutcome.FileNeedsContext(copy.path, text)
+            store.create(text, copy.path)
         } else {
             val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.takeIf { it.isNotBlank() } ?: return null
             LinkRouter.validLink(text)?.let { return ShareOutcome.NeedsContext(it) }

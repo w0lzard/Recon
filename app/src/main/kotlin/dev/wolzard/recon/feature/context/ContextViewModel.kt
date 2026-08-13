@@ -8,12 +8,16 @@ import dev.wolzard.recon.feature.job.JobActions
 import dev.wolzard.recon.mvi.MviViewModel
 import kotlinx.coroutines.launch
 
-/** [preview] (D26) is fetched once in the background; Start and Skip never wait for it. */
-class ContextViewModel(link: String, private val actions: JobActions, preview: (suspend (String) -> LinkPreview?)? = null) :
-    MviViewModel<ContextState, ContextIntent, ContextEffect>(ContextState(link, hostOf(link))) {
+/**
+ * [preview] (D26) is fetched once in the background; Start and Skip never wait for it. With [localUri] (share sheet)
+ * the shared item is a video file already copied there, and [link] is the share's text; no preview is fetched.
+ */
+class ContextViewModel(
+    link: String, private val actions: JobActions, private val localUri: String? = null, preview: (suspend (String) -> LinkPreview?)? = null,
+) : MviViewModel<ContextState, ContextIntent, ContextEffect>(ContextState(link, if (localUri != null) ContextCopy.SHARED_FILE else hostOf(link))) {
 
     init {
-        if (preview != null) viewModelScope.launch { preview(link)?.let { p -> setState { copy(preview = p) } } }
+        if (preview != null && localUri == null) viewModelScope.launch { preview(link)?.let { p -> setState { copy(preview = p) } } }
     }
 
     override fun onIntent(intent: ContextIntent) {
@@ -32,7 +36,8 @@ class ContextViewModel(link: String, private val actions: JobActions, preview: (
         if (state.value.starting) return
         setState { copy(starting = true) }
         viewModelScope.launch {
-            val id = actions.start(state.value.link, context, state.value.preview)   // re-validates the link; creates nothing if it fails
+            val id = if (localUri != null) actions.startFile(localUri, state.value.link, context)
+            else actions.start(state.value.link, context, state.value.preview)   // re-validates the link; creates nothing if it fails
             if (id == null) setState { copy(starting = false, error = ContextCopy.INVALID_LINK) }
             else send(ContextEffect.OpenJob(id))
         }

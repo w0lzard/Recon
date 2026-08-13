@@ -142,4 +142,24 @@ class ContextViewModelTest {
         assertEquals(38L, job.videoDurationSec)
         assertNull(job.thumbnailUrl)
     }
+
+    // --- Share sheet: a shared video file gets the context step too
+
+    @Test fun sharedFileStartsAJobWithItsCopyAndContext() {
+        val v = ContextViewModel("look at this", actions, localUri = "/data/shared/abc/video.mp4")
+        assertEquals("Shared video", v.state.value.host)
+        v.onIntent(ContextIntent.TextChanged("  What song is this?  "))
+        v.onIntent(ContextIntent.Start)
+        val job = runBlocking { kotlinx.coroutines.withTimeout(5_000) { while (jobs().isEmpty()) kotlinx.coroutines.delay(10); jobs().single() } }
+        assertEquals("/data/shared/abc/video.mp4", job.localUri)
+        assertEquals("look at this", job.sharedText)
+        assertEquals("What song is this?", job.userContext)
+        assertEquals(1, queued.size)
+    }
+
+    @Test fun sharedFileNeverFetchesALinkPreview() {
+        var fetched = false
+        ContextViewModel("", actions, localUri = "/data/shared/abc/video.mp4") { fetched = true; null }
+        assertEquals(false, fetched)
+    }
 }

@@ -41,6 +41,13 @@ class JobActions(private val store: JobStore, private val cancelWork: (Job) -> U
         return id
     }
 
+    /** Share sheet: a shared video file, already copied, starts with its optional context. */
+    suspend fun startFile(localUri: String, sharedText: String, context: String?): String {
+        val id = store.create(sharedText, localUri, UserContext.clean(context))
+        enqueue(id, UserAction.RUN)
+        return id
+    }
+
     /** Only a WAITING_QUOTA job can be cancelled; it is removed, not kept as failed. */
     suspend fun cancel(id: String): Boolean {
         val job = store.get(id)?.takeIf { it.state == JobState.WAITING_QUOTA } ?: return false

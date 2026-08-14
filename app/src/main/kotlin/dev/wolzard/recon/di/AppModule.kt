@@ -48,6 +48,7 @@ import dev.wolzard.recon.core.job.RunJob
 import dev.wolzard.recon.work.JobRunner
 import dev.wolzard.recon.work.Notifier
 import dev.wolzard.recon.work.ShareIntake
+import dev.wolzard.recon.work.ResultPresenter
 import dev.wolzard.recon.work.deviceLanguage
 import java.io.File
 import org.koin.android.ext.koin.androidContext
@@ -74,6 +75,7 @@ val appModule = module {
     single { ResearchChain(get<GitHubResearcher>(), WikipediaResearcher(get()), KnowledgeResearcher(get()), web = null) { GroundingCapability.UNAVAILABLE } }
     single<() -> Long> { System::currentTimeMillis }
     single { Notifier(androidContext()) }
+    single { ResultPresenter(androidContext(), get()) }
     single {
         RunJob(
             store = get(), resolver = get(), fetchers = Fetchers(get<YtDlpFetcher>(), get<ContentUriFetcher>()),

@@ -21,6 +21,8 @@ class Notifier(private val context: Context) {
         if (Build.VERSION.SDK_INT >= 26) {
             val nm = context.getSystemService(NotificationManager::class.java)
             nm.createNotificationChannel(NotificationChannel(CHANNEL, "Video lookups", NotificationManager.IMPORTANCE_LOW))
+            // Share sheet: finished jobs are announced (sound, shade); the running notice stays quiet on CHANNEL.
+            nm.createNotificationChannel(NotificationChannel(RESULTS, "Lookup results", NotificationManager.IMPORTANCE_DEFAULT))
         }
     }
 
@@ -44,7 +46,7 @@ class Notifier(private val context: Context) {
             JobState.DONE -> "Recon finished" to (summary?.lineSequence()?.firstOrNull() ?: "Tap to see what was found.")
             else -> "Recon couldn't finish" to "Tap to see why and what to do next."
         }
-        val n = NotificationCompat.Builder(context, CHANNEL)
+        val n = NotificationCompat.Builder(context, RESULTS)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentTitle(title)
             .setContentText(text)
@@ -64,6 +66,7 @@ class Notifier(private val context: Context) {
 
     private companion object {
         const val CHANNEL = "jobs"
+        const val RESULTS = "results"
         const val ONGOING_ID = 1
     }
 }

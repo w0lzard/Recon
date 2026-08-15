@@ -49,6 +49,7 @@ class JobWorkerTest {
                 single { store }
                 single<JobRunner> { JobRunner { id, _ -> seenStates += store.get(id)!!.state; behaviour(id) } }
                 single { Notifier(ctx) }
+                single { ResultPresenter(ctx, get()) }
                 single<() -> Long> { { now } }
             })
         }

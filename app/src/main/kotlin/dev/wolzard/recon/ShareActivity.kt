@@ -178,6 +178,7 @@ fun ShareSheet(step: SheetStep, onDismiss: () -> Unit, onJob: (String) -> Unit, 
                     koinViewModel(key = "ctx-${step.localUri}") { parametersOf(step.sharedText, step.localUri) }, onOpenJob = onJob, onBack = onDismiss,
                 )
                 is SheetStep.Job -> Column {
+                    OverlayPrompt()
                     JobRoute(
                         koinViewModel(key = step.id) { parametersOf(step.id) }, koinInject(),
                         onBack = onDismiss, onSignIn = { onOpenApp(step.id) }, onSettings = { onOpenApp(null) },
@@ -185,6 +186,38 @@ fun ShareSheet(step: SheetStep, onDismiss: () -> Unit, onJob: (String) -> Unit, 
                 }
                 SheetStep.Loading, SheetStep.Nothing -> Unit
             }
+        }
+    }
+}
+
+/**
+ * Asked once, while a job runs: with "Display over other apps", a result that arrives after the sheet is closed
+ * pops up by itself instead of waiting in a notification (ResultPresenter).
+ */
+@Composable
+private fun OverlayPrompt() {
+    val ctx = LocalContext.current
+    val prefs = remember { ctx.getSharedPreferences("sheet", Context.MODE_PRIVATE) }
+    var allowed by remember { mutableStateOf(Settings.canDrawOverlays(ctx)) }
+    var dismissed by remember { mutableStateOf(prefs.getBoolean("overlayAsked", false)) }
+    val owner = LocalLifecycleOwner.current
+    DisposableEffect(owner) {
+        val o = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) allowed = Settings.canDrawOverlays(ctx) }
+        owner.lifecycle.addObserver(o)
+        onDispose { owner.lifecycle.removeObserver(o) }
+    }
+    if (allowed || dismissed) return
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium).padding(12.dp).testTag("overlay_prompt"),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("You can close this. To have the result pop up here when it's ready, allow Recon to display over other apps.", style = MaterialTheme.typography.bodyMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(shape = MaterialTheme.shapes.small, onClick = {
+                ctx.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${ctx.packageName}")))
+            }) { Text("Allow") }
+            TextButton(onClick = { prefs.edit().putBoolean("overlayAsked", true).apply(); dismissed = true }) { Text("Not now") }
         }
     }
 }

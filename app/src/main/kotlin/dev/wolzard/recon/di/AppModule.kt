@@ -100,6 +100,7 @@ val appModule = module {
     viewModel { params -> JobViewModel(params.get(), get(), get()) }
     single { LinkPreviewFetcher({ url -> get<YtDlpRunner>().run(url, listOf("--dump-json", "--skip-download", "--no-playlist"), "preview-${java.util.UUID.randomUUID()}") {} }) }
     single { ThumbnailLoader(get()) }
+    viewModel { dev.wolzard.recon.ShareSheetViewModel(get()) }
     viewModel { params -> ContextViewModel(params.get(), get(), params.values.getOrNull(1) as? String, get<LinkPreviewFetcher>()::fetch) }
     viewModel { HomeViewModel(get(), get()) }
 }

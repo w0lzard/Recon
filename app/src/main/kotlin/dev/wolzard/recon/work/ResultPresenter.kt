@@ -1,7 +1,14 @@
 package dev.wolzard.recon.work
 
 import android.content.Context
+import android.content.Intent
+import android.graphics.PixelFormat
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
+import android.view.View
+import android.view.WindowManager
+import dev.wolzard.recon.ShareActivity
 import dev.wolzard.recon.core.model.Job
 import dev.wolzard.recon.core.model.JobState
 
@@ -25,11 +32,37 @@ class ResultPresenter(private val context: Context, private val notifier: Notifi
         when (decide(job.state, Visible.sheetJob == job.id, Visible.resumedActivities > 0, canOverlay())) {
             Action.NOTHING -> Unit
             Action.NOTIFY -> notifier.finished(job, summary)
-            Action.POP -> notifier.finished(job, summary) // until there is a sheet to pop up
+            Action.POP -> pop(job.id) { notifier.finished(job, summary) }
         }
     }
 
     private fun canOverlay() = Settings.canDrawOverlays(context)
+
+    /**
+     * Android 10+ blocks activity starts from the background; holding SYSTEM_ALERT_WINDOW lifts that, and from
+     * Android 15 only while the app shows an overlay window. So a 1 px invisible, untouchable overlay is added,
+     * the sheet is started, and the overlay is removed a moment later.
+     */
+    private fun pop(jobId: String, fallback: () -> Unit) {
+        val main = Handler(Looper.getMainLooper())
+        main.post {
+            val wm = context.getSystemService(WindowManager::class.java)
+            val dot = View(context)
+            val params = WindowManager.LayoutParams(
+                1, 1, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                PixelFormat.TRANSLUCENT,
+            )
+            try {
+                wm.addView(dot, params)
+                context.startActivity(ShareActivity.openJob(context, jobId).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                main.postDelayed({ runCatching { wm.removeView(dot) } }, 1_500)
+            } catch (_: Exception) {
+                runCatching { wm.removeView(dot) }
+                fallback()
+            }
+        }
+    }
 
     companion object {
         fun decide(state: JobState, sheetShowsJob: Boolean, appOnScreen: Boolean, canOverlay: Boolean): Action = when {

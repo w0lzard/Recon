@@ -27,6 +27,16 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+
+        <!-- Share sheet: shares open here as a bottom sheet over the sending app, in their own task. -->
+        <activity
+            android:name=".ShareActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Recon.Sheet"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />

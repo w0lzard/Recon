@@ -10,7 +10,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.work.ForegroundInfo
-import dev.wolzard.recon.MainActivity
+import dev.wolzard.recon.ShareActivity
 import dev.wolzard.recon.core.model.Job
 import dev.wolzard.recon.core.model.JobState
 
@@ -58,9 +58,10 @@ class Notifier(private val context: Context) {
         } catch (_: SecurityException) { /* permission revoked meanwhile; the job is in history anyway */ }
     }
 
+    /** Taps open the job in the share sheet, over whatever app is on screen. */
     private fun open(jobId: String): PendingIntent = PendingIntent.getActivity(
         context, jobId.hashCode(),
-        Intent(context, MainActivity::class.java).putExtra(MainActivity.EXTRA_JOB_ID, jobId).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+        ShareActivity.openJob(context, jobId).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 

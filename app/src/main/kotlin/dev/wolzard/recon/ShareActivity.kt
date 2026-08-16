@@ -112,7 +112,9 @@ class ShareActivity : ComponentActivity() {
         if (savedInstanceState == null && !route(intent)) return
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                try { vm.step.collect { Visible.sheetJob = (it as? SheetStep.Job)?.id } } finally { Visible.sheetJob = null }
+                try {
+                    vm.step.collect { step -> Visible.sheetJob = (step as? SheetStep.Job)?.id?.also { Visible.lastShownJob = it } }
+                } finally { Visible.sheetJob = null }
             }
         }
         setContent {

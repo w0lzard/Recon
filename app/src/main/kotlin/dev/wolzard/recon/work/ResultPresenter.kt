@@ -16,6 +16,8 @@ import dev.wolzard.recon.core.model.JobState
 object Visible {
     @Volatile var resumedActivities = 0
     @Volatile var sheetJob: String? = null
+    /** The last job the sheet came up with; unlike [sheetJob] it stays set after the sheet closes. */
+    @Volatile var lastShownJob: String? = null
 }
 
 /**
@@ -56,7 +58,10 @@ class ResultPresenter(private val context: Context, private val notifier: Notifi
             try {
                 wm.addView(dot, params)
                 context.startActivity(ShareActivity.openJob(context, jobId).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                main.postDelayed({ runCatching { wm.removeView(dot) } }, 1_500)
+                main.postDelayed({
+                    runCatching { wm.removeView(dot) }
+                    if (Visible.lastShownJob != jobId) fallback() // a blocked start is dropped silently, not thrown
+                }, 6_000)
             } catch (_: Exception) {
                 runCatching { wm.removeView(dot) }
                 fallback()

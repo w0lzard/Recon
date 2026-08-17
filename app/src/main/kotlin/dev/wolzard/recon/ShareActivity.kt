@@ -137,8 +137,11 @@ class ShareActivity : ComponentActivity() {
 
     /** @return false if the share went to the full app instead. */
     private fun route(intent: Intent): Boolean {
-        intent.getStringExtra(EXTRA_JOB_ID)?.let { vm.open(it); return true }
-        if (intent.action != Intent.ACTION_SEND) { finish(); return false }
+        if (intent.action != Intent.ACTION_SEND) {
+            // Only Recon starts the activity directly (notifications, ResultPresenter); shares arrive via the alias.
+            intent.getStringExtra(EXTRA_JOB_ID)?.let { vm.open(it); return true }
+            finish(); return false
+        }
         if (notice.needed || !GeminiSession.signedIn(secrets)) {
             // Setup first: the full app takes the share as before (held until the notice is accepted).
             startActivity(Intent(intent).setClass(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION))

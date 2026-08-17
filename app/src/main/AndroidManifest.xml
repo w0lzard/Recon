@@ -29,14 +29,19 @@
             </intent-filter>
         </activity>
 
-        <!-- Share sheet: shares open here as a bottom sheet over the sending app, in their own task. -->
+        <!-- Share sheet: a bottom sheet over the sending app, in its own task. Not exported itself: other apps reach it
+             only through the alias below, which carries the share filters, so they cannot open it on a job id. -->
         <activity
             android:name=".ShareActivity"
-            android:exported="true"
+            android:exported="false"
             android:theme="@style/Theme.Recon.Sheet"
             android:taskAffinity=""
             android:excludeFromRecents="true"
-            android:launchMode="singleTop">
+            android:launchMode="singleTop" />
+        <activity-alias
+            android:name=".Share"
+            android:targetActivity=".ShareActivity"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -47,7 +52,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="video/*" />
             </intent-filter>
-        </activity>
+        </activity-alias>
 
         <!-- JobWorker runs as a foreground dataSync worker (T12). -->
         <service

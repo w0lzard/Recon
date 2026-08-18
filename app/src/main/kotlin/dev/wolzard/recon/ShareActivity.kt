@@ -1,5 +1,23 @@
 package dev.wolzard.recon
 
+import kotlinx.coroutines.flow.drop
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.material3.rememberStandardBottomSheetState
+import androidx.compose.material3.rememberBottomSheetScaffoldState
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.BottomSheetScaffold
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -17,16 +35,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -167,32 +182,62 @@ class ShareActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** Resting height of the sheet, as a share of the screen; dragging up opens it to [EXPANDED]. */
+const val PEEK = 0.4f
+private const val EXPANDED = 0.92f
+
+/**
+ * The sheet rests at [PEEK] of the screen and drags up to [EXPANDED]. Its content is laid out in the part that is
+ * actually visible, so Skip/Start and the job screen fit the resting height. It expands by itself when the keyboard
+ * opens, and closes when dragged below the resting height or when the dimmed area above it is tapped.
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ShareSheet(step: SheetStep, onDismiss: () -> Unit, onJob: (String) -> Unit, onOpenApp: (String?) -> Unit) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.background,
-        modifier = Modifier.testTag("share_sheet"),
-    ) {
-        Box(Modifier.fillMaxWidth().fillMaxHeight(0.92f)) {
-            when (step) {
-                is SheetStep.Link -> ContextRoute(koinViewModel(key = "ctx-${step.link}") { parametersOf(step.link) }, onOpenJob = onJob, onBack = onDismiss)
-                is SheetStep.VideoFile -> ContextRoute(
-                    koinViewModel(key = "ctx-${step.localUri}") { parametersOf(step.sharedText, step.localUri) }, onOpenJob = onJob, onBack = onDismiss,
-                )
-                is SheetStep.Job -> Column {
-                    OverlayPrompt()
-                    JobRoute(
-                        koinViewModel(key = step.id) { parametersOf(step.id) }, koinInject(),
-                        onBack = onDismiss, onSignIn = { onOpenApp(step.id) }, onSettings = { onOpenApp(null) },
-                    )
+    val sheet = rememberStandardBottomSheetState(initialValue = SheetValue.PartiallyExpanded, skipHiddenState = false)
+    val scaffold = rememberBottomSheetScaffoldState(bottomSheetState = sheet)
+    LaunchedEffect(sheet) { snapshotFlow { sheet.currentValue }.drop(1).collect { if (it == SheetValue.Hidden) onDismiss() } }
+    val imeVisible = WindowInsets.isImeVisible
+    LaunchedEffect(imeVisible) { if (imeVisible) sheet.expand() }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val full = maxHeight
+        val density = LocalDensity.current
+        BottomSheetScaffold(
+            scaffoldState = scaffold,
+            sheetPeekHeight = full * PEEK,
+            sheetContainerColor = MaterialTheme.colorScheme.background,
+            containerColor = Color.Transparent,
+            modifier = Modifier.testTag("share_sheet"),
+            sheetContent = {
+                // Fixed height for the sheet (its anchors depend on it); the content inside follows the visible part.
+                Box(Modifier.fillMaxWidth().height(full * EXPANDED)) {
+                    val visible = runCatching { with(density) { (full.toPx() - sheet.requireOffset()).toDp() } }.getOrDefault(full * PEEK)
+                    Box(Modifier.fillMaxWidth().height((visible - 48.dp).coerceIn(0.dp, full * EXPANDED)).navigationBarsPadding()) {
+                        SheetContent(step, onDismiss, onJob, onOpenApp)
+                    }
                 }
-                SheetStep.Loading, SheetStep.Nothing -> Unit
-            }
+            },
+        ) {
+            // The app behind shows through, dimmed; a tap above the sheet closes it.
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.32f)).clickable(onClick = onDismiss, indication = null, interactionSource = null))
         }
     }
+}
+
+@Composable
+private fun SheetContent(step: SheetStep, onDismiss: () -> Unit, onJob: (String) -> Unit, onOpenApp: (String?) -> Unit) = when (step) {
+    is SheetStep.Link -> ContextRoute(koinViewModel(key = "ctx-${step.link}") { parametersOf(step.link) }, onOpenJob = onJob, onBack = onDismiss)
+    is SheetStep.VideoFile -> ContextRoute(
+        koinViewModel(key = "ctx-${step.localUri}") { parametersOf(step.sharedText, step.localUri) }, onOpenJob = onJob, onBack = onDismiss,
+    )
+    is SheetStep.Job -> Column {
+        OverlayPrompt()
+        JobRoute(
+            koinViewModel(key = step.id) { parametersOf(step.id) }, koinInject(),
+            onBack = onDismiss, onSignIn = { onOpenApp(step.id) }, onSettings = { onOpenApp(null) },
+        )
+    }
+    SheetStep.Loading, SheetStep.Nothing -> Unit
 }
 
 /**

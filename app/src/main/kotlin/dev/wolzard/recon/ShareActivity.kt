@@ -1,5 +1,7 @@
 package dev.wolzard.recon
 
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.foundation.layout.heightIn
 import kotlinx.coroutines.flow.drop
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
@@ -10,8 +12,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.isImeVisible
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.material3.rememberStandardBottomSheetState
@@ -182,38 +182,45 @@ class ShareActivity : ComponentActivity() {
     }
 }
 
-/** Resting height of the sheet, as a share of the screen; dragging up opens it to [EXPANDED]. */
+/** Resting height of the job sheet, as a share of the screen; dragging up opens it to [EXPANDED]. */
 const val PEEK = 0.4f
 private const val EXPANDED = 0.92f
 
 /**
- * The sheet rests at [PEEK] of the screen and drags up to [EXPANDED]. Its content is laid out in the part that is
- * actually visible, so Skip/Start and the job screen fit the resting height. It expands by itself when the keyboard
- * opens, and closes when dragged below the resting height or when the dimmed area above it is tapped.
+ * Add context: the sheet is exactly as tall as its content (keyboard included), so all of it shows at rest.
+ * Job and result: the sheet rests at [PEEK] of the screen and drags up to [EXPANDED]; its content is laid out in the
+ * part that is visible, so the screen fits the resting height. Dragging below the resting height or tapping the
+ * dimmed area above closes it.
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShareSheet(step: SheetStep, onDismiss: () -> Unit, onJob: (String) -> Unit, onOpenApp: (String?) -> Unit) {
     val sheet = rememberStandardBottomSheetState(initialValue = SheetValue.PartiallyExpanded, skipHiddenState = false)
     val scaffold = rememberBottomSheetScaffoldState(bottomSheetState = sheet)
     LaunchedEffect(sheet) { snapshotFlow { sheet.currentValue }.drop(1).collect { if (it == SheetValue.Hidden) onDismiss() } }
-    val imeVisible = WindowInsets.isImeVisible
-    LaunchedEffect(imeVisible) { if (imeVisible) sheet.expand() }
+    val fitsContent = step is SheetStep.Link || step is SheetStep.VideoFile
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val full = maxHeight
         val density = LocalDensity.current
+        var contentHeight by remember { mutableStateOf(full * 0.6f) }
         BottomSheetScaffold(
             scaffoldState = scaffold,
-            sheetPeekHeight = full * PEEK,
+            sheetPeekHeight = if (fitsContent) contentHeight + DRAG_HANDLE else full * PEEK,
             sheetContainerColor = MaterialTheme.colorScheme.background,
             containerColor = Color.Transparent,
             modifier = Modifier.testTag("share_sheet"),
             sheetContent = {
-                // Fixed height for the sheet (its anchors depend on it); the content inside follows the visible part.
-                Box(Modifier.fillMaxWidth().height(full * EXPANDED)) {
-                    val visible = runCatching { with(density) { (full.toPx() - sheet.requireOffset()).toDp() } }.getOrDefault(full * PEEK)
-                    Box(Modifier.fillMaxWidth().height((visible - 48.dp).coerceIn(0.dp, full * EXPANDED)).navigationBarsPadding()) {
+                if (fitsContent) {
+                    Box(Modifier.fillMaxWidth().heightIn(max = full * EXPANDED).onSizeChanged { contentHeight = with(density) { it.height.toDp() } }) {
                         SheetContent(step, onDismiss, onJob, onOpenApp)
+                    }
+                } else {
+                    // Fixed height for the sheet (its anchors depend on it); the content inside follows the visible part.
+                    Box(Modifier.fillMaxWidth().height(full * EXPANDED)) {
+                        val visible = runCatching { with(density) { (full.toPx() - sheet.requireOffset()).toDp() } }.getOrDefault(full * PEEK)
+                        Box(Modifier.fillMaxWidth().height((visible - DRAG_HANDLE).coerceIn(0.dp, full * EXPANDED)).navigationBarsPadding()) {
+                            SheetContent(step, onDismiss, onJob, onOpenApp)
+                        }
                     }
                 }
             },
@@ -224,11 +231,14 @@ fun ShareSheet(step: SheetStep, onDismiss: () -> Unit, onJob: (String) -> Unit, 
     }
 }
 
+/** Height of Material's drag handle area above the sheet content. */
+private val DRAG_HANDLE = 48.dp
+
 @Composable
 private fun SheetContent(step: SheetStep, onDismiss: () -> Unit, onJob: (String) -> Unit, onOpenApp: (String?) -> Unit) = when (step) {
-    is SheetStep.Link -> ContextRoute(koinViewModel(key = "ctx-${step.link}") { parametersOf(step.link) }, onOpenJob = onJob, onBack = onDismiss)
+    is SheetStep.Link -> ContextRoute(koinViewModel(key = "ctx-${step.link}") { parametersOf(step.link) }, onOpenJob = onJob, onBack = onDismiss, compact = true)
     is SheetStep.VideoFile -> ContextRoute(
-        koinViewModel(key = "ctx-${step.localUri}") { parametersOf(step.sharedText, step.localUri) }, onOpenJob = onJob, onBack = onDismiss,
+        koinViewModel(key = "ctx-${step.localUri}") { parametersOf(step.sharedText, step.localUri) }, onOpenJob = onJob, onBack = onDismiss, compact = true,
     )
     is SheetStep.Job -> Column {
         OverlayPrompt()

@@ -1,5 +1,6 @@
 package dev.wolzard.recon
 
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.layout.heightIn
 import kotlinx.coroutines.flow.drop
@@ -199,7 +200,8 @@ fun ShareSheet(step: SheetStep, onDismiss: () -> Unit, onJob: (String) -> Unit, 
     val scaffold = rememberBottomSheetScaffoldState(bottomSheetState = sheet)
     LaunchedEffect(sheet) { snapshotFlow { sheet.currentValue }.drop(1).collect { if (it == SheetValue.Hidden) onDismiss() } }
     val fitsContent = step is SheetStep.Link || step is SheetStep.VideoFile
-    BoxWithConstraints(Modifier.fillMaxSize()) {
+    // imePadding: the whole sheet area ends at the keyboard, so the sheet rides up with it and keeps its own height.
+    BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
         val full = maxHeight
         val density = LocalDensity.current
         var contentHeight by remember { mutableStateOf(full * 0.6f) }

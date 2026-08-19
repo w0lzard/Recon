@@ -1,5 +1,8 @@
 package dev.wolzard.recon.ui
 
+import org.junit.Assert.assertTrue
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.assertIsDisplayed
 import android.content.Context
 import android.content.Intent
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
@@ -88,6 +91,33 @@ class ShareSheetTest {
             compose.onNodeWithText("Start").assertExists()
             compose.onNodeWithText("Skip").assertExists()
             capture("sheet_context")
+        }
+    }
+
+    @Test fun sheetFitsAddContextAndRisesAboveTheKeyboard() {
+        sh("settings put secure show_ime_with_hard_kbd 1")
+        val share = Intent(Intent.ACTION_SEND).setClass(ctx, ShareActivity::class.java).setType("text/plain")
+            .putExtra(Intent.EXTRA_TEXT, "https://www.instagram.com/reel/abc/")
+        ActivityScenario.launch<ShareActivity>(share).use { scenario ->
+            compose.waitUntil(10_000) { runCatching { compose.onNodeWithText("Add context").assertExists() }.isSuccess }
+            // At rest the whole Add context screen shows: the chips and both buttons are on screen.
+            compose.onNodeWithText("What movie is this?").assertIsDisplayed()
+            compose.onNodeWithText("Start").assertIsDisplayed()
+            capture("sheet_context")
+            compose.onNodeWithTag("context_field").performClick()
+            var imeTop = Int.MAX_VALUE
+            compose.waitUntil(10_000) {
+                scenario.onActivity { a ->
+                    val root = a.window.decorView
+                    val ime = androidx.core.view.ViewCompat.getRootWindowInsets(root)?.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime())?.bottom ?: 0
+                    imeTop = if (ime > 0) root.height - ime else Int.MAX_VALUE
+                }
+                imeTop != Int.MAX_VALUE
+            }
+            var bottom = Float.MAX_VALUE
+            runCatching { compose.waitUntil(3_000) { bottom = compose.onNodeWithText("Start").fetchSemanticsNode().boundsInWindow.bottom; bottom <= imeTop } }
+            capture("sheet_context_keyboard")
+            assertTrue("Start bottom $bottom must be above the keyboard top $imeTop", bottom <= imeTop)
         }
     }
 }

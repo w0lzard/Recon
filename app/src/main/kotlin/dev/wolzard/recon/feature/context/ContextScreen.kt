@@ -1,5 +1,7 @@
 package dev.wolzard.recon.feature.context
 
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import dev.wolzard.recon.core.model.LinkPreview
 import dev.wolzard.recon.designsystem.Thumb
 import androidx.compose.foundation.background
@@ -52,10 +54,14 @@ import java.net.URI
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ContextScreen(state: ContextState, onIntent: (ContextIntent) -> Unit) {
+fun ContextScreen(state: ContextState, compact: Boolean = false, onIntent: (ContextIntent) -> Unit) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val line = MaterialTheme.colorScheme.outlineVariant
-    Column(Modifier.fillMaxSize().imePadding()) {
+    // compact (share sheet): as tall as the content, so the sheet fits it. The sheet itself sits above the keyboard,
+    // so only the navigation bar pads the bottom here (and none while the keyboard is up: the sheet consumed it).
+    val outer = if (compact) Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars)
+    else Modifier.fillMaxSize().imePadding()
+    Column(outer) {
         TopAppBar(
             title = { Text(ContextCopy.TITLE, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)) },
             navigationIcon = { IconButton(onClick = { onIntent(ContextIntent.Back) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
@@ -64,7 +70,7 @@ fun ContextScreen(state: ContextState, onIntent: (ContextIntent) -> Unit) {
             windowInsets = WindowInsets(0), // MainActivity's Scaffold already pads for the status bar
         )
         Column(
-            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 8.dp),
+            Modifier.weight(1f, fill = !compact).fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             LinkCard(state.link, state.host, state.preview)

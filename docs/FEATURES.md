@@ -62,3 +62,27 @@ Recon is a personal tool distributed as a sideloaded APK (no Play Store) with no
 - **Wikipedia lookup**: People, places, books, products, apps, media and other findings are checked against Wikipedia. Media is only confirmed when the page matches the video's year.
 - **Claim checking**: Claims get a verdict. Health, legal and financial claims need a named source to be anything but *Unclear*, and they show a *Not professional advice* line.
 - **Sharper video**: When on-screen text is hard to read, *Try sharper video* runs again with more frames at higher resolution.
+
+### Results
+
+- **Your question and the answer card**: If you asked something, the result opens with your question and an answer card: a label such as `ANSWER · MEDIA · SONG`, the title, the reply, a status chip (*Verified*, *Unverified* or *Unclear*), a confidence percentage and numbered sources. An unverified answer without sources says *No source*.
+- **Summary**: A short description of the video.
+- **Entities found**: One card per finding with its type, verdict, evidence, where the information came from, key facts, a next step (*Install*, *Get it*, *Read*, *Watch or listen*, *Visit*, *Ingredients & steps*) and a link to GitHub or Wikipedia when there is one.
+- **Verdicts**: *Confirmed*, *Supported*, *Best match*, *Unclear*, *Disputed*, *Not found* or *Not checked*. Status is never shown by colour alone; every chip has an icon and a label.
+- **Where it came from**: *From GitHub*, *From Wikipedia*, *From web sources*, *Unverified, from AI knowledge* or *Only what the video said*.
+- **Sources**: One numbered list for the whole result (`SOURCES · N`), including the answer's sources.
+- **On-screen text**: The text Gemini read from the video, behind *Show on-screen text*.
+- **History**: Home lists recent jobs with their thumbnail, title, site, time and status (*Queued*, *Downloading*, *Analysing*, *Looking up*, *Waiting for quota*, *Done*, *Failed*).
+
+### Account, privacy and settings
+
+- **First-run notice**: Explains downloading, what is sent to Google, the link lookup and the account-ban risk. It must be accepted before any share is processed and is shown again whenever its text changes.
+- **Two-step sign-in**: An intro with a one-line explanation, a risk notice, **Sign in with Google** and **Paste cookies instead**. Google's sign-in page then fills the screen and follows your phone's dark mode, and the keyboard never hides Google's *Next* button.
+- **Verified sign-in**: Cookies are saved only after one authenticated check with Google succeeds. Rejected cookies, network errors and Google consent or "verify it's you" pages each get their own message.
+- **Locked-down sign-in page**: The sign-in page can only visit Google sign-in and Gemini pages; other links open in your browser. File and content access are off.
+- **Encrypted storage**: The Google session and the optional GitHub token are encrypted with a key in the Android Keystore and excluded from backups and device transfers.
+- **Sign out**: Removes the saved session and wipes the sign-in page's cookies, storage and cache.
+- **Settings**: Gemini account (sign in again, sign out), optional GitHub token, privacy notes, update check, and About (notice, version).
+- **Update check**: Recon checks GitHub Releases at most once a day and shows a banner when a newer version exists.
+
+---

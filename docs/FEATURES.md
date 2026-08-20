@@ -86,3 +86,69 @@ Recon is a personal tool distributed as a sideloaded APK (no Play Store) with no
 - **Update check**: Recon checks GitHub Releases at most once a day and shows a banner when a newer version exists.
 
 ---
+
+## Feature flows
+
+### Flow: First launch
+
+1. User opens Recon.
+2. The **Before you start** notice appears.
+3. User reads it and taps **I understand**.
+4. The sign-in intro (Step 2 of 2) appears. Continue with [Signing in with Google](#flow-signing-in-with-google) or [Signing in with pasted cookies](#flow-signing-in-with-pasted-cookies).
+
+If the user shared something before accepting the notice, Recon holds that share and processes it right after **I understand**.
+
+### Flow: Signing in with Google
+
+1. On the sign-in intro, user taps **Sign in with Google**.
+2. Google's sign-in page opens full screen under a slim bar with a back arrow and **Paste cookies**.
+3. User enters their email, taps **Next**, enters their password and completes any Google checks.
+4. When the page reaches gemini.google.com, Recon shows *Checking sign-in…* and makes one request to Gemini with the new session.
+5. If the check passes, the session is saved and Recon opens Home.
+6. If it fails, a message explains why (cookies rejected, no connection, or a Google consent or verification page). The user can retry or use pasted cookies.
+
+### Flow: Signing in with pasted cookies
+
+1. On a computer, user opens gemini.google.com in a browser and signs in.
+2. In the browser's developer tools, user copies the **Cookie** header of any request to gemini.google.com.
+3. On the phone, user taps **Paste cookies instead** on the intro, or **Paste cookies** on Google's page.
+4. User pastes the header into the field and taps **Use these cookies**.
+5. Recon checks the format first. If the text is empty, malformed or lacks the session cookie, a message says what is wrong.
+6. Recon then checks the session with Google, as in the WebView flow. The field is emptied, and the clipboard is cleared if it still holds the cookies.
+
+### Flow: Sharing a video link
+
+1. In Instagram, TikTok, X, YouTube or another app, user taps **Share** on a video and picks **Recon**.
+2. The share sheet opens over that app with **Add context**: the site, the link path and, once fetched, the thumbnail and length.
+3. User either types a question, taps a suggestion chip, or leaves the field empty.
+4. User taps **Start**, or **Skip** to start without context.
+5. The sheet shows the job's progress: *Queued*, *Downloading*, *Analysing*, *Looking up*.
+6. When the job finishes, the result appears in the sheet. User drags the sheet up to read all of it.
+7. User closes the sheet by dragging it down or tapping the dimmed area above it.
+
+If Recon is not set up yet (notice not accepted, or not signed in), the share opens the full app instead and is handled there.
+
+### Flow: Sharing a video file
+
+1. In a gallery, file manager or messaging app, user shares a video file to **Recon**.
+2. Recon copies the file and the sheet opens with **Add context** (labelled *Shared video*).
+3. User adds a question or taps **Skip**, then **Start**.
+4. The job runs as for a link. Closing the sheet before **Start** deletes Recon's copy of the file.
+
+### Flow: Pasting a link inside the app
+
+1. User copies a video link in any app.
+2. User opens Recon and taps **Paste a video link** on Home.
+3. Recon validates the link and opens **Add context**.
+4. User adds a question or skips, and the job opens on its own screen.
+
+### Flow: Getting the result after closing the sheet
+
+1. While a job is running in the sheet, Recon asks once to *display over other apps*.
+2. User taps **Allow** and turns the permission on in Android settings, or taps **Not now**.
+3. User closes the sheet and goes back to scrolling.
+4. When the job finishes:
+   - **Succeeded, permission on, Recon not open**: the sheet pops up over the current app with the result.
+   - **Succeeded without the permission, or Recon open on another screen**: a *Recon finished* notification appears.
+   - **Failed**: a *Recon couldn't finish* notification appears.
+5. Tapping a notification opens the sheet on that job.

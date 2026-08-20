@@ -40,3 +40,25 @@ Recon is a personal tool distributed as a sideloaded APK (no Play Store) with no
 > **Account risk.** Gemini web is not an official API. Google doesn't support apps using it and may limit, suspend or ban the account. That risk is yours. Sign in with a secondary Google account, not the one you rely on.
 
 ---
+
+## Feature listing
+
+### Sharing and capture
+
+- **Share sheet**: Sharing a link or a video file to Recon opens a bottom sheet over the app you are in, instead of opening Recon itself. The Add context step fits the sheet; the job and result rest at 40% of the screen and drag up to full height.
+- **Add context (optional)**: Before a job starts you can type a question or note (up to 300 characters) or tap a suggestion chip: *What movie is this?*, *What song is this?*, *Who or what is this?*, *Explain this*. **Skip** starts at once with no context.
+- **Link preview**: The Add context card shows the video's thumbnail, path and length (for example `0:38 video`), fetched in the background. It never delays Start; if it fails, a link icon stays in its place.
+- **Shared video files**: A video file shared to Recon is copied immediately (Android's access to it is temporary) and gets the same Add context step. Closing the sheet before Start deletes the copy.
+- **Paste a video link**: The Home screen has a button that reads a link from the clipboard and opens Add context.
+- **Background processing**: Jobs run one at a time in a foreground worker. Closing the sheet or the app does not stop a job.
+- **Result pop-up and notifications**: When a job succeeds while you are in another app, the sheet pops back up over it (needs the *Display over other apps* permission). Failures, and successes without that permission, arrive as a notification; tapping it opens the sheet.
+
+### Analysis and research
+
+- **Video analysis with Gemini**: The video (or frames and audio from it) goes to Gemini in a temporary chat, so it does not appear in your Gemini history. Gemini returns a summary, the things worth looking up, any text shown on screen, and an answer to your question if you asked one.
+- **Typed findings**: Each finding has a type: repository, app, product, book, person, place, recipe, media, claim or other. Media findings carry a sub-type (movie, series, song, game, anime) with its own icon, shown as for example `MEDIA · MOVIE`.
+- **Evidence labels**: Each finding says whether it was *Spoken*, *On-screen* or *Inferred*. Inferred findings also get a *Guess* badge.
+- **GitHub lookup**: Repositories are matched against the GitHub API. When the match is uncertain, Recon lists candidates for you to choose from.
+- **Wikipedia lookup**: People, places, books, products, apps, media and other findings are checked against Wikipedia. Media is only confirmed when the page matches the video's year.
+- **Claim checking**: Claims get a verdict. Health, legal and financial claims need a named source to be anything but *Unclear*, and they show a *Not professional advice* line.
+- **Sharper video**: When on-screen text is hard to read, *Try sharper video* runs again with more frames at higher resolution.

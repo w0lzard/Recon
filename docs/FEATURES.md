@@ -152,3 +152,83 @@ If Recon is not set up yet (notice not accepted, or not signed in), the share op
    - **Succeeded without the permission, or Recon open on another screen**: a *Recon finished* notification appears.
    - **Failed**: a *Recon couldn't finish* notification appears.
 5. Tapping a notification opens the sheet on that job.
+
+### Flow: Reading a result
+
+1. If the user asked a question, the result starts with **YOUR QUESTION** and the answer card. The status chip and confidence show how far to trust it.
+2. **SUMMARY** describes the video.
+3. **ENTITIES FOUND** lists each finding. User checks the verdict and evidence chips, reads the facts and taps **Open on GitHub** or **Open on Wikipedia** where shown.
+4. **CLAIMS** lists checked claims with their verdict, source and any advice line.
+5. **SOURCES** lists every source by number; web sources open in the browser.
+6. User taps **Show on-screen text** to see the text read from the video.
+7. If text in the video was hard to read, user taps **Try sharper video** to run it again at higher resolution.
+
+### Flow: Picking the right GitHub repository
+
+1. A repository finding shows *Which repo did the video mean?* with candidates, each with its stars and description.
+2. User taps the right one. The card updates to that repository with a GitHub link, and no AI call is made.
+3. If none fits, user taps **None of these**; the finding becomes *Not found*.
+
+### Flow: Recovering from a failed job
+
+1. The job screen shows *Failed*, the reason and the target link.
+2. User takes the action offered for that reason:
+   - **Retry**: network errors, busy servers and most other failures.
+   - **Share the video file instead**: the link could not be downloaded (private or login-only video).
+   - **Share a different file**: the shared file could not be read.
+   - **Sign in** / **Sign in again**: Recon is not signed in, or the session expired.
+3. A job that hit the Gemini usage limit says so and offers **Retry**; it will succeed once the limit lifts.
+
+### Flow: Signing in again when the session expires
+
+1. A job fails with *Your Gemini sign-in has expired. Sign in again.*
+2. User taps **Sign in again**.
+3. User signs in through Google's page or pasted cookies, as above.
+4. When the check passes, Recon returns to the same job and runs it again with its saved link and question.
+
+### Flow: Signing out
+
+1. User opens **Settings** from the gear on Home.
+2. Under **GEMINI ACCOUNT**, user taps **Sign out**.
+3. Recon deletes the saved session and wipes the sign-in page's cookies, storage and cache. Settings shows *Not signed in.*
+
+### Flow: Adding a GitHub token
+
+1. On GitHub, user creates a personal access token with no scopes.
+2. In Recon, user opens **Settings** and finds **GITHUB TOKEN (OPTIONAL)**.
+3. User pastes the token and taps **Save token**. It is stored encrypted and raises GitHub's lookup limit. **Remove token** deletes it.
+
+### Flow: Checking for updates
+
+1. Recon checks GitHub Releases at most once a day. When a newer version exists, a banner appears on Home.
+2. To check now, user opens **Settings** and taps **Check for updates** under **UPDATES**; it shows *Up to date* or the new version.
+3. User downloads the APK for their phone and installs it over the current version. History is kept.
+
+---
+
+## For developers
+
+| Area | Where |
+|---|---|
+| Domain logic, models, prompts, parsing (no Android) | `core/` |
+| Gemini web client, GitHub and Wikipedia clients, media, Room, secrets | `app/src/main/kotlin/dev/wolzard/recon/data/` |
+| Screens (one package per feature, MVI ViewModels) | `app/src/main/kotlin/dev/wolzard/recon/feature/` |
+| Share sheet, result pop-up | `ShareActivity.kt`, `work/ResultPresenter.kt` |
+| Jobs, share intake, notifications | `app/src/main/kotlin/dev/wolzard/recon/work/` |
+| Theme, shared UI parts, icons | `app/src/main/kotlin/dev/wolzard/recon/designsystem/` |
+| Decisions and their history | `docs/plan.md` (D1 onwards) |
+
+Common commands:
+
+```bash
+# Unit tests (core and app)
+./gradlew :core:test :app:testDebugUnitTest
+
+# Instrumented tests on a connected emulator or device
+scripts/connected-tests.sh
+
+# Signed release APKs (needs keystore.properties)
+./gradlew :app:assembleRelease
+```
+
+Build, signing and test details are in the [README](../README.md#building); every design decision, with its reasons and test counts, is in [`docs/plan.md`](plan.md).

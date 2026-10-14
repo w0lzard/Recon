@@ -83,7 +83,7 @@ class SignInKeyboardTest {
         instrumentation.uiAutomation.executeShellCommand("settings put secure show_ime_with_hard_kbd 1").close()
         compose.activityRule.scenario.onActivity { it.enableEdgeToEdge() }
         compose.setContent { ReconTheme { SignInScreen(SignInState(), signInUrl = page) {} } }
-        compose.onNodeWithText("Sign in with Google").performClick()
+        compose.onNodeWithText("Continue with Google").performClick()
         compose.waitUntil(10_000) { webView()?.let(::nextBottom) != null }
         val web = webView()!!
 

@@ -34,6 +34,13 @@ data class JobEntity(
     val videoTitle: String? = null,     // D26: link preview
     val videoDurationSec: Long? = null,
     val thumbnailUrl: String? = null,
+    val startedAt: Long? = null,        // D28: run record
+    val downloadedAt: Long? = null,
+    val sampledAt: Long? = null,
+    val analysedAt: Long? = null,
+    val downloadBytes: Long? = null,
+    val frameCount: Int? = null,
+    val hasAudio: Boolean? = null,
 )
 
 @Dao
@@ -47,7 +54,7 @@ interface JobDao {
     @Query("DELETE FROM jobs WHERE id = :id") suspend fun delete(id: String)
 }
 
-@Database(entities = [JobEntity::class], version = 3, exportSchema = true)
+@Database(entities = [JobEntity::class], version = 4, exportSchema = true)
 abstract class ReconDb : RoomDatabase() {
     abstract fun jobs(): JobDao
 }
@@ -66,5 +73,19 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
-fun JobEntity.toJob() = Job(id, sharedText, url, localUri, state, failure, failureDetail, retryAtEpochMs, progress, analysisJson, resultJson, createdAt, updatedAt, userContext, videoTitle, videoDurationSec, thumbnailUrl)
-fun Job.toEntity() = JobEntity(id, sharedText, url, localUri, state, failure, failureDetail, retryAtEpochMs, progress, analysisJson, resultJson, createdAt, updatedAt, userContext, videoTitle, videoDurationSec, thumbnailUrl)
+/** D28: jobs gain the run record (step times, download size, frames). Existing rows keep NULL = not known. */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        listOf("startedAt", "downloadedAt", "sampledAt", "analysedAt", "downloadBytes", "frameCount", "hasAudio")
+            .forEach { db.execSQL("ALTER TABLE jobs ADD COLUMN $it INTEGER") }
+    }
+}
+
+fun JobEntity.toJob() = Job(
+    id, sharedText, url, localUri, state, failure, failureDetail, retryAtEpochMs, progress, analysisJson, resultJson, createdAt, updatedAt, userContext, videoTitle, videoDurationSec, thumbnailUrl,
+    startedAt, downloadedAt, sampledAt, analysedAt, downloadBytes, frameCount, hasAudio,
+)
+fun Job.toEntity() = JobEntity(
+    id, sharedText, url, localUri, state, failure, failureDetail, retryAtEpochMs, progress, analysisJson, resultJson, createdAt, updatedAt, userContext, videoTitle, videoDurationSec, thumbnailUrl,
+    startedAt, downloadedAt, sampledAt, analysedAt, downloadBytes, frameCount, hasAudio,
+)

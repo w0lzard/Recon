@@ -2,6 +2,8 @@ package dev.wolzard.recon.feature.job
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.delay
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.wolzard.recon.designsystem.openCustomTab
@@ -20,5 +22,7 @@ fun JobRoute(vm: JobViewModel, clock: () -> Long, onBack: () -> Unit, onSignIn: 
             is JobEffect.OpenUrl -> if (effect.url.startsWith("https://")) ctx.openCustomTab(effect.url)
         }
     }
-    state.job?.let { JobScreen(it, state.result, clock(), vm::onIntent) }
+    // The step card's clock and Retry's enabled state follow the time, not only store updates.
+    val now by produceState(clock()) { while (true) { delay(1_000); value = clock() } }
+    state.job?.let { JobScreen(it, state.result, now, vm::onIntent) }
 }

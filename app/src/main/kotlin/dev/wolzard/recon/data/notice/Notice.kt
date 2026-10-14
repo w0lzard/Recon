@@ -3,7 +3,7 @@ package dev.wolzard.recon.data.notice
 import android.content.SharedPreferences
 
 /** Raise when the notice text changes in a way users must re-accept. */
-const val NOTICE_VERSION = 4 // 2: Gemini web sign-in replaced the API key (D22); 3: account-ban risk spelled out (D25); 4: link preview call (D26)
+const val NOTICE_VERSION = 5 // 2: Gemini web sign-in replaced the API key (D22); 3: account-ban risk spelled out (D25); 4: link preview call (D26); 5: design rows (Recon UI 1b)
 
 /** T16: the accepted notice version, in prefs. [version] is a parameter only so tests can bump it. */
 class Notice(private val prefs: SharedPreferences, private val version: Int = NOTICE_VERSION) {
@@ -13,15 +13,16 @@ class Notice(private val prefs: SharedPreferences, private val version: Int = NO
     companion object {
         private const val ACCEPTED = "acceptedVersion"
         const val PREFS = "notice"
+        /** Bold lead and the rest of each notice row, in the design's order; the download/terms row is Recon's own (kept from v4). */
         val TEXT = listOf(
-            "Recon is a personal tool. To analyse a video it downloads a temporary copy, then deletes it when the analysis " +
-                "finishes. When you share a link, it first asks the platform for the video's title, length and thumbnail to show " +
-                "them. Instagram, TikTok, X and other platforms may forbid downloading in their terms of service. You are " +
-                "responsible for what you share with Recon. Only share content you're allowed to process.",
-            "Recon uses your own Google account through Gemini web (gemini.google.com), not an official API. Videos and " +
-                "screenshots are sent there with your account. Google's terms apply.",
-            "Google doesn't support apps using Gemini web and may limit, suspend or ban the account. The account-ban risk is " +
-                "yours. Sign in with a secondary Google account, not the one you rely on.",
+            "Video goes to Google Gemini." to "Frames and audio are sent through your own signed-in Google account.",
+            "You're responsible for what you share." to "Recon downloads a temporary copy, deleted after analysis, and asks the " +
+                "platform for the title, length and thumbnail. Instagram, TikTok, X and others may forbid downloading in their terms.",
+            "Unofficial." to "Not made by Google. Access can stop working or be blocked at any time.",
+            "Use a secondary Google account." to "Automated use may put the signed-in account at risk.",
+            "Results can be wrong." to "Check the sources before you act on anything.",
+            "Not professional advice." to "Health, legal and financial output is information only.",
+            "Outside the Play Store." to "Install updates only from the official GitHub releases.",
         )
     }
 }

@@ -11,7 +11,7 @@ object SetupCopy {
     // Design Recon UI 1c: the intro sentence (how the sign-in is stored included) and the account-risk card.
     const val SIGN_IN_INTRO = "Recon runs each analysis with Gemini on your Google account. You sign in on Google's own page; " +
         "Recon keeps the session on this phone only."
-    const val RISK_SHORT = "Google may flag automated use. Sign in with a secondary account, not your main one."
+    const val RISK_SHORT = "Google may flag automated use and can suspend or ban the account. Sign in with a secondary account, not your main one."
     const val ACCOUNT_RISK = "Gemini web is not an official API. Google doesn't support apps using it and may limit, " +
         "suspend or ban the account. That risk is yours, not Recon's. Use a secondary Google account, not your main one."
     const val PASTE_HELP = "If Google won't sign you in here, open gemini.google.com in a desktop browser, copy the Cookie " +

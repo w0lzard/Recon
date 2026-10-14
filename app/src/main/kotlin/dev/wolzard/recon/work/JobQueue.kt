@@ -10,6 +10,7 @@ import androidx.work.workDataOf
 import dev.wolzard.recon.core.job.Language
 import dev.wolzard.recon.core.job.UserAction
 import dev.wolzard.recon.core.model.Job
+import dev.wolzard.recon.core.model.JobState
 import java.io.File
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -46,11 +47,13 @@ object JobQueue {
     }
 
     /**
-     * Drops a WAITING_QUOTA job's delayed work and Recon's copy of a shared file.
-     * Only the separate wait work: cancelling inside the APPEND chain would cancel every job queued after it.
+     * Drops a job's work and Recon's copy of a shared file. A WAITING_QUOTA job only has its separate wait work.
+     * A queued or running job's work sits in the APPEND chain, so cancelling it cancels every job queued after it;
+     * JobActions.cancel queues those again.
      */
     fun cancel(context: Context, job: Job) {
-        WorkManager.getInstance(context).cancelUniqueWork(waitName(job.id))
+        val wm = WorkManager.getInstance(context)
+        if (job.state == JobState.WAITING_QUOTA) wm.cancelUniqueWork(waitName(job.id)) else wm.cancelAllWorkByTag(tag(job.id))
         val shared = File(context.filesDir, "shared").canonicalFile
         job.localUri?.let(::File)?.canonicalFile?.takeIf { it.path.startsWith(shared.path + File.separator) }?.let { f ->
             f.delete()

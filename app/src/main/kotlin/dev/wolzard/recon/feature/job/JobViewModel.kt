@@ -13,6 +13,7 @@ import dev.wolzard.recon.core.model.JobState
 import dev.wolzard.recon.core.model.Verdict
 import dev.wolzard.recon.core.port.JobStore
 import dev.wolzard.recon.mvi.MviViewModel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 
@@ -48,11 +49,19 @@ class JobActions(private val store: JobStore, private val cancelWork: (Job) -> U
         return id
     }
 
-    /** Only a WAITING_QUOTA job can be cancelled; it is removed, not kept as failed. */
+    /**
+     * Cancel job / Delete (design 1f, 1g, the result's overflow menu): the job is removed, not kept as failed.
+     * Cancelling a queued or running job's work inside the one-at-a-time chain also cancels the jobs queued behind it,
+     * so every QUEUED job is queued again (JobWorker skips one that already finished).
+     */
     suspend fun cancel(id: String): Boolean {
-        val job = store.get(id)?.takeIf { it.state == JobState.WAITING_QUOTA } ?: return false
-        cancelWork(job)
+        val job = store.get(id) ?: return false
+        val active = job.state != JobState.DONE && job.state != JobState.FAILED
+        if (active) cancelWork(job)
         store.delete(id)
+        if (active && job.state != JobState.WAITING_QUOTA) {
+            store.observeAll().first().filter { it.state == JobState.QUEUED }.asReversed().forEach { enqueue(it.id, UserAction.RUN) } // oldest first
+        }
         return true
     }
 

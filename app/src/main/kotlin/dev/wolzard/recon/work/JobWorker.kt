@@ -19,6 +19,7 @@ class JobWorker(context: Context, params: WorkerParameters) : CoroutineWorker(co
     private val store: JobStore by inject()
     private val runner: JobRunner by inject()
     private val notifier: Notifier by inject()
+    private val presenter: ResultPresenter by inject()
     private val clock: () -> Long by inject()
 
     override suspend fun getForegroundInfo(): ForegroundInfo = notifier.foregroundInfo(JobQueue.idOf(inputData).orEmpty())
@@ -39,14 +40,14 @@ class JobWorker(context: Context, params: WorkerParameters) : CoroutineWorker(co
             throw e
         } catch (e: Exception) {
             store.update(id) { it.copy(state = JobState.FAILED, failure = FailureReason.UNKNOWN, failureDetail = e::class.simpleName, progress = null) }
-            store.get(id)?.let { notifier.finished(it, null) }
+            store.get(id)?.let { presenter.finished(it, null) }
             return Result.failure()
         }
 
         val job = store.get(id) ?: return Result.success()
         when (job.state) {
             JobState.WAITING_QUOTA -> JobQueue.enqueueAfter(applicationContext, id, action, (job.retryAtEpochMs ?: clock()) - clock())
-            JobState.DONE, JobState.FAILED -> notifier.finished(job, summary(job))
+            JobState.DONE, JobState.FAILED -> presenter.finished(job, summary(job))
             else -> Unit
         }
         return Result.success()

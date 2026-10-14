@@ -48,6 +48,7 @@ import dev.wolzard.recon.core.job.RunJob
 import dev.wolzard.recon.work.JobRunner
 import dev.wolzard.recon.work.Notifier
 import dev.wolzard.recon.work.ShareIntake
+import dev.wolzard.recon.work.ResultPresenter
 import dev.wolzard.recon.work.deviceLanguage
 import java.io.File
 import org.koin.android.ext.koin.androidContext
@@ -74,6 +75,7 @@ val appModule = module {
     single { ResearchChain(get<GitHubResearcher>(), WikipediaResearcher(get()), KnowledgeResearcher(get()), web = null) { GroundingCapability.UNAVAILABLE } }
     single<() -> Long> { System::currentTimeMillis }
     single { Notifier(androidContext()) }
+    single { ResultPresenter(androidContext(), get()) }
     single {
         RunJob(
             store = get(), resolver = get(), fetchers = Fetchers(get<YtDlpFetcher>(), get<ContentUriFetcher>()),
@@ -98,6 +100,7 @@ val appModule = module {
     viewModel { params -> JobViewModel(params.get(), get(), get()) }
     single { LinkPreviewFetcher({ url -> get<YtDlpRunner>().run(url, listOf("--dump-json", "--skip-download", "--no-playlist"), "preview-${java.util.UUID.randomUUID()}") {} }) }
     single { ThumbnailLoader(get()) }
-    viewModel { params -> ContextViewModel(params.get(), get(), get<LinkPreviewFetcher>()::fetch) }
+    viewModel { dev.wolzard.recon.ShareSheetViewModel(get()) }
+    viewModel { params -> ContextViewModel(params.get(), get(), params.values.getOrNull(1) as? String, get<LinkPreviewFetcher>()::fetch) }
     viewModel { HomeViewModel(get(), get()) }
 }

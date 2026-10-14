@@ -6,6 +6,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Share sheet: lets a finished result pop up over other apps; the user grants it in Settings (ResultPresenter). -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
         android:name=".ReconApp"
@@ -25,6 +27,21 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+
+        <!-- Share sheet: a bottom sheet over the sending app, in its own task. Not exported itself: other apps reach it
+             only through the alias below, which carries the share filters, so they cannot open it on a job id. -->
+        <activity
+            android:name=".ShareActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Recon.Sheet"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop" />
+        <activity-alias
+            android:name=".Share"
+            android:targetActivity=".ShareActivity"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -35,7 +52,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="video/*" />
             </intent-filter>
-        </activity>
+        </activity-alias>
 
         <!-- JobWorker runs as a foreground dataSync worker (T12). -->
         <service

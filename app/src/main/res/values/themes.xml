@@ -14,4 +14,13 @@
         <item name="android:windowBackground">@color/splash_bg</item>
         <item name="android:windowLightStatusBar">@bool/light_bars</item>
     </style>
+
+    <!-- Share sheet: a see-through window; the Compose bottom sheet draws its own scrim. -->
+    <style name="Theme.Recon.Sheet" parent="Theme.Recon">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
 </resources>

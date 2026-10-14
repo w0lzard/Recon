@@ -41,9 +41,9 @@ class HomeScreenTest {
         compose.setContent { HomeScreen(HomeState(listOf(HomeRow.from(job), HomeRow.from(shared)))) { intents += it } }
         compose.onNodeWithText("instagram.com").assertExists()
         compose.onNodeWithText("A slime video.").assertExists()
-        compose.onNodeWithText("Done").assertExists()
+        compose.onNodeWithText("DONE").assertExists()
         compose.onNodeWithText("Shared video").assertExists()
-        compose.onNodeWithText("Waiting for quota").assertExists()
+        compose.onNodeWithText("WAITING FOR QUOTA").assertExists()
         compose.onNodeWithText("A slime video.").performClick()
         assertEquals(listOf<HomeIntent>(HomeIntent.OpenJob("j1")), intents)
     }

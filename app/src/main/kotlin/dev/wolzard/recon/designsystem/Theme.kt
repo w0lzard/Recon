@@ -41,7 +41,8 @@ private val Sans = FontFamily(Font(R.font.inter_regular, FontWeight.Normal), Fon
 private val Dark = darkColorScheme(
     background = Ink, surface = Ink, onBackground = Color(0xFFE8ECE9), onSurface = Color(0xFFE8ECE9),
     surfaceContainer = Color(0xFF161A18), surfaceContainerHigh = Color(0xFF1F2421),
-    outlineVariant = Color(0xFF2C322F), outline = Color(0xFF6F7873), // outline = control borders, ≥ 3:1 (WCAG 1.4.11); outlineVariant = hairlines onSurfaceVariant = Color(0xFF9BA39E),
+    // outline = control borders, ≥ 3:1 (WCAG 1.4.11); outlineVariant = hairlines
+    outlineVariant = Color(0xFF2C322F), outline = Color(0xFF6F7873), onSurfaceVariant = Color(0xFF9BA39E),
     primary = Lime, onPrimary = Ink, error = DarkStatus.bad, onError = Ink,
 )
 

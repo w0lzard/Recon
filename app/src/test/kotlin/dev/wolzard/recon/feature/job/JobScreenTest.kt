@@ -110,20 +110,20 @@ class JobScreenTest {
 
     @Test fun disputedClaimNeverConfirmed() {
         show(job(JobState.DONE), result(listOf(finding(entity(EntityType.CLAIM, "Chocolate causes acne"), Verdict.DISPUTED, Basis.WEB_SOURCES))))
-        compose.onNodeWithText("Disputed").assertExists()
+        compose.onNodeWithText("DISPUTED").assertExists()
         compose.onNodeWithText("Chocolate causes acne").assertExists()
-        compose.onNodeWithText("Confirmed").assertDoesNotExist()
+        compose.onNodeWithText("Confirmed", ignoreCase = true).assertDoesNotExist()
     }
 
     @Test fun inferredShowsGuessBadge() {
         show(job(JobState.DONE), result(listOf(finding(entity(EntityType.PRODUCT, "Kirby", Evidence.INFERRED), Verdict.BEST_MATCH, Basis.AI_KNOWLEDGE))))
-        compose.onNodeWithText("Guess").assertExists()
+        compose.onNodeWithText("GUESS").assertExists()
     }
 
     @Test fun notCheckedShowsWhatTheVideoSaid() {
         val e = entity(EntityType.PLACE, "Taj Mahal")
         show(job(JobState.DONE), result(listOf(Finding(e, "none", Verdict.NOT_CHECKED, e.name, e.saidInVideo, emptyList(), "", "", null, null, Basis.VIDEO_ONLY))))
-        compose.onNodeWithText("Not checked").assertExists()
+        compose.onNodeWithText("NOT CHECKED").assertExists()
         compose.onNodeWithText("The video says Taj Mahal.").assertExists()
     }
 
@@ -132,9 +132,9 @@ class JobScreenTest {
             finding(entity(EntityType.CLAIM, "Water while standing hurts knees"), Verdict.UNCLEAR, Basis.AI_KNOWLEDGE),
             finding(entity(EntityType.BOOK, "Atomic Habits"), Verdict.BEST_MATCH, Basis.AI_KNOWLEDGE),
         )))
-        compose.onAllNodesWithText("Unverified, from AI knowledge").assertCountEquals(2)
-        compose.onNodeWithText("Confirmed").assertDoesNotExist()
-        compose.onNodeWithText("Supported").assertDoesNotExist()
+        compose.onAllNodesWithText("Unverified, from AI knowledge", ignoreCase = true).assertCountEquals(2)
+        compose.onNodeWithText("Confirmed", ignoreCase = true).assertDoesNotExist()
+        compose.onNodeWithText("Supported", ignoreCase = true).assertDoesNotExist()
     }
 
     // --- r2 candidates picker
@@ -237,7 +237,7 @@ class JobScreenTest {
         val a = dev.wolzard.recon.core.model.Answer("It is Codeium.", dev.wolzard.recon.core.model.AnswerStatus.VERIFIED, 0.9, listOf("caption at the start"))
         show(asked(), answered(a))
         compose.onNodeWithText("It is Codeium.").assertExists()
-        compose.onNodeWithText("Verified").assertExists()
+        compose.onNodeWithText("VERIFIED").assertExists()
         compose.onNodeWithText("90%").assertExists()
         compose.onAllNodesWithText("caption at the start").assertCountEquals(2) // in the card and in the shared source list
         val y = { tag: String -> compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.top }
@@ -251,14 +251,14 @@ class JobScreenTest {
     @Test fun unclearAnswerShowsItsStatus() {
         val a = dev.wolzard.recon.core.model.Answer("The video does not say who this is.", dev.wolzard.recon.core.model.AnswerStatus.UNCLEAR, 0.2)
         show(asked(), answered(a))
-        compose.onNodeWithText("Unclear").assertExists()
+        compose.onNodeWithText("UNCLEAR").assertExists()
         compose.onNodeWithText("The video does not say who this is.").assertExists()
     }
 
     @Test fun questionWithoutAnswerShowsAFallbackCard() {
         show(asked(), answered(null))
         compose.onNodeWithText(JobCopy.NO_ANSWER).assertExists()
-        compose.onNodeWithText("Unclear").assertExists()
+        compose.onNodeWithText("UNCLEAR").assertExists()
     }
 
     @Test fun mediaFindingShowsItsLabel() {
@@ -283,7 +283,7 @@ class JobScreenTest {
     @Test fun unverifiedAnswerWithoutSourcesSaysSo() {
         val a = dev.wolzard.recon.core.model.Answer("Probably Codeium.", dev.wolzard.recon.core.model.AnswerStatus.UNVERIFIED, 0.5)
         show(asked(), answered(a))
-        compose.onNodeWithText("Unverified").assertExists()
+        compose.onNodeWithText("UNVERIFIED").assertExists()
         compose.onNodeWithText(JobCopy.NO_SOURCE).assertExists()
         compose.onNodeWithTag("no_source").assertExists() // icon and text in one row
     }

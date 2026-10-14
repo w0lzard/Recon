@@ -28,7 +28,7 @@ import dev.wolzard.recon.designsystem.status
 enum class ChipKind { Neutral, Ok, Warn, Unclear, Bad }
 
 /**
- * Non-clickable status pill: 22dp, 1dp border, coloured ink (design 1a). Non-neutral chips carry an icon next to
+ * Non-clickable status pill: 22dp, 1dp border, coloured ink, uppercase mono label (design 1a). Non-neutral chips carry an icon next to
  * the label ([icon] overrides the one the kind implies), so the status never rests on colour alone.
  */
 @Composable
@@ -53,8 +53,8 @@ fun StatusChip(label: String, kind: ChipKind, modifier: Modifier = Modifier, ico
         modifier.border(1.dp, line, RoundedCornerShape(6.dp)).padding(horizontal = 7.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        glyph?.let { Icon(it, contentDescription = null, Modifier.size(12.dp), tint = ink) }
-        Text(label, color = ink, style = MaterialTheme.typography.labelSmall)
+        glyph?.let { Icon(it, contentDescription = null, Modifier.size(14.dp), tint = ink) }
+        Text(label.uppercase(), color = ink, style = MaterialTheme.typography.labelSmall)
     }
 }
 

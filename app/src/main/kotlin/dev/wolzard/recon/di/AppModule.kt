@@ -9,6 +9,7 @@ import dev.wolzard.recon.core.port.JobStore
 import dev.wolzard.recon.core.port.LanguageModel
 import dev.wolzard.recon.core.port.LinkResolver
 import dev.wolzard.recon.core.port.SecretStore
+import dev.wolzard.recon.core.port.Secret
 import dev.wolzard.recon.core.port.VideoAnalyzer
 import dev.wolzard.recon.data.db.MIGRATION_1_2
 import dev.wolzard.recon.data.db.MIGRATION_2_3
@@ -37,6 +38,7 @@ import dev.wolzard.recon.data.media.YtDlpFetcher
 import dev.wolzard.recon.data.media.YtDlpRunner
 import dev.wolzard.recon.data.secret.KeystoreSecretStore
 import dev.wolzard.recon.feature.settings.SettingsViewModel
+import dev.wolzard.recon.feature.settings.signingSha256
 import dev.wolzard.recon.feature.context.ContextViewModel
 import dev.wolzard.recon.feature.home.HomeViewModel
 import dev.wolzard.recon.feature.job.JobActions
@@ -88,14 +90,18 @@ val appModule = module {
     }
     single<JobRunner> { val runJob: RunJob = get(); JobRunner { id, action -> runJob(id, action) } }
     single { ShareIntake(androidContext(), get(), get()) }
-    viewModel { SignInViewModel(get()) { get<GeminiWebClient>().verify(it) } }
+    viewModel {
+        val secrets: SecretStore = get()
+        // The address goes next to the cookies only after the check passed; sign-out clears both (GeminiSession).
+        SignInViewModel(secrets) { cookies -> get<GeminiWebClient>().run { verify(cookies).also { secrets.put(Secret.GEMINI_EMAIL, accountEmail) } } }
+    }
     single {
         UpdateChecker(
             get(), androidContext().getSharedPreferences("update", Context.MODE_PRIVATE), BuildConfig.VERSION_NAME,
             BuildConfig.RELEASES_REPO, Build.SUPPORTED_ABIS.toList(), get(),
         )
     }
-    viewModel { SettingsViewModel(get(), get()) }
+    viewModel { SettingsViewModel(get(), get(), signingSha256(androidContext())) }
     single { JobActions(get(), { job -> JobQueue.cancel(androidContext(), job) }) { id, action -> JobQueue.enqueue(androidContext(), id, action) } }
     viewModel { params -> JobViewModel(params.get(), get(), get()) }
     single { LinkPreviewFetcher({ url -> get<YtDlpRunner>().run(url, listOf("--dump-json", "--skip-download", "--no-playlist"), "preview-${java.util.UUID.randomUUID()}") {} }) }

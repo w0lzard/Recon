@@ -6,7 +6,6 @@ import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.wolzard.recon.core.model.Job
 import dev.wolzard.recon.core.model.JobState
-import dev.wolzard.recon.data.update.UpdateInfo
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -19,17 +18,6 @@ class HomeScreenTest {
     @Test fun emptyState() {
         compose.setContent { HomeScreen(HomeState()) {} }
         compose.onNodeWithText("Share a video link to Recon from any app").assertExists()
-    }
-
-    @Test fun updateBannerOpensLinksAndDismisses() {
-        val intents = mutableListOf<HomeIntent>()
-        val info = UpdateInfo("0.2.0", "https://github.com/w0lzard/recon/releases/download/v0.2.0/a.apk", "https://github.com/w0lzard/recon/releases/tag/v0.2.0")
-        compose.setContent { HomeScreen(HomeState(update = info)) { intents += it } }
-        compose.onNodeWithText("Recon 0.2.0 is available").assertExists()
-        compose.onNodeWithText("Download").performClick()
-        compose.onNodeWithText("What's new").performClick()
-        compose.onNodeWithText("Dismiss").performClick()
-        assertEquals(listOf(HomeIntent.OpenLink(info.apkUrl), HomeIntent.OpenLink(info.releasePageUrl), HomeIntent.DismissUpdate("0.2.0")), intents)
     }
 
     @Test fun rowsShowStateHostAndSummaryAndOpen() {

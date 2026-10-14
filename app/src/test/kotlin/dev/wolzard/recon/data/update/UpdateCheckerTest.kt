@@ -161,4 +161,12 @@ class UpdateCheckerTest {
         server.enqueue(release(tag = "v0.3.0", assets = arrayOf()))
         assertEquals("0.3.0", checker().check(force = true)!!.version)
     }
+
+    @Test fun lastCheckedIsNullUntilGitHubIsAsked() = runTest {
+        val c = checker()
+        assertEquals(null, c.lastChecked())
+        server.enqueue(release())
+        c.checkNow()
+        assertEquals(now, c.lastChecked())
+    }
 }

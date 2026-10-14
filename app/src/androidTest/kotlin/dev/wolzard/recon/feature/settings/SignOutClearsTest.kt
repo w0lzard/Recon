@@ -36,12 +36,12 @@ class SignOutClearsTest {
         compose.waitUntil(5_000) { cookies.getCookie("https://gemini.google.com")?.contains("__Secure-1PSID") == true }
 
         val vm = SettingsViewModel(secrets)
-        compose.setContent { ReconTheme { SettingsRoute(vm, onNotice = {}, onSignIn = {}) } }
+        compose.setContent { ReconTheme { SettingsRoute(vm, onBack = {}, onNotice = {}, onSignIn = {}) } }
         compose.onNodeWithText("Sign out").performScrollTo().performClick()
 
         compose.waitUntil(5_000) { cookies.getCookie("https://gemini.google.com") == null && cookies.getCookie("https://accounts.google.com") == null }
         assertNull(secrets.get(Secret.GEMINI_COOKIES))
         assertNull(secrets.get(Secret.GEMINI_VERIFIED))
-        assertTrue(compose.onNodeWithText("Not signed in.").fetchSemanticsNode().layoutInfo.isPlaced)
+        assertTrue(compose.onNodeWithText("Not signed in").fetchSemanticsNode().layoutInfo.isPlaced)
     }
 }

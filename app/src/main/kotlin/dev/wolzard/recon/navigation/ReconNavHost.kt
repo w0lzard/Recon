@@ -107,7 +107,7 @@ fun ReconNavHost(
                 }
             }
             composable<SettingsDestination> {
-                SettingsRoute(koinViewModel(), onNotice = { nav.navigate(NoticeDestination) }, onSignIn = { nav.navigate(SignInDestination) })
+                SettingsRoute(koinViewModel(), onBack = { nav.popBackStack() }, onNotice = { nav.navigate(NoticeDestination) }, onSignIn = { nav.navigate(SignInDestination) })
             }
         }
     }

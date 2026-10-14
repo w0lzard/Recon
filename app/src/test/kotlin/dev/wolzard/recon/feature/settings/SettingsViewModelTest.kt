@@ -47,4 +47,25 @@ class SettingsViewModelTest {
         assertEquals(SettingsEffect.NavigateToSignIn, vm.effects.first())
         assertEquals(SettingsEffect.NavigateToNotice, vm.effects.first())
     }
+
+    @Test fun emailShowsOnlyWhileSignedInAndSignOutForgetsIt() {
+        secrets.put(Secret.GEMINI_EMAIL, "recon.side@gmail.com")
+        assertNull(SettingsViewModel(secrets).state.value.email) // address without a verified sign-in
+        GeminiSession.save(secrets, "__Secure-1PSID=x")
+        val signedIn = SettingsViewModel(secrets)
+        assertEquals("recon.side@gmail.com", signedIn.state.value.email)
+        signedIn.onIntent(SettingsIntent.SignOut)
+        assertNull(secrets.get(Secret.GEMINI_EMAIL))
+        assertNull(signedIn.state.value.email)
+    }
+
+    @Test fun certificateIsPassedThroughAndPrintedInFourLines() {
+        val sha = fingerprint("cert".toByteArray())
+        assertEquals(sha, SettingsViewModel(secrets, certSha256 = sha).state.value.certSha256)
+        assertEquals(32, sha.split(":").size)
+        val lines = certLines(sha).lines()
+        assertEquals(4, lines.size)
+        assertTrue(lines[0].startsWith("SHA-256 ") && lines[0].endsWith(":"))
+        assertEquals(sha, certLines(sha).removePrefix("SHA-256 ").replace("\n", ""))
+    }
 }

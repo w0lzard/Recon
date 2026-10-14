@@ -169,4 +169,12 @@ class GeminiWebClientTest {
         try { client().verify("__Secure-1PSID=bad"); fail() } catch (e: AnalyzerException) { assertEquals(FailureReason.API_KEY_INVALID, e.reason) }
         assertTrue(secrets.map.isEmpty())
     }
+
+    @Test fun `account email comes from the page, escaped at-sign undone, anything else is null`() {
+        assertEquals("recon.side@gmail.com", GeminiWebClient.accountEmail("""{"oPEP7c":"recon.side\u0040gmail.com","SNlM0e":"t"}"""))
+        assertEquals("a@b.co", GeminiWebClient.accountEmail("""{"oPEP7c": "a@b.co"}"""))
+        assertEquals(null, GeminiWebClient.accountEmail(appPage))
+        assertEquals(null, GeminiWebClient.accountEmail("""{"oPEP7c":""}"""))
+        assertEquals(null, GeminiWebClient.accountEmail("""{"oPEP7c":"not an address"}"""))
+    }
 }

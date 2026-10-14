@@ -9,7 +9,7 @@ sealed interface HomeIntent {
     data object OpenSettings : HomeIntent
     data class OpenLink(val url: String) : HomeIntent
     data class DismissUpdate(val version: String) : HomeIntent
-    /** [text] = what the clipboard held; a valid link opens the context screen (D23). */
+    /** [text] = the link field (typed, pasted or filled from the clipboard); a valid link opens the context screen (D23). */
     data class PasteLink(val text: String) : HomeIntent
 }
 

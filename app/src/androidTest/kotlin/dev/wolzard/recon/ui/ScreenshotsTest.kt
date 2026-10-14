@@ -57,9 +57,14 @@ class ScreenshotsTest {
     private val suffix = InstrumentationRegistry.getArguments().getString("suffix", "")
     private val dir = File(InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null), "screenshots").apply { mkdirs() }
 
-    private fun shot(name: String, scrollTo: String? = null, scrollToTag: String? = null, clickText: String? = null, content: @Composable () -> Unit) {
+    /** [dark] null = follow the device, as the app does. */
+    private fun shot(name: String, scrollTo: String? = null, scrollToTag: String? = null, clickText: String? = null, dark: Boolean? = null, content: @Composable () -> Unit) {
         // The real app gets its background from the Scaffold in ReconNavHost; the harness needs its own.
-        compose.setContent { ReconTheme { androidx.compose.material3.Surface(color = androidx.compose.material3.MaterialTheme.colorScheme.background) { content() } } }
+        compose.setContent {
+            ReconTheme(dark ?: androidx.compose.foundation.isSystemInDarkTheme()) {
+                androidx.compose.material3.Surface(color = androidx.compose.material3.MaterialTheme.colorScheme.background) { content() }
+            }
+        }
         compose.waitForIdle()
         clickText?.let { compose.onNodeWithText(it).performClick(); compose.waitForIdle() }
         scrollTo?.let { compose.onNodeWithText(it).performScrollTo() }
@@ -80,13 +85,22 @@ class ScreenshotsTest {
         JobResult(AnalysisResult(findings.map { it.entity }, "A short video about a few things worth looking up.", 0.8, listOf("on-screen text")),
             findings, sources, null, "A", mapOf("analyse" to "gemini-3.8-flash", "research" to "gemini-3.7-flash"), emptyMap())
 
-    @Test fun home() = shot("home") {
-        val done = Job("j1", "https://www.instagram.com/reel/abc/", url = "https://www.instagram.com/reel/abc/", state = JobState.DONE,
-            resultJson = """{"analysis":{"entities":[],"summary":"Three productivity books reviewed.","confidence":0.8},"findings":[],"sources":[],"searchSuggestionsHtml":null,"path":"A"}""",
-            createdAt = now - 3_600_000, updatedAt = now)
-        val waiting = Job("j2", "https://www.tiktok.com/@x/video/1", url = "https://www.tiktok.com/@x/video/1", state = JobState.WAITING_QUOTA, createdAt = now, updatedAt = now)
-        HomeScreen(HomeState(listOf(HomeRow.from(waiting), HomeRow.from(done)))) {}
+    // Design 1d's example rows.
+    private fun homeRows(): List<HomeRow> {
+        fun j(id: String, url: String, state: JobState, minAgo: Long, title: String? = null) =
+            Job(id, url, url = url, state = state, videoTitle = title, createdAt = now - minAgo * 60_000, updatedAt = now)
+        return listOf(
+            j("1", "https://www.instagram.com/reel/C9xQ2/", JobState.DONE, 2, "My desk setup and the CLI behind my dotfiles"),
+            j("2", "https://www.tiktok.com/@x/video/1", JobState.ANALYSING, 0),
+            j("3", "https://www.youtube.com/watch?v=abc", JobState.WAITING_QUOTA, 18, "Sourdough at 80% hydration, start to finish"),
+            j("4", "https://x.com/a/status/18402", JobState.FAILED, 60),
+            j("5", "https://www.instagram.com/reel/D1/", JobState.DONE, 26 * 60, "Five-minute garlic noodles"),
+        ).map { HomeRow.from(it, now) }
     }
+
+    @Test fun home() = shot("home") { HomeScreen(HomeState(homeRows())) {} }
+
+    @Test fun homeLight() = shot("home_light", dark = false) { HomeScreen(HomeState(homeRows())) {} }
 
     @Test fun homeEmpty() = shot("home_empty") { HomeScreen(HomeState()) {} }
 
@@ -195,18 +209,13 @@ class ScreenshotsTest {
 
     @Test fun quotaWaitingNoTime() = shot("job_quota_waiting_no_time") { JobScreen(job(JobState.WAITING_QUOTA), null, now) {} }
 
-    @Test fun homeUpdate() = shot("home_update") {
-        val info = dev.wolzard.recon.data.update.UpdateInfo("0.2.0", "https://github.com/w0lzard/recon/releases/download/v0.2.0/a.apk", "https://github.com/w0lzard/recon/releases/tag/v0.2.0")
-        HomeScreen(HomeState(update = info)) {}
-    }
-
     @Test fun signIn() {
-        shot("sign_in") { SignInScreen(SignInState()) {} }
+        shot("sign_in") { SignInScreen(SignInState(), onBack = {}) {} }
     }
 
-    @Test fun signInPaste() { // D27: the paste step, reached from "Paste cookies instead"
-        shot("sign_in_paste", clickText = "Paste cookies instead") {
-            SignInScreen(SignInState(error = dev.wolzard.recon.core.copy.SetupCopy.NO_SESSION_COOKIE)) {}
+    @Test fun signInPaste() { // design 1c: the paste field, inline under "Advanced"
+        shot("sign_in_paste", clickText = "Advanced: paste cookie header", scrollToTag = "cookie_field") {
+            SignInScreen(SignInState(error = dev.wolzard.recon.core.copy.SetupCopy.NO_SESSION_COOKIE), onBack = {}) {}
         }
     }
 

@@ -16,7 +16,7 @@ class HomeViewModel(store: JobStore, private val updates: UpdateChecker) : MviVi
         }
     }
 
-    private companion object { const val NO_LINK = "No video link on the clipboard. Copy one first." }
+    private companion object { const val NO_LINK = "That isn't a video link. Copy the link from the app's Share menu and paste it here." }
 
     override fun onIntent(intent: HomeIntent) = when (intent) {
         is HomeIntent.OpenJob -> send(HomeEffect.NavigateToJob(intent.id))

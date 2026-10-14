@@ -20,7 +20,9 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import dev.wolzard.recon.designsystem.Mono
 import dev.wolzard.recon.designsystem.status
 
@@ -68,16 +70,17 @@ fun Reticle(modifier: Modifier = Modifier.size(18.dp), tick: Color = MaterialThe
             drawLine(tick, Offset(cx, cy), Offset(cx + dx, cy), w); drawLine(tick, Offset(cx, cy), Offset(cx, cy + dy), w)
         }
         corner(w / 2, w / 2, t, t); corner(x, w / 2, -t, t); corner(w / 2, y, t, -t); corner(x, y, -t, -t)
-        drawRect(dot, Offset(size.width * .42f, size.height * .42f), Size(size.width / 6, size.height / 6))
+        val d = minOf(size.width / 6, 4.dp.toPx()) // design: a small signal dot, even on the 48 dp empty-state mark
+        drawRect(dot, Offset((size.width - d) / 2, (size.height - d) / 2), Size(d, d))
     }
 }
 
 @Composable
 fun Wordmark(modifier: Modifier = Modifier) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        Reticle()
+        Reticle(Modifier.size(20.dp))
         Spacer(Modifier.width(10.dp))
-        Text("Recon", style = MaterialTheme.typography.titleMedium.copy(fontFamily = Mono))
+        Text("Recon", style = MaterialTheme.typography.titleMedium.copy(fontFamily = Mono, fontWeight = FontWeight.Medium, fontSize = 19.sp, lineHeight = 24.sp))
     }
 }
 

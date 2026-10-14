@@ -165,7 +165,7 @@ private fun BottomBar(content: @Composable androidx.compose.foundation.layout.Ro
 /** A thumbnail inside the reticle corners (design TARGET block and result header). */
 @Composable
 private fun FramedThumb(url: String?, width: Dp, height: Dp) {
-    Box(Modifier.cornerTicks(MaterialTheme.colorScheme.onSurface, 8.dp).padding(5.dp)) { Thumb(url, width, height) }
+    Box(Modifier.cornerTicks(MaterialTheme.colorScheme.onSurface, 8.dp).padding(5.dp)) { Thumb(url, width, height, fallback = null) } // a video: the striped placeholder
 }
 
 // --- running (1f, 3c)

@@ -48,7 +48,7 @@ class MigrationTest {
         db.close()
     }
 
-    private fun open() = Room.databaseBuilder(ctx, ReconDb::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3).allowMainThreadQueries().build()
+    private fun open() = Room.databaseBuilder(ctx, ReconDb::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).allowMainThreadQueries().build()
 
     @Test fun v1RowsKeepTheirDataAndGetNoContext() {
         createV1(insertRow = true)
@@ -120,6 +120,29 @@ class MigrationTest {
             assertEquals("Glass Harbour", job.videoTitle)
             assertEquals(38L, job.videoDurationSec)
             assertEquals("https://i.ytimg.com/vi/b/hq.jpg", job.thumbnailUrl)
+        } finally {
+            room.close()
+        }
+    }
+
+    // --- D28: version 3 to 4 adds the run record
+
+    @Test fun v3RowsKeepTheirPreviewAndStoreARunRecord() {
+        create(3) { db ->
+            db.execSQL(
+                "INSERT INTO jobs (id, sharedText, url, localUri, state, failure, failureDetail, retryAtEpochMs, progress, analysisJson, resultJson, createdAt, updatedAt, userContext, videoTitle, videoDurationSec, thumbnailUrl) " +
+                    "VALUES ('j3', 'https://youtu.be/c', 'https://youtu.be/c', NULL, 'DONE', NULL, NULL, NULL, NULL, NULL, '{\"r\":3}', 50, 60, NULL, 'Glass Harbour', 38, NULL)",
+            )
+        }
+        val room = open()
+        try {
+            val store = RoomJobStore(room)
+            val job = runBlocking { store.get("j3") }!!
+            assertEquals("Glass Harbour", job.videoTitle)
+            assertNull(job.startedAt); assertNull(job.downloadBytes); assertNull(job.frameCount); assertNull(job.hasAudio)
+            runBlocking { store.update("j3") { it.copy(startedAt = 1, downloadedAt = 2, sampledAt = 3, analysedAt = 4, downloadBytes = 4_400_000, frameCount = 24, hasAudio = true) } }
+            val after = runBlocking { store.get("j3") }!!
+            assertEquals(listOf<Any?>(1L, 2L, 3L, 4L, 4_400_000L, 24, true), listOf(after.startedAt, after.downloadedAt, after.sampledAt, after.analysedAt, after.downloadBytes, after.frameCount, after.hasAudio))
         } finally {
             room.close()
         }

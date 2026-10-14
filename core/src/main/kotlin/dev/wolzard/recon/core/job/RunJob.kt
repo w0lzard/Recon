@@ -79,7 +79,7 @@ class RunJob(
             val saved = job.analysisJson?.takeIf { action != UserAction.TRY_SHARPER }
                 ?.let { runCatching { json.decodeFromString(SavedAnalysis.serializer(), it) }.getOrNull() }
             val analysis = saved ?: analyse(job, dir, action, budget)
-            if (saved == null) store.update(jobId) { it.copy(analysisJson = json.encodeToString(SavedAnalysis.serializer(), analysis)) }
+            if (saved == null) store.update(jobId) { it.copy(analysisJson = json.encodeToString(SavedAnalysis.serializer(), analysis), analysedAt = clock()) }
 
             val lang = language()
             val models = mapOf("analyse" to analysis.model)
@@ -118,13 +118,17 @@ class RunJob(
         val local = job.localUri
         if (url == null && local == null) throw AnalyzerException(FailureReason.UNSUPPORTED_LINK)
         val lang = language().display
+        // D28: a new run record; the step card times count from here.
+        store.update(job.id) {
+            it.copy(startedAt = clock(), downloadedAt = null, sampledAt = null, analysedAt = null, downloadBytes = null, frameCount = null, hasAudio = null)
+        }
 
         var lastError: AnalyzerException? = null
         if (local == null) {
             val resolved = if (LinkRouter.needsResolving(url!!)) resolver.resolve(url) else url
             store.update(job.id) { it.copy(url = resolved) }
             if (LinkRouter.classify(resolved) is Route.YouTube && analyzer.supportsYouTubeUrl && action != UserAction.TRY_SHARPER) {
-                store.update(job.id) { it.copy(state = JobState.ANALYSING) }
+                store.update(job.id) { it.copy(state = JobState.ANALYSING, sampledAt = clock()) } // the model reads the video itself
                 when (val r = attempt(budget, timeouts.pathA) { analyzer.analyze(AnalysisInput.YouTubeUrl(resolved), lang, job.userContext) }) {
                     is Attempt.Ok -> return SavedAnalysis(r.analysis.result, r.analysis.model, "youtube-url")
                     is Attempt.Failed -> lastError = r.error // falls through to the download path
@@ -147,7 +151,7 @@ class RunJob(
         // Path A: a muxed file ≤ 50 MB. YouTube's two-file download (separate audio) goes straight to Path B.
         if (media.audio == null && media.video.length() <= timeouts.maxPathABytes) {
             if (!budget.canSpend()) throw lastError ?: AnalyzerException(FailureReason.UNKNOWN, message = "call budget used up")
-            store.update(job.id) { it.copy(state = JobState.ANALYSING, progress = null) }
+            store.update(job.id) { it.copy(state = JobState.ANALYSING, progress = null, sampledAt = clock()) } // sent whole; no frames of ours
             when (val r = attempt(budget, timeouts.pathA) { analyzer.analyze(AnalysisInput.VideoFile(media.video, mime(media.video)), lang, job.userContext) }) {
                 is Attempt.Ok -> return SavedAnalysis(r.analysis.result, r.analysis.model, "A")
                 is Attempt.Failed -> lastError = r.error
@@ -155,16 +159,18 @@ class RunJob(
         }
 
         // Path B: frames + audio. Zero frames is never a success: one other-format re-download for links, then fail.
-        store.update(job.id) { it.copy(state = JobState.ANALYSING, progress = null) }
+        store.update(job.id) { it.copy(state = JobState.ANALYSING, progress = null, sampledAt = null) }
         var frames = sampler.sample(media.video, File(dir, "frames"))
         if (frames.frames.isEmpty() && fetcher === fetchers.link) {
             media = fetch(job.id, fetcher, source, dir, FetchQuality.OTHER_FORMAT, media.formatId)
             store.update(job.id) { it.copy(state = JobState.ANALYSING, progress = null) }
             frames = sampler.sample(media.video, File(dir, "frames-retry"))
         }
+        val audio = media.audio ?: frames.audio
+        store.update(job.id) { it.copy(sampledAt = clock(), frameCount = frames.frames.size, hasAudio = audio != null) }
         if (frames.frames.isEmpty()) throw AnalyzerException(FailureReason.VIDEO_UNREADABLE, message = "no frame could be decoded")
         if (!budget.canSpend()) throw lastError ?: AnalyzerException(FailureReason.UNKNOWN, message = "call budget used up")
-        val input = AnalysisInput.FramesAndAudio(frames.frames, media.audio ?: frames.audio)
+        val input = AnalysisInput.FramesAndAudio(frames.frames, audio)
         return when (val r = attempt(budget, timeouts.pathB) { analyzer.analyze(input, lang, job.userContext) }) {
             is Attempt.Ok -> SavedAnalysis(r.analysis.result, r.analysis.model, "B")
             is Attempt.Failed -> throw r.error
@@ -175,7 +181,7 @@ class RunJob(
         store.update(id) { it.copy(state = JobState.DOWNLOADING, progress = 0f) }
         var reported = 0f
         return f.fetch(source, dir, q, avoid) { p -> if (p - reported >= 0.05f || p >= 1f) reported = p }
-            .also { store.update(id) { it.copy(progress = reported) } }
+            .also { m -> store.update(id) { it.copy(progress = reported, downloadedAt = clock(), downloadBytes = m.video.length() + (m.audio?.length() ?: 0)) } }
     }
 
     private sealed interface Attempt {

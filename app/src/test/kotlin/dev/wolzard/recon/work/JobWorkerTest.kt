@@ -69,6 +69,14 @@ class JobWorkerTest {
         assertEquals(JobState.DONE, store.get(id)!!.state)
     }
 
+    @Test fun finishedOrDeletedJobIsNotRunAgain() = runBlocking { // queued twice after a cancel (JobActions.cancel)
+        val id = store.create("https://youtu.be/x", null)
+        store.update(id) { it.copy(state = JobState.DONE) }
+        assertEquals(ListenableWorker.Result.success(), worker(id).doWork())
+        assertEquals(ListenableWorker.Result.success(), worker("gone").doWork())
+        assertTrue(seenStates.isEmpty())
+    }
+
     @Test fun runnerExceptionIsFailedUnknownAndWorkerFailure() = runBlocking {
         val id = store.create("https://youtu.be/x", null)
         behaviour = { throw IllegalStateException("boom") }

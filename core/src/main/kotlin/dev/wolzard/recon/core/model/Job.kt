@@ -28,6 +28,14 @@ data class Job(
     val videoTitle: String? = null,
     val videoDurationSec: Long? = null,
     val thumbnailUrl: String? = null,       // https only (checked before it is stored and again before it is loaded)
+    // D28: the run's own record, for the step card and the failed card (design 1f/1k); display-only, null = not known.
+    val startedAt: Long? = null,            // this run began (Retry and "Try sharper video" start a new run)
+    val downloadedAt: Long? = null,
+    val sampledAt: Long? = null,            // frames sampled, or the video handed to the model whole (Path A, YouTube URL)
+    val analysedAt: Long? = null,
+    val downloadBytes: Long? = null,
+    val frameCount: Int? = null,            // Path B only; 0 = the sampler read none
+    val hasAudio: Boolean? = null,          // Path B only
 )
 
 /** Persisted as JSON in JobEntity.resultJson. */

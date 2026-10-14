@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import dev.wolzard.recon.core.model.LinkPreview
 import dev.wolzard.recon.designsystem.Thumb
+import dev.wolzard.recon.designsystem.cornerTicks
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -37,9 +38,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -136,15 +134,4 @@ private fun LinkCard(link: String, host: String, preview: LinkPreview?) {
             detail?.let { Text(it, Modifier.testTag("context_detail"), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
         }
     }
-}
-
-/** Four 10 dp corner ticks, 1.5 dp stroke, as on the design's link card. */
-private fun Modifier.cornerTicks(c: Color) = drawBehind {
-    val t = 10.dp.toPx(); val s = 1.5.dp.toPx(); val h = s / 2
-    val (w, ht) = size.width to size.height
-    fun corner(x: Float, y: Float, dx: Float, dy: Float) {
-        drawLine(c, Offset(x, y), Offset(x + dx * t, y), s)
-        drawLine(c, Offset(x, y), Offset(x, y + dy * t), s)
-    }
-    corner(h, h, 1f, 1f); corner(w - h, h, -1f, 1f); corner(h, ht - h, 1f, -1f); corner(w - h, ht - h, -1f, -1f)
 }

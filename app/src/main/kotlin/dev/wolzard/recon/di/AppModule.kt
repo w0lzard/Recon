@@ -13,6 +13,7 @@ import dev.wolzard.recon.core.port.Secret
 import dev.wolzard.recon.core.port.VideoAnalyzer
 import dev.wolzard.recon.data.db.MIGRATION_1_2
 import dev.wolzard.recon.data.db.MIGRATION_2_3
+import dev.wolzard.recon.data.db.MIGRATION_3_4
 import dev.wolzard.recon.data.db.ReconDb
 import dev.wolzard.recon.data.db.RoomJobStore
 import dev.wolzard.recon.data.gemini.GeminiWebBackend
@@ -60,7 +61,7 @@ import org.koin.dsl.module
 
 val appModule = module {
     single { OkHttpClient() }
-    single { Room.databaseBuilder(androidContext(), ReconDb::class.java, "recon.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3).build() }
+    single { Room.databaseBuilder(androidContext(), ReconDb::class.java, "recon.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build() }
     single<JobStore> { RoomJobStore(get()) }
     single<LinkResolver> { OkHttpLinkResolver(get()) }
     single<SecretStore> { KeystoreSecretStore(androidContext()) }

@@ -90,19 +90,42 @@ class JobViewModelTest {
         assertEquals(listOf(id to UserAction.RUN), queued)
     }
 
-    @Test fun cancelRemovesOnlyWaitingJobs() = runBlocking {
+    @Test fun cancelRemovesAWaitingJobWithoutTouchingTheChain() = runBlocking {
         val cancelled = mutableListOf<String>()
         val actions = JobActions(store, { cancelled += it.id }) { i, a -> queued += i to a }
         val waiting = store.create("https://youtu.be/w", null)
         store.update(waiting) { it.copy(state = JobState.WAITING_QUOTA, retryAtEpochMs = 5) }
-        val running = store.create("https://youtu.be/r", null)
-        store.update(running) { it.copy(state = JobState.ANALYSING) }
+        store.create("https://youtu.be/q", null)
 
         assertTrue(actions.cancel(waiting))
         assertNull(store.get(waiting))
-        assertEquals(false, actions.cancel(running))
-        assertEquals(JobState.ANALYSING, store.get(running)!!.state)
         assertEquals(listOf(waiting), cancelled)
+        assertEquals(emptyList<Pair<String, UserAction>>(), queued) // its delayed work is separate from the chain
+    }
+
+    @Test fun cancelARunningJobQueuesTheJobsBehindItAgain() = runBlocking {
+        val cancelled = mutableListOf<String>()
+        val actions = JobActions(store, { cancelled += it.id }) { i, a -> queued += i to a }
+        val running = store.create("https://youtu.be/r", null)
+        store.update(running) { it.copy(state = JobState.ANALYSING) }
+        val next = store.create("https://youtu.be/q", null)
+        val done = store.create("https://youtu.be/d", null)
+        store.update(done) { it.copy(state = JobState.DONE) }
+
+        assertTrue(actions.cancel(running))
+        assertNull(store.get(running))
+        assertEquals(listOf(running), cancelled)
+        assertEquals(listOf(next to UserAction.RUN), queued)
+    }
+
+    @Test fun deletingAFinishedJobCancelsNoWork() = runBlocking {
+        val cancelled = mutableListOf<String>()
+        val actions = JobActions(store, { cancelled += it.id }) { i, a -> queued += i to a }
+        val done = store.create("https://youtu.be/d", null)
+        store.update(done) { it.copy(state = JobState.DONE) }
+        assertTrue(actions.cancel(done))
+        assertNull(store.get(done))
+        assertTrue(cancelled.isEmpty() && queued.isEmpty())
     }
 
     // --- MVI: intents become state or one-shot effects

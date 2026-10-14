@@ -61,7 +61,7 @@ object Symbols {
     val Warning: ImageVector by lazy { symbol("Warning", "M74.62-140 480-840l405.38 700H74.62Zm78.61-45.39h653.54L480-749.23 153.23-185.39Zm329.8-60.07q10.7 0 17.76-7.24 7.06-7.24 7.06-17.94 0-10.71-7.24-17.76-7.24-7.06-17.95-7.06-10.7 0-17.76 7.24-7.05 7.24-7.05 17.94 0 10.7 7.24 17.76 7.24 7.06 17.94 7.06Zm-22.88-97.92h45.39v-217.85h-45.39v217.85ZM480-467.31Z") }
     val ExpandMore: ImageVector by lazy { StatusIcons.fromPath("ExpandMore", "M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z") }
 
-    private fun symbol(name: String, d: String): ImageVector =
+    internal fun symbol(name: String, d: String): ImageVector =
         ImageVector.Builder(name, 24.dp, 24.dp, 960f, 960f).apply {
             group(translationY = 960f) { addPath(addPathNodes(d), fill = SolidColor(Color.Black)) }
         }.build()

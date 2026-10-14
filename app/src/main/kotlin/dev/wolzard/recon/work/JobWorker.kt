@@ -31,6 +31,8 @@ class JobWorker(context: Context, params: WorkerParameters) : CoroutineWorker(co
             JobQueue.enqueue(applicationContext, id, action) // waited for quota; re-join the one-at-a-time chain
             return Result.success()
         }
+        // Deleted, or finished already (a job queued twice after a cancel, see JobActions.cancel): nothing to run.
+        if (store.get(id)?.state.let { it == null || it == JobState.DONE || it == JobState.FAILED }) return Result.success()
         recoverAndSweep(id)
         runCatching { setForeground(notifier.foregroundInfo(id)) } // may be refused in the background; the job still runs
 

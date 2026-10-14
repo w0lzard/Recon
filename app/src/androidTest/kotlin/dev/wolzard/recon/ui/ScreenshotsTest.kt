@@ -219,9 +219,21 @@ class ScreenshotsTest {
         }
     }
 
+    // Design 1l content: an update waiting, signed in, checked at 14:00, this build's real certificate.
     @Test fun settings() {
-        val state = SettingsViewModel(koin.get(), koin.get()).state.value
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        val state = dev.wolzard.recon.feature.settings.SettingsState(
+            signedIn = true, email = "recon.side@gmail.com",
+            available = dev.wolzard.recon.data.update.UpdateInfo("1.4.0", "https://github.com/a.apk", "https://github.com/r"),
+            lastChecked = java.time.LocalDate.now().atTime(14, 0).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli(),
+            certSha256 = dev.wolzard.recon.feature.settings.signingSha256(ctx),
+        )
         shot("settings") { SettingsScreen(state) {} }
+    }
+
+    @Test fun settingsSignedOut() {
+        val state = SettingsViewModel(koin.get(), koin.get()).state.value.copy(signedIn = false, email = null, available = null)
+        shot("settings_signed_out") { SettingsScreen(state) {} }
     }
 
     @Test fun notice() = shot("first_run_notice") { NoticeScreen {} }

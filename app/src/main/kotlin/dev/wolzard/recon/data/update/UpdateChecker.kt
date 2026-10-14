@@ -60,6 +60,9 @@ class UpdateChecker(
         return result
     }
 
+    /** When GitHub was last asked (automatic or forced); null = never. */
+    fun lastChecked(): Long? = prefs.getLong(LAST_CHECK, 0).takeIf { it > 0 }
+
     fun dismiss(version: String) {
         prefs.edit().putString(DISMISSED, version).apply()
         if (_available.value?.version == version) _available.value = null

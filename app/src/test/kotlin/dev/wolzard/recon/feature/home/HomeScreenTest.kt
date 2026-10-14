@@ -8,7 +8,6 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.wolzard.recon.core.model.Job
 import dev.wolzard.recon.core.model.JobState
-import dev.wolzard.recon.data.update.UpdateInfo
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test

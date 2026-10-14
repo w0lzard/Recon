@@ -16,6 +16,7 @@ object GeminiSession {
     fun clear(secrets: SecretStore) {
         secrets.put(Secret.GEMINI_VERIFIED, null)
         secrets.put(Secret.GEMINI_COOKIES, null)
+        secrets.put(Secret.GEMINI_EMAIL, null)
     }
 
     /** App launch: cookies without the marker (killed mid-save, or saved by a build before D25) are signed out. */

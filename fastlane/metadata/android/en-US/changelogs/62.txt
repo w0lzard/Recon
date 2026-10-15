@@ -1,0 +1,3 @@
+- First F-Droid release.
+- yt-dlp no longer updates itself unless you turn on Settings → Update yt-dlp.
+- Installs from an app store no longer check GitHub for updates.

@@ -37,8 +37,6 @@ apps, books, places, repos, products, with sources where it can.
 | **Look up** | Each thing it names is checked against GitHub and Wikipedia, so you get a real link, not just a guess. |
 | **Show its working** | Each result says how it was found (spoken, on screen, or a guess) and how well it matched, with its sources. |
 
-See [`docs/plan.md`](docs/plan.md) for the full plan.
-
 > [!WARNING]
 > **Personal use.** Recon is a personal tool. To analyse a video it downloads a temporary copy, then deletes it when
 > the analysis finishes. When you share a link, it first asks the platform for the video's title, length and thumbnail
@@ -170,7 +168,7 @@ flowchart LR
 - **JDK:** pinned to **21** through Gradle toolchains: the Gradle daemon (`gradle/gradle-daemon-jvm.properties`), Kotlin compilation (`jvmToolchain(21)`) and unit tests all use it. The foojay resolver plugin downloads it if your machine doesn't have it. Bytecode targets Java 17.
 - **Android SDK:** `compileSdk`/`targetSdk` 37, `minSdk` 26. Put `sdk.dir` in `local.properties`.
 - **Tests:** `./gradlew :core:test :app:testDebugUnitTest`; instrumented: `scripts/connected-tests.sh` (an API 26 emulator is the reference device). It deletes old results, runs `connectedDebugAndroidTest` and fails unless the XML report ran exactly the expected number of tests (default: the `@Test` count in `app/src/androidTest`) with none failing, because Gradle can report BUILD SUCCESSFUL after an install failure with zero tests run.
-- **Screenshots:** `ScreenshotsTest` writes PNGs to the app's external files dir; run it with `am instrument -e class dev.wolzard.recon.ui.ScreenshotsTest -e suffix _default …` and `adb pull` them (see `docs/screenshots/`). Not through Gradle, which uninstalls the app and its files afterwards.
+- **Screenshots:** `ScreenshotsTest` writes PNGs to the app's external files dir; run it with `am instrument -e class dev.wolzard.recon.ui.ScreenshotsTest -e suffix _default …` and `adb pull` them. Not through Gradle, which uninstalls the app and its files afterwards.
 - **JDK internals opened for unit tests (Robolectric only).** Robolectric's Android 16 (SDK 36) runtime reaches into JDK internals for `FileDescriptor` shared memory, so `app` unit tests run with:
   - `--add-opens=java.base/java.io=ALL-UNNAMED`
   - `--add-exports=java.base/jdk.internal.access=ALL-UNNAMED`

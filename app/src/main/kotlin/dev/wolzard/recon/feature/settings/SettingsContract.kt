@@ -16,6 +16,8 @@ data class SettingsState(
     val lastChecked: Long? = null,
     /** SHA-256 of this APK's signing certificate, "AB:CD:…"; null if Android wouldn't say. */
     val certSha256: String? = null,
+    /** yt-dlp downloads its own updates (code); opt-in, see YtDlp. */
+    val ytDlpAutoUpdate: Boolean = false,
 )
 
 sealed interface SettingsIntent {
@@ -24,6 +26,7 @@ sealed interface SettingsIntent {
     data object SignOut : SettingsIntent
     data class SaveGitHubToken(val token: String?) : SettingsIntent
     data object CheckForUpdates : SettingsIntent
+    data class SetYtDlpAutoUpdate(val on: Boolean) : SettingsIntent
     data class OpenUpdate(val url: String) : SettingsIntent
     data class DismissUpdate(val version: String) : SettingsIntent
     data object OpenSource : SettingsIntent

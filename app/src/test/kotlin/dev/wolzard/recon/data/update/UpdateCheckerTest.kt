@@ -9,7 +9,9 @@ import mockwebserver3.MockWebServer
 import okhttp3.OkHttpClient
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -168,5 +170,13 @@ class UpdateCheckerTest {
         server.enqueue(release())
         c.checkNow()
         assertEquals(now, c.lastChecked())
+    }
+
+    @Test fun autoCheckOnlyForSideloads() {
+        assertTrue(UpdateChecker.autoCheckFor(null)) // adb
+        assertTrue(UpdateChecker.autoCheckFor("com.google.android.packageinstaller"))
+        assertTrue(UpdateChecker.autoCheckFor("com.android.packageinstaller"))
+        assertFalse(UpdateChecker.autoCheckFor("org.fdroid.fdroid"))
+        assertFalse(UpdateChecker.autoCheckFor("dev.imranr.obtainium"))
     }
 }

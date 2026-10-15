@@ -18,7 +18,9 @@ class SettingsViewModel(
     private val secrets: SecretStore,
     private val updates: UpdateChecker? = null,
     certSha256: String? = null,
-) : MviViewModel<SettingsState, SettingsIntent, SettingsEffect>(SettingsState(certSha256 = certSha256)) {
+    ytDlpAutoUpdate: Boolean = false,
+    private val setYtDlpAutoUpdate: (Boolean) -> Unit = {},
+) : MviViewModel<SettingsState, SettingsIntent, SettingsEffect>(SettingsState(certSha256 = certSha256, ytDlpAutoUpdate = ytDlpAutoUpdate)) {
     init {
         refresh()
         updates?.let { u -> viewModelScope.launch { u.available.collect { setState { copy(available = it) } } } }
@@ -30,6 +32,7 @@ class SettingsViewModel(
         SettingsIntent.SignOut -> signOut()
         is SettingsIntent.SaveGitHubToken -> saveGitHubToken(intent.token)
         SettingsIntent.CheckForUpdates -> checkForUpdates()
+        is SettingsIntent.SetYtDlpAutoUpdate -> { setYtDlpAutoUpdate(intent.on); setState { copy(ytDlpAutoUpdate = intent.on) } }
         is SettingsIntent.OpenUpdate -> send(SettingsEffect.OpenInBrowser(intent.url))
         is SettingsIntent.DismissUpdate -> updates?.dismiss(intent.version) ?: Unit
         SettingsIntent.OpenSource -> send(SettingsEffect.OpenCustomTab("https://github.com/${BuildConfig.RELEASES_REPO}"))

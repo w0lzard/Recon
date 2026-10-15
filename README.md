@@ -174,7 +174,7 @@ flowchart LR
   - `--add-exports=java.base/jdk.internal.access=ALL-UNNAMED`
 
   These flags apply only to the test JVM (`tasks.withType<Test>` in `app/build.gradle.kts`), never to the app. Robolectric tests also use a plain `Application` (`app/src/test/resources/robolectric.properties`), because `ReconApp` starts Koin, which can only start once per JVM.
-- **Release signing:** `keystore.properties` (git-ignored), created once by `scripts/make-release-keystore.sh` (Task 14; run it yourself in a terminal, it prompts for the password). Without it, release APKs are debug-signed and named `recon-<version>-UNSIGNED-FOR-RELEASE-<abi>-release.apk`. Debug APKs are always `recon-<version>-<abi>-debug.apk`.
+- **Release signing:** `keystore.properties` (git-ignored), created once by `scripts/make-release-keystore.sh` (Task 14; run it yourself in a terminal, it prompts for the password). Without it, release APKs are unsigned (`recon-<version>-<abi>-release-unsigned.apk`), which is what F-Droid builds before checking it against the published APK. Each ABI APK has its own versionCode: `versionCode * 10` plus 1 for armeabi-v7a, 2 for arm64-v8a, 4 for x86_64. Debug APKs are always `recon-<version>-<abi>-debug.apk`.
 
 </details>
 

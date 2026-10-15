@@ -68,4 +68,13 @@ class SettingsViewModelTest {
         assertTrue(lines[0].startsWith("SHA-256 ") && lines[0].endsWith(":"))
         assertEquals(sha, certLines(sha).removePrefix("SHA-256 ").replace("\n", ""))
     }
+
+    @Test fun ytDlpUpdatesAreOffUntilTurnedOn() {
+        val saved = mutableListOf<Boolean>()
+        val vm = SettingsViewModel(secrets, setYtDlpAutoUpdate = { saved += it })
+        assertFalse(vm.state.value.ytDlpAutoUpdate)
+        vm.onIntent(SettingsIntent.SetYtDlpAutoUpdate(true))
+        assertTrue(vm.state.value.ytDlpAutoUpdate)
+        assertEquals(listOf(true), saved)
+    }
 }

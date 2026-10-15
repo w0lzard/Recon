@@ -112,6 +112,12 @@ class UpdateChecker(
         private const val PAGE = "pageUrl"
         private const val DISMISSED = "dismissed"
 
+        /**
+         * The automatic check is for sideloaded installs. An app store (F-Droid, Obtainium, …) brings its own updates, so
+         * Recon doesn't point its users at GitHub. Sideloads report Android's package installer, adb installs none.
+         */
+        fun autoCheckFor(installer: String?): Boolean = installer == null || installer.endsWith(".packageinstaller")
+
         /** https, host exactly github.com, no user info or odd port. */
         fun isGitHubHttps(url: String): Boolean = runCatching { URI(url) }.getOrNull()?.let {
             it.scheme == "https" && it.host == "github.com" && it.rawUserInfo == null && (it.port == -1 || it.port == 443)

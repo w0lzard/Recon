@@ -28,6 +28,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -41,6 +42,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import dev.wolzard.recon.BuildConfig
@@ -137,6 +140,13 @@ fun SettingsScreen(state: SettingsState, onIntent: (SettingsIntent) -> Unit) {
                 },
                 onClick = { if (!state.checkingUpdate) onIntent(SettingsIntent.CheckForUpdates) },
                 leading = { Icon(Symbols.Sync, contentDescription = null, tint = muted) },
+            )
+            // F-Droid's inclusion policy: downloading code needs opt-in consent that says it skips F-Droid's checks.
+            SettingRow(
+                "Update yt-dlp",
+                "Downloads the newest yt-dlp from GitHub once a day, so video sites keep working between Recon releases. " +
+                    "It's code that runs on your phone and skips F-Droid's checks.",
+                trailing = { Switch(checked = state.ytDlpAutoUpdate, onCheckedChange = { onIntent(SettingsIntent.SetYtDlpAutoUpdate(it)) }, Modifier.semantics { contentDescription = "Update yt-dlp" }) },
             )
 
             Section("ABOUT")

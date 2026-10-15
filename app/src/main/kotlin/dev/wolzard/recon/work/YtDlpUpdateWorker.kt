@@ -23,13 +23,15 @@ class YtDlpUpdateWorker(context: Context, params: WorkerParameters) : CoroutineW
 
     companion object {
         private const val TAG = "YtDlpUpdate"
+        private const val NAME = "ytdlp-update"
 
-        /** Unique periodic 24 h on any network; the first run happens right after the first enqueue (app start). */
-        fun schedule(context: Context) {
+        /** On: unique periodic 24 h on any network, first run right after the first enqueue. Off: cancels it. */
+        fun sync(context: Context, on: Boolean) {
+            if (!on) { WorkManager.getInstance(context).cancelUniqueWork(NAME); return }
             val request = PeriodicWorkRequestBuilder<YtDlpUpdateWorker>(24, TimeUnit.HOURS)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .build()
-            WorkManager.getInstance(context).enqueueUniquePeriodicWork("ytdlp-update", ExistingPeriodicWorkPolicy.KEEP, request)
+            WorkManager.getInstance(context).enqueueUniquePeriodicWork(NAME, ExistingPeriodicWorkPolicy.KEEP, request)
         }
     }
 }

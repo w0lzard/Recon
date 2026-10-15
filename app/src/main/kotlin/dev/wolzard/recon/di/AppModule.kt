@@ -35,6 +35,7 @@ import dev.wolzard.recon.data.media.AndroidFrameSampler
 import dev.wolzard.recon.data.media.ContentUriFetcher
 import dev.wolzard.recon.core.port.FrameSampler
 import dev.wolzard.recon.data.media.YoutubeDlRunner
+import dev.wolzard.recon.data.media.YtDlp
 import dev.wolzard.recon.data.media.YtDlpFetcher
 import dev.wolzard.recon.data.media.YtDlpRunner
 import dev.wolzard.recon.data.secret.KeystoreSecretStore
@@ -52,6 +53,7 @@ import dev.wolzard.recon.work.JobRunner
 import dev.wolzard.recon.work.Notifier
 import dev.wolzard.recon.work.ShareIntake
 import dev.wolzard.recon.work.ResultPresenter
+import dev.wolzard.recon.work.YtDlpUpdateWorker
 import dev.wolzard.recon.work.deviceLanguage
 import java.io.File
 import org.koin.android.ext.koin.androidContext
@@ -102,7 +104,10 @@ val appModule = module {
             BuildConfig.RELEASES_REPO, Build.SUPPORTED_ABIS.toList(), get(),
         )
     }
-    viewModel { SettingsViewModel(get(), get(), signingSha256(androidContext())) }
+    viewModel {
+        val ctx = androidContext()
+        SettingsViewModel(get(), get(), signingSha256(ctx), YtDlp.autoUpdate(ctx)) { on -> YtDlp.setAutoUpdate(ctx, on); YtDlpUpdateWorker.sync(ctx, on) }
+    }
     single { JobActions(get(), { job -> JobQueue.cancel(androidContext(), job) }) { id, action -> JobQueue.enqueue(androidContext(), id, action) } }
     viewModel { params -> JobViewModel(params.get(), get(), get()) }
     single { LinkPreviewFetcher({ url -> get<YtDlpRunner>().run(url, listOf("--dump-json", "--skip-download", "--no-playlist"), "preview-${java.util.UUID.randomUUID()}") {} }) }

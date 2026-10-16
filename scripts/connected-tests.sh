@@ -31,6 +31,16 @@ xmls=("$dir"/TEST-*.xml)
 read -r tests failures errors skipped < <(grep -ho '<testsuite [^>]*>' "${xmls[@]}" | awk '
   { for (i = 1; i <= NF; i++) if (split($i, kv, "=") == 2) { gsub(/"/, "", kv[2]); s[kv[1]] += kv[2] } }
   END { print s["tests"]+0, s["failures"]+0, s["errors"]+0, s["skipped"]+0 }')
+# Pull matrix artifacts if present
+mkdir -p app/build/matrix-artifacts
+"$adb" ${ANDROID_SERIAL:+-s "$ANDROID_SERIAL"} pull /sdcard/Download/matrix-artifacts/. app/build/matrix-artifacts/ >/dev/null 2>&1 || true
+"$adb" ${ANDROID_SERIAL:+-s "$ANDROID_SERIAL"} pull /sdcard/Android/data/dev.wolzard.recon/files/matrix-artifacts/. app/build/matrix-artifacts/ >/dev/null 2>&1 || true
+"$adb" ${ANDROID_SERIAL:+-s "$ANDROID_SERIAL"} pull /data/local/tmp/matrix-artifacts/. app/build/matrix-artifacts/ >/dev/null 2>&1 || true
+if compgen -G "app/build/matrix-artifacts/*" > /dev/null; then
+  echo "matrix artifacts saved to app/build/matrix-artifacts:"
+  ls -la app/build/matrix-artifacts
+fi
+
 echo "connected tests: ran=$tests expected=$expected failures=$failures errors=$errors skipped=$skipped"
 [[ $tests -eq $expected && $failures -eq 0 && $errors -eq 0 && $skipped -le ${MAX_SKIPPED:-0} ]] || { echo "FAIL"; exit 1; }
 echo OK

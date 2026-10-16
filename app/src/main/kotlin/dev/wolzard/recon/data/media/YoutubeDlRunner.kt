@@ -24,17 +24,36 @@ import kotlinx.coroutines.withContext
 object YtDlp {
     private val lock = Mutex()
     @Volatile private var ready = false
+    @Volatile private var ffmpegReady = false
+    private val ffmpegInitLock = Any()
 
     suspend fun <T> use(context: Context, block: suspend () -> T): T = lock.withLock {
         if (!ready) {
             withContext(Dispatchers.IO) {
                 val app = context.applicationContext
                 YoutubeDL.getInstance().init(app)
-                FFmpeg.getInstance().init(app)
             }
             ready = true
         }
         block()
+    }
+
+    /** Initialises FFmpeg lazily on the save path (D28). Throws [YtDlpException] on init failure. */
+    suspend fun ensureFFmpeg(context: Context) {
+        if (!ffmpegReady) {
+            withContext(Dispatchers.IO) {
+                synchronized(ffmpegInitLock) {
+                    if (!ffmpegReady) {
+                        try {
+                            FFmpeg.getInstance().init(context.applicationContext)
+                            ffmpegReady = true
+                        } catch (e: Exception) {
+                            throw YtDlpException(e.message?.ifEmpty { null } ?: "FFmpeg initialization failed")
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /** @return the update status, or null if it failed (the current version stays in use). */
@@ -61,21 +80,30 @@ class YoutubeDlRunner(private val context: Context) : YtDlpRunner {
     override suspend fun run(url: String, args: List<String>, processId: String, onProgress: (Float) -> Unit): String {
         val request = request(url, args)
         val ytdl = YoutubeDL.getInstance()
-        return YtDlp.useUpdated(context) { coroutineScope {
-            val call = async(Dispatchers.IO) { ytdl.execute(request, processId) { progress, _, _ -> onProgress((progress / 100f).coerceIn(0f, 1f)) } }
-            try {
-                call.await().out
-            } catch (e: CancellationException) {
-                ytdl.destroyProcessById(processId) // kills the Python child; the job's finally deletes its dir
-                throw e
-            } catch (e: YoutubeDLException) {
-                throw YtDlpException(e.message.orEmpty())
+        val isSave = isSavePath(processId, args)
+        return YtDlp.useUpdated(context) {
+            if (isSave) {
+                YtDlp.ensureFFmpeg(context)
             }
-        } }
+            coroutineScope {
+                val call = async(Dispatchers.IO) { ytdl.execute(request, processId) { progress, _, _ -> onProgress((progress / 100f).coerceIn(0f, 1f)) } }
+                try {
+                    call.await().out
+                } catch (e: CancellationException) {
+                    ytdl.destroyProcessById(processId) // kills the Python child; the job's finally deletes its dir
+                    throw e
+                } catch (e: YoutubeDLException) {
+                    throw YtDlpException(e.message.orEmpty())
+                }
+            }
+        }
     }
 
     companion object {
         private val flagsWithoutValue = setOf("--no-playlist", "--no-simulate", "--dump-json", "--skip-download") // last two: D26 link preview
+
+        fun isSavePath(processId: String, args: List<String> = emptyList()): Boolean =
+            processId.startsWith("save") || args.any { it.contains("output.%(ext)s") }
 
         /** http(s) only; the URL goes after "--" so yt-dlp can never read it as an option. */
         fun request(url: String, args: List<String>): YoutubeDLRequest {

@@ -1,4 +1,5 @@
 .env
+live-links.local.json
 spikes/.venv/
 spikes/inputs/*.mp4
 spikes/inputs/*.m4a

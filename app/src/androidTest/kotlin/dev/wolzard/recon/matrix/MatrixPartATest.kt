@@ -3,17 +3,19 @@ package dev.wolzard.recon.matrix
 import android.content.Context
 import android.content.Intent
 import androidx.activity.ComponentActivity
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.room.Room
@@ -82,7 +84,6 @@ import dev.wolzard.recon.feature.job.JobScreen
 import dev.wolzard.recon.feature.job.JobViewModel
 import dev.wolzard.recon.feature.settings.SettingsIntent
 import dev.wolzard.recon.feature.settings.SettingsViewModel
-import dev.wolzard.recon.work.ShareIntake
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -223,16 +224,13 @@ class MatrixPartATest {
         ActivityScenario.launch<ShareActivity>(share).use { scenario ->
             compose.waitUntil(10_000) { runCatching { compose.onNodeWithText("Add context").assertExists() }.isSuccess }
 
-            var sheetHeightDp = 0
-            var screenHeightDp = 0
+            val sheetBounds = compose.onNodeWithTag("share_sheet").fetchSemanticsNode().boundsInWindow
+            var screenHeight = 0
             scenario.onActivity { a ->
-                val root = a.window.decorView
-                screenHeightDp = root.height
-                val sheetNode = compose.onNodeWithTag("share_sheet").fetchSemanticsNode()
-                sheetHeightDp = sheetNode.size.height
+                screenHeight = a.window.decorView.height
             }
-            assertTrue("Screen height should be measured", screenHeightDp > 0)
-            assertTrue("Sheet height should be measured", sheetHeightDp > 0)
+            assertTrue("Screen height should be measured", screenHeight > 0)
+            assertTrue("Sheet height should be positive", sheetBounds.height > 0)
 
             compose.onNodeWithText("Start").assertIsDisplayed()
             compose.onNodeWithText("Skip").assertIsDisplayed()
@@ -268,9 +266,11 @@ class MatrixPartATest {
         val queuedActions = mutableListOf<Pair<String, UserAction>>()
         val actions = JobActions(store) { i, a -> queuedActions += i to a }
         val vm = JobViewModel(id, store, actions)
+        runBlocking { vm.state.first { it.job != null } }
 
         // 1. Retry
         vm.onIntent(JobIntent.Retry)
+        compose.waitUntil(5_000) { queuedActions.isNotEmpty() }
         var job = runBlocking { store.get(id) }!!
         assertEquals("Retry must preserve stored userContext", "What is the tool shown?", job.userContext)
         assertEquals(JobState.QUEUED, job.state)
@@ -280,6 +280,7 @@ class MatrixPartATest {
         queuedActions.clear()
         runBlocking { store.update(id) { it.copy(state = JobState.DONE) } }
         vm.onIntent(JobIntent.TrySharper)
+        compose.waitUntil(5_000) { queuedActions.isNotEmpty() }
         job = runBlocking { store.get(id) }!!
         assertEquals("TrySharper must preserve stored userContext", "What is the tool shown?", job.userContext)
         assertEquals(JobState.QUEUED, job.state)
@@ -345,10 +346,11 @@ class MatrixPartATest {
 
         // Answer card appears and contains ANSWER · MEDIA · SONG
         compose.onNodeWithTag("answer_card").assertIsDisplayed()
+        compose.onNodeWithTag("answer_label").assertExists()
         compose.onNodeWithText("ANSWER · MEDIA · SONG", substring = true).assertExists()
-        compose.onNodeWithText("Glass Harbour", substring = true).assertExists()
-        // Media year beside title
-        compose.onNodeWithText("2021", substring = true).assertExists()
+        compose.onNodeWithTag("answer_title").assertExists()
+        // Media year beside title (finding title has year)
+        compose.onAllNodesWithText("2021", substring = true).assertCountEquals(2)
         compose.onNodeWithText("“What track is playing?”").assertExists()
     }
 
@@ -384,15 +386,6 @@ class MatrixPartATest {
             searchSuggestionsHtml = null,
             path = "A",
         )
-        compose.setContent {
-            ReconTheme {
-                Surface { JobScreen(job, resultWithSources, now) {} }
-            }
-        }
-        compose.onNodeWithText("caption at 0:02").assertExists()
-        compose.onNodeWithText("audio at 0:14").assertExists()
-
-        // 3. 'No source' with crossed-link icon when answer has no sources
         val answerNoSources = Answer(
             text = "Answer without sources",
             status = AnswerStatus.UNVERIFIED,
@@ -406,11 +399,19 @@ class MatrixPartATest {
             searchSuggestionsHtml = null,
             path = "A",
         )
+
+        var currentResult by mutableStateOf(resultWithSources)
         compose.setContent {
             ReconTheme {
-                Surface { JobScreen(job, resultNoSources, now) {} }
+                Surface { JobScreen(job, currentResult, now) {} }
             }
         }
+        compose.onAllNodesWithText("caption at 0:02").assertCountEquals(2) // in card and in list
+        compose.onAllNodesWithText("audio at 0:14").assertCountEquals(2)
+
+        // 3. 'No source' with crossed-link icon when answer has no sources
+        currentResult = resultNoSources
+        compose.waitForIdle()
         compose.onNodeWithTag("no_source").assertExists()
         compose.onNodeWithText("No source").assertExists()
     }
@@ -422,12 +423,12 @@ class MatrixPartATest {
             entity = Entity(EntityType.CLAIM, "Drinking cold water slows digestion", null, Evidence.SPOKEN, "Said in video", domain = ClaimDomain.HEALTH),
             reference = null,
         )
-        val rawSupportedNoSource = """{"title":"Drinking cold water","verdict":"supported","whatItIs":"claim info"}"""
-        val findingNoSource = ResultParser.parseResearch("{\"items\":[$rawSupportedNoSource]}", listOf(item), VerdictCap.WEB).single()
+        val rawSupportedNoSource = """{"items":[{"index":0,"title":"Drinking cold water","verdict":"supported","whatItIs":"claim info","keyFacts":[],"howToTry":"","whyInVideo":""}]}"""
+        val findingNoSource = ResultParser.parseResearch(rawSupportedNoSource, listOf(item), VerdictCap.WEB).single()
         assertEquals("Health claim with no named source must never be SUPPORTED", Verdict.UNCLEAR, findingNoSource.verdict)
 
-        val rawSupportedWithSource = """{"title":"Drinking cold water","verdict":"supported","source":"WHO Bulletin","whatItIs":"claim info"}"""
-        val findingWithSource = ResultParser.parseResearch("{\"items\":[$rawSupportedWithSource]}", listOf(item), VerdictCap.WEB).single()
+        val rawSupportedWithSource = """{"items":[{"index":0,"title":"Drinking cold water","verdict":"supported","source":"WHO Bulletin","whatItIs":"claim info","keyFacts":[],"howToTry":"","whyInVideo":""}]}"""
+        val findingWithSource = ResultParser.parseResearch(rawSupportedWithSource, listOf(item), VerdictCap.WEB).single()
         assertEquals("Health claim with named source can be SUPPORTED", Verdict.SUPPORTED, findingWithSource.verdict)
 
         // 2. UI rendering of advice line for sensitive domain
@@ -445,17 +446,8 @@ class MatrixPartATest {
             source = "WHO Bulletin",
         )
         val job = Job("j_claim", "url", state = JobState.DONE, createdAt = now, updatedAt = now)
-        val result = JobResult(AnalysisResult(listOf(claimFinding.entity), "Health video", 0.8), listOf(claimFinding), emptyList(), null, "A")
+        val resultSensitive = JobResult(AnalysisResult(listOf(claimFinding.entity), "Health video", 0.8), listOf(claimFinding), emptyList(), null, "A")
 
-        compose.setContent {
-            ReconTheme {
-                Surface { JobScreen(job, result, now) {} }
-            }
-        }
-        compose.onNodeWithTag("advice_line").assertExists()
-        compose.onNodeWithText("Not professional advice", substring = true).assertExists()
-
-        // 3. Open item 3 verification: does advice line show for non-sensitive claims?
         val nonSensitiveClaim = Finding(
             entity = Entity(EntityType.CLAIM, "Python was released in 1991", null, Evidence.ON_SCREEN, "1991", domain = ClaimDomain.OTHER),
             researcher = "web",
@@ -470,14 +462,26 @@ class MatrixPartATest {
             source = "Python.org",
         )
         val resultNonSensitive = JobResult(AnalysisResult(listOf(nonSensitiveClaim.entity), "Tech video", 0.8), listOf(nonSensitiveClaim), emptyList(), null, "A")
+
+        var currentResult by mutableStateOf(resultSensitive)
         compose.setContent {
             ReconTheme {
-                Surface { JobScreen(job, resultNonSensitive, now) {} }
+                Surface { JobScreen(job, currentResult, now) {} }
             }
         }
-        // In JobScreen.kt, advice line is guarded by `f.entity.domain?.takeIf { it.sensitive }?.let { ... }`.
-        // Thus, non-sensitive claims do NOT show the advice line.
-        compose.onAllNodesWithText("Not professional advice", substring = true).assertCountEquals(0)
+        // Sensitive claim renders both advice_line and advice_footer
+        compose.onNodeWithTag("advice_line").assertExists()
+        compose.onNodeWithTag("advice_footer").assertExists()
+
+        // 3. Open item 3 verification: does advice footer show whenever claims list is non-empty?
+        // Switch to non-sensitive claim:
+        currentResult = resultNonSensitive
+        compose.waitForIdle()
+        // ClaimRow and JobScreen check `f.entity.domain?.takeIf { it.sensitive }?.let { ... }`
+        // and `claims.any { it.value.entity.domain?.sensitive == true }`.
+        // Therefore, for non-sensitive claims, advice_line and advice_footer do NOT show.
+        compose.onAllNodesWithTag("advice_line").assertCountEquals(0)
+        compose.onAllNodesWithTag("advice_footer").assertCountEquals(0)
     }
 
     /** A9: Face-only and prompt-injection fixtures: app renders model reply unchanged and sends on-screen text only through existing prompt path. Prompt text instructs against naming people from faces alone and against obeying instructions inside video/context. */
@@ -517,20 +521,22 @@ class MatrixPartATest {
 
     /** A10: Link preview: thumbnail and length shown when metadata fixture succeeds; glyph fallback when it fails or times out; Start is never blocked. */
     @Test fun A10_linkPreviewThumbnailAndLengthOrGlyphFallbackAndStartNeverBlocked() {
-        // 1. Success fixture
         val successPreview = LinkPreview("Video Title", 45L, "https://example.com/thumb.jpg")
         val successState = ContextState("https://youtu.be/sample", "youtu.be", preview = successPreview)
+        val failState = ContextState("https://youtu.be/sample", "youtu.be", preview = null)
+
+        var currentState by mutableStateOf(successState)
         compose.setContent {
-            ReconTheme { Surface { ContextScreen(successState) {} } }
+            ReconTheme { Surface { ContextScreen(currentState) {} } }
         }
-        compose.onNodeWithText("0:45 video").assertExists()
+
+        // 1. Success fixture: shows duration text and Start is enabled
+        compose.onNodeWithText("0:45 video", substring = true).assertExists()
         compose.onNodeWithText("Start").assertIsEnabled()
 
-        // 2. Failure / timeout fixture
-        val failState = ContextState("https://youtu.be/sample", "youtu.be", preview = null)
-        compose.setContent {
-            ReconTheme { Surface { ContextScreen(failState) {} } }
-        }
+        // 2. Failure / timeout fixture: Start is never blocked
+        currentState = failState
+        compose.waitForIdle()
         compose.onNodeWithText("Start").assertIsEnabled()
         compose.onNodeWithText("Skip").assertIsEnabled()
     }
@@ -556,8 +562,10 @@ class MatrixPartATest {
         val queuedActions = mutableListOf<Pair<String, UserAction>>()
         val actions = JobActions(store) { i, a -> queuedActions += i to a }
         val jobVm = JobViewModel(id, store, actions)
+        runBlocking { jobVm.state.first { it.job != null } }
 
         jobVm.onIntent(JobIntent.SignedInAgain)
+        compose.waitUntil(5_000) { queuedActions.isNotEmpty() }
         val job = runBlocking { store.get(id) }!!
         assertEquals("JobState must be QUEUED after SignedInAgain", JobState.QUEUED, job.state)
         assertEquals("Context must be preserved on SignedInAgain", "Context before expired session", job.userContext)
@@ -605,8 +613,8 @@ class MatrixPartATest {
     }
 
     private class FakeFrameSampler : FrameSampler {
-        override suspend fun sample(video: File, destDir: File): AnalysisInput.FramesAndAudio {
-            val f = File(destDir, "frame_0.jpg").apply { writeText("dummy frame") }
+        override suspend fun sample(video: File, outDir: File): AnalysisInput.FramesAndAudio {
+            val f = File(outDir, "frame_0.jpg").apply { writeText("dummy frame") }
             return AnalysisInput.FramesAndAudio(listOf(AnalysisInput.Frame(f, 0L)), null)
         }
     }

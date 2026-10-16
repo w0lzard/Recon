@@ -73,7 +73,7 @@ class MainActivity : ComponentActivity() {
     private fun show(outcome: ShareOutcome?) = when (outcome) {
         is ShareOutcome.Started -> openJob.value = outcome.jobId
         is ShareOutcome.NeedsContext -> openContext.value = outcome.link
-        null -> Unit
+        is ShareOutcome.FileNeedsContext, null -> Unit // only the share sheet asks for it
     }
 
     /** True once the first Compose frame is up; the splash stays until then so there is no blank flash. */
@@ -89,7 +89,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         shares.held = savedInstanceState?.let { BundleCompat.getParcelable(it, HELD_SHARE, Intent::class.java) }
         if (savedInstanceState == null) handle(intent)
-        lifecycleScope.launch { updates.check() } // throttled to once per 24 h; errors stay silent
+        if (UpdateChecker.autoCheckFor(installer())) lifecycleScope.launch { updates.check() } // throttled to once per 24 h; errors stay silent
         val signedIn = { GeminiSession.signedIn(secrets) }
         val start = startDestination(notice.needed, GeminiSession.atLaunch(secrets))
         setContent {
@@ -116,6 +116,11 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         handle(intent)
     }
+
+    private fun installer(): String? = runCatching {
+        if (Build.VERSION.SDK_INT >= 30) packageManager.getInstallSourceInfo(packageName).installingPackageName
+        else @Suppress("DEPRECATION") packageManager.getInstallerPackageName(packageName)
+    }.getOrNull()
 
     private fun handle(intent: Intent?) {
         intent?.getStringExtra(EXTRA_JOB_ID)?.let { openJob.value = it; return }

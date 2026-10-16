@@ -1,0 +1,19 @@
+Recon tells you what a short video is about, then looks up the specific things it mentions: apps, books, places, repos and products, with sources where it can.
+
+<b>How it works</b>
+<ul>
+<li><b>Share:</b> send a video link, or the video itself, to Recon from Instagram, TikTok, X, YouTube or any app with a share sheet.</li>
+<li><b>Watch:</b> Gemini watches it with your own Google account (frames and audio, in temporary chats).</li>
+<li><b>Look up:</b> each thing it names is checked against GitHub and Wikipedia, so you get a real link, not just a guess.</li>
+<li><b>Show its working:</b> each result says how it was found (spoken, on screen, or a guess) and how well it matched, with its sources.</li>
+</ul>
+
+<b>Before you install</b>
+<ul>
+<li>Recon uses Gemini web (gemini.google.com) with your own Google account, not an official API. You sign in inside the app and Recon keeps the session cookies on your phone. Videos and screenshots are sent to Google with your account, and Google's terms apply.</li>
+<li>Google doesn't support apps using Gemini web and may limit, suspend or ban the account. Use a secondary Google account.</li>
+<li>To analyse a video Recon downloads a temporary copy with yt-dlp, then deletes it. Platforms may forbid downloading in their terms of service; only share content you're allowed to process.</li>
+<li>Optional: Settings → Update yt-dlp downloads the newest yt-dlp from GitHub once a day. It is off by default; turning it on runs code that skips F-Droid's checks.</li>
+</ul>
+
+No analytics, no ads. Your history and sign-in stay on your phone.

@@ -10,7 +10,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.work.ForegroundInfo
-import dev.wolzard.recon.MainActivity
+import dev.wolzard.recon.ShareActivity
 import dev.wolzard.recon.core.model.Job
 import dev.wolzard.recon.core.model.JobState
 
@@ -21,6 +21,8 @@ class Notifier(private val context: Context) {
         if (Build.VERSION.SDK_INT >= 26) {
             val nm = context.getSystemService(NotificationManager::class.java)
             nm.createNotificationChannel(NotificationChannel(CHANNEL, "Video lookups", NotificationManager.IMPORTANCE_LOW))
+            // Share sheet: finished jobs are announced (sound, shade); the running notice stays quiet on CHANNEL.
+            nm.createNotificationChannel(NotificationChannel(RESULTS, "Lookup results", NotificationManager.IMPORTANCE_DEFAULT))
         }
     }
 
@@ -101,7 +103,7 @@ class Notifier(private val context: Context) {
             JobState.DONE -> "Recon finished" to (summary?.lineSequence()?.firstOrNull() ?: "Tap to see what was found.")
             else -> "Recon couldn't finish" to "Tap to see why and what to do next."
         }
-        val n = NotificationCompat.Builder(context, CHANNEL)
+        val n = NotificationCompat.Builder(context, RESULTS)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentTitle(title)
             .setContentText(text)
@@ -113,14 +115,16 @@ class Notifier(private val context: Context) {
         } catch (_: SecurityException) { /* permission revoked meanwhile; the job is in history anyway */ }
     }
 
+    /** Taps open the job in the share sheet, over whatever app is on screen. */
     private fun open(jobId: String): PendingIntent = PendingIntent.getActivity(
         context, jobId.hashCode(),
-        Intent(context, MainActivity::class.java).putExtra(MainActivity.EXTRA_JOB_ID, jobId).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+        ShareActivity.openJob(context, jobId).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 
     private companion object {
         const val CHANNEL = "jobs"
+        const val RESULTS = "results"
         const val ONGOING_ID = 1
         const val SAVE_ONGOING_PREFIX = "save_ongoing_"
         const val SAVE_DONE_PREFIX = "save_done_"

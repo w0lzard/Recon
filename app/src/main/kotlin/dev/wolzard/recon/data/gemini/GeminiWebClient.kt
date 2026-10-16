@@ -53,6 +53,10 @@ class GeminiWebClient(
     @Volatile private var candidate: String? = null
     private var reqId = Random.nextInt(10_000, 100_000)
 
+    /** The signed-in account's address as the app page states it, from the last page load; null when the page has none. */
+    @Volatile var accountEmail: String? = null
+        private set
+
     /** Uploads one file and returns the id that [generate] takes. */
     suspend fun upload(file: File, mime: String): String {
         val s = session()
@@ -108,6 +112,7 @@ class GeminiWebClient(
         if (r.code != 200) return null
         fun field(name: String) = Regex("\"$name\":\\s*\"(.*?)\"").find(r.body)?.groupValues?.get(1)
         val at = field("SNlM0e") ?: return null // signed-out (guest) pages have none
+        accountEmail = accountEmail(r.body)
         return Session(at, field("cfb2h"), field("FdrFJe"), field("TuX5cc") ?: "en", field("qKIAYe") ?: DEFAULT_PUSH_ID)
     }
 
@@ -224,6 +229,14 @@ class GeminiWebClient(
     companion object {
         private const val ORIGIN = "https://gemini.google.com"
         const val GOOGLE_CHALLENGE = "Google consent or challenge page"
+        private val EMAIL = Regex("[^@\\s\"]+@[^@\\s\"]+\\.[^@\\s\"]+")
+
+        /**
+         * Settings' account line: the email in the page's WIZ_global_data ("oPEP7c"), JSON-escaped "@" undone.
+         * Anything that isn't plainly one address gives null, so the screen says "Google account" rather than guess.
+         */
+        fun accountEmail(page: String): String? = Regex("\"oPEP7c\":\\s*\"([^\"]*)\"").find(page)?.groupValues?.get(1)
+            ?.replace("\\u0040", "@")?.takeIf { EMAIL.matches(it) }
 
         /** Google sent the request to its cookie-consent page or a sign-in challenge (verify it's you, captcha). */
         fun isGoogleChallenge(url: String): Boolean {

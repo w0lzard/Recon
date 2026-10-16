@@ -80,10 +80,11 @@ class NoticeFlowTest {
     @Test fun screenShowsTextAndOnlyIUnderstand() {
         var accepted = false
         compose.setContent { NoticeScreen { accepted = true } }
-        compose.onNodeWithText("Recon is a personal tool", substring = true).assertExists()
-        compose.onNodeWithText("Google's terms apply", substring = true).assertExists()
-        compose.onNodeWithText("your own Google account through Gemini web", substring = true).assertExists()
-        compose.onNodeWithText("The account-ban risk is yours", substring = true).assertExists()
+        compose.onNodeWithText("Recon is a personal-use tool. Read this once.").assertExists()
+        compose.onNodeWithText("NOTICE · V$NOTICE_VERSION").assertExists()
+        // Every row, including Recon's own download/terms row on top of the design's six.
+        Notice.TEXT.forEach { (lead, _) -> compose.onNodeWithText(lead, substring = true).assertExists() }
+        compose.onNodeWithText("may forbid downloading in their terms", substring = true).assertExists()
         compose.onNodeWithText("secondary Google account", substring = true).assertExists()
         compose.onAllNodes(hasClickAction()).assertCountEquals(1)
         compose.onNodeWithText("I understand").performClick()

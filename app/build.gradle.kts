@@ -7,14 +7,11 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-// Release signing from keystore.properties (git-ignored, created in T14). Without it, release
-// builds use the debug key and carry UNSIGNED-FOR-RELEASE in the file name so they can't be published by mistake.
+// Release signing from keystore.properties (git-ignored, created in T14). Without it, release APKs are unsigned
+// (recon-0.4.2-arm64-v8a-release-unsigned.apk): what F-Droid builds and then checks byte for byte against ours.
 val keystoreProps = rootProject.file("keystore.properties").takeIf { it.exists() }
     ?.let { f -> Properties().apply { f.inputStream().use(::load) } }
 // APK names (AGP pattern <archivesName>-<abi>-<buildType>.apk): recon-0.1.0-arm64-v8a-release.apk.
-// T15 matches release assets by this pattern; see README → "Which APK".
-val appVersion = "0.1.1"
-base.archivesName.set("recon-$appVersion")
 
 android {
     namespace = "dev.wolzard.recon"
@@ -24,8 +21,9 @@ android {
         applicationId = "dev.wolzard.recon"
         minSdk = 26
         targetSdk = 37
-        versionCode = 2
-        versionName = appVersion
+        // Literal values: F-Droid reads both with a regex. Each ABI APK gets versionCode * 10 + its ABI digit (below).
+        versionCode = 7
+        versionName = "0.4.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "RELEASES_REPO", "\"${providers.gradleProperty("recon.releasesRepo").get()}\"")
     }
@@ -44,7 +42,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release")
         }
         // Low-end gate build (AVD): release config with R8, debug-signed, x86_64 split allowed.
         create("gate") {
@@ -68,6 +66,11 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+    // F-Droid rejects the encrypted "Dependency metadata" signing block AGP adds for Google Play.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
     buildFeatures {
         compose = true
         buildConfig = true
@@ -77,16 +80,19 @@ android {
 
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }   // D23: the exported schemas are the record of each version; MigrationTest builds v1 from 1.json
 
+// T15 matches release assets by this pattern; see README → "Which APK".
+base.archivesName.set("recon-${android.defaultConfig.versionName}")
+
+// F-Droid's ABI order, lowest digit of the versionCode: 0.4.2 (7) is 71 for armeabi-v7a, 72 for arm64-v8a.
+val abiDigit = mapOf("armeabi-v7a" to 1, "arm64-v8a" to 2, "x86" to 3, "x86_64" to 4)
+
 // x86_64 is for the emulator only (debug + gate); release ships arm64-v8a and armeabi-v7a.
 androidComponents {
-    onVariants(selector().withBuildType("release")) { variant ->
+    onVariants { variant ->
         variant.outputs.forEach { out ->
-            if (out.filters.any { it.identifier == "x86_64" }) out.enabled.set(false)
-            // Debug-signed release (no keystore): recon-0.1.0-UNSIGNED-FOR-RELEASE-arm64-v8a-release.apk.
-            // Debug and test APKs keep plain AGP names. ponytail: VariantOutputImpl is AGP-internal (pinned 9.4.1); recheck on AGP bumps.
-            if (keystoreProps == null) (out as? com.android.build.api.variant.impl.VariantOutputImpl)?.outputFileName?.let { name ->
-                name.set(name.get().replace("recon-$appVersion-", "recon-$appVersion-UNSIGNED-FOR-RELEASE-"))
-            }
+            val abi = out.filters.firstOrNull { it.filterType == com.android.build.api.variant.FilterConfiguration.FilterType.ABI }?.identifier
+            abi?.let { out.versionCode.set(android.defaultConfig.versionCode!! * 10 + abiDigit.getValue(it)) }
+            if (variant.buildType == "release" && abi == "x86_64") out.enabled.set(false)
         }
     }
 }

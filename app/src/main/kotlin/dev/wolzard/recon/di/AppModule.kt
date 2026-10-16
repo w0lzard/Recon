@@ -9,9 +9,11 @@ import dev.wolzard.recon.core.port.JobStore
 import dev.wolzard.recon.core.port.LanguageModel
 import dev.wolzard.recon.core.port.LinkResolver
 import dev.wolzard.recon.core.port.SecretStore
+import dev.wolzard.recon.core.port.Secret
 import dev.wolzard.recon.core.port.VideoAnalyzer
 import dev.wolzard.recon.data.db.MIGRATION_1_2
 import dev.wolzard.recon.data.db.MIGRATION_2_3
+import dev.wolzard.recon.data.db.MIGRATION_3_4
 import dev.wolzard.recon.data.db.ReconDb
 import dev.wolzard.recon.data.db.RoomJobStore
 import dev.wolzard.recon.data.gemini.GeminiWebBackend
@@ -34,10 +36,12 @@ import dev.wolzard.recon.data.media.ContentUriFetcher
 import dev.wolzard.recon.core.port.FrameSampler
 import dev.wolzard.recon.data.media.VideoFormatFetcher
 import dev.wolzard.recon.data.media.YoutubeDlRunner
+import dev.wolzard.recon.data.media.YtDlp
 import dev.wolzard.recon.data.media.YtDlpFetcher
 import dev.wolzard.recon.data.media.YtDlpRunner
 import dev.wolzard.recon.data.secret.KeystoreSecretStore
 import dev.wolzard.recon.feature.settings.SettingsViewModel
+import dev.wolzard.recon.feature.settings.signingSha256
 import dev.wolzard.recon.feature.context.ContextViewModel
 import dev.wolzard.recon.feature.home.HomeViewModel
 import dev.wolzard.recon.feature.job.JobActions
@@ -49,6 +53,8 @@ import dev.wolzard.recon.core.job.RunJob
 import dev.wolzard.recon.work.JobRunner
 import dev.wolzard.recon.work.Notifier
 import dev.wolzard.recon.work.ShareIntake
+import dev.wolzard.recon.work.ResultPresenter
+import dev.wolzard.recon.work.YtDlpUpdateWorker
 import dev.wolzard.recon.work.deviceLanguage
 import java.io.File
 import org.koin.android.ext.koin.androidContext
@@ -58,7 +64,7 @@ import org.koin.dsl.module
 
 val appModule = module {
     single { OkHttpClient() }
-    single { Room.databaseBuilder(androidContext(), ReconDb::class.java, "recon.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3).build() }
+    single { Room.databaseBuilder(androidContext(), ReconDb::class.java, "recon.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build() }
     single<JobStore> { RoomJobStore(get()) }
     single<LinkResolver> { OkHttpLinkResolver(get()) }
     single<SecretStore> { KeystoreSecretStore(androidContext()) }
@@ -75,6 +81,7 @@ val appModule = module {
     single { ResearchChain(get<GitHubResearcher>(), WikipediaResearcher(get()), KnowledgeResearcher(get()), web = null) { GroundingCapability.UNAVAILABLE } }
     single<() -> Long> { System::currentTimeMillis }
     single { Notifier(androidContext()) }
+    single { ResultPresenter(androidContext(), get()) }
     single {
         RunJob(
             store = get(), resolver = get(), fetchers = Fetchers(get<YtDlpFetcher>(), get<ContentUriFetcher>()),
@@ -87,19 +94,27 @@ val appModule = module {
     }
     single<JobRunner> { val runJob: RunJob = get(); JobRunner { id, action -> runJob(id, action) } }
     single { ShareIntake(androidContext(), get(), get()) }
-    viewModel { SignInViewModel(get()) { get<GeminiWebClient>().verify(it) } }
+    viewModel {
+        val secrets: SecretStore = get()
+        // The address goes next to the cookies only after the check passed; sign-out clears both (GeminiSession).
+        SignInViewModel(secrets) { cookies -> get<GeminiWebClient>().run { verify(cookies).also { secrets.put(Secret.GEMINI_EMAIL, accountEmail) } } }
+    }
     single {
         UpdateChecker(
             get(), androidContext().getSharedPreferences("update", Context.MODE_PRIVATE), BuildConfig.VERSION_NAME,
             BuildConfig.RELEASES_REPO, Build.SUPPORTED_ABIS.toList(), get(),
         )
     }
-    viewModel { SettingsViewModel(get(), get()) }
+    viewModel {
+        val ctx = androidContext()
+        SettingsViewModel(get(), get(), signingSha256(ctx), YtDlp.autoUpdate(ctx)) { on -> YtDlp.setAutoUpdate(ctx, on); YtDlpUpdateWorker.sync(ctx, on) }
+    }
     single { JobActions(get(), { job -> JobQueue.cancel(androidContext(), job) }) { id, action -> JobQueue.enqueue(androidContext(), id, action) } }
     single { VideoFormatFetcher(get()) }
     viewModel { params -> JobViewModel(params.get(), get(), get(), get()) }
     single { LinkPreviewFetcher({ url -> get<YtDlpRunner>().run(url, listOf("--dump-json", "--skip-download", "--no-playlist"), "preview-${java.util.UUID.randomUUID()}") {} }) }
     single { ThumbnailLoader(get()) }
-    viewModel { params -> ContextViewModel(params.get(), get(), get<LinkPreviewFetcher>()::fetch) }
+    viewModel { dev.wolzard.recon.ShareSheetViewModel(get()) }
+    viewModel { params -> ContextViewModel(params.get(), get(), params.values.getOrNull(1) as? String, get<LinkPreviewFetcher>()::fetch) }
     viewModel { HomeViewModel(get(), get()) }
 }

@@ -99,7 +99,7 @@ fun ReconNavHost(
                 }
             }
             composable<SignInDestination> {
-                SignInRoute(koinViewModel()) {
+                SignInRoute(koinViewModel(), onBack = nav.previousBackStackEntry?.let { { nav.popBackStack() } }) {
                     // D25: "Sign in again" on a job returns to that job, which runs again; otherwise start over at Home.
                     val job = nav.previousBackStackEntry?.takeIf { it.destination.hasRoute<JobDestination>() }
                     if (job != null) { job.savedStateHandle[SIGNED_IN_AGAIN] = true; nav.popBackStack() }
@@ -107,7 +107,7 @@ fun ReconNavHost(
                 }
             }
             composable<SettingsDestination> {
-                SettingsRoute(koinViewModel(), onNotice = { nav.navigate(NoticeDestination) }, onSignIn = { nav.navigate(SignInDestination) })
+                SettingsRoute(koinViewModel(), onBack = { nav.popBackStack() }, onNotice = { nav.navigate(NoticeDestination) }, onSignIn = { nav.navigate(SignInDestination) })
             }
         }
     }

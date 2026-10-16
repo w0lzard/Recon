@@ -18,3 +18,10 @@ local.properties
 .kotlin/
 spikes/inputs/*.vtt
 __pycache__/
+# docs/ stays local; only what README and the bundled fonts need is tracked
+docs/*
+!docs/logo.svg
+!docs/licenses/
+!docs/screenshots/
+docs/screenshots/*
+!docs/screenshots/readme-*.png

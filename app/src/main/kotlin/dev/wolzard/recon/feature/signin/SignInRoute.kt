@@ -7,8 +7,8 @@ import dev.wolzard.recon.mvi.CollectEffects
 
 /** Wires [SignInViewModel] to [SignInScreen]; [onSignedIn] leaves the screen once Gemini accepted the cookies. */
 @Composable
-fun SignInRoute(vm: SignInViewModel, onSignedIn: () -> Unit) {
+fun SignInRoute(vm: SignInViewModel, onBack: (() -> Unit)? = null, onSignedIn: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     CollectEffects(vm.effects) { if (it == SignInEffect.SignedIn) onSignedIn() }
-    SignInScreen(state, onIntent = vm::onIntent)
+    SignInScreen(state, onBack = onBack, onIntent = vm::onIntent)
 }

@@ -110,20 +110,21 @@ class JobScreenTest {
 
     @Test fun disputedClaimNeverConfirmed() {
         show(job(JobState.DONE), result(listOf(finding(entity(EntityType.CLAIM, "Chocolate causes acne"), Verdict.DISPUTED, Basis.WEB_SOURCES))))
-        compose.onNodeWithText("Disputed").assertExists()
-        compose.onNodeWithText("Chocolate causes acne").assertExists()
-        compose.onNodeWithText("Confirmed").assertDoesNotExist()
+        compose.onNodeWithText("CONTRADICTED").assertExists()
+        compose.onNodeWithText("“Chocolate causes acne”").assertExists()
+        compose.onNodeWithText("Confirmed", ignoreCase = true).assertDoesNotExist()
     }
 
-    @Test fun inferredShowsGuessBadge() {
+    @Test fun inferredGuessFromAiMemoryIsUnverifiedWithNoSource() {
         show(job(JobState.DONE), result(listOf(finding(entity(EntityType.PRODUCT, "Kirby", Evidence.INFERRED), Verdict.BEST_MATCH, Basis.AI_KNOWLEDGE))))
-        compose.onNodeWithText("Guess").assertExists()
+        compose.onNodeWithText("UNVERIFIED").assertExists()
+        compose.onNodeWithTag("no_source").assertExists()
     }
 
     @Test fun notCheckedShowsWhatTheVideoSaid() {
         val e = entity(EntityType.PLACE, "Taj Mahal")
         show(job(JobState.DONE), result(listOf(Finding(e, "none", Verdict.NOT_CHECKED, e.name, e.saidInVideo, emptyList(), "", "", null, null, Basis.VIDEO_ONLY))))
-        compose.onNodeWithText("Not checked").assertExists()
+        compose.onNodeWithText("UNVERIFIED").assertExists()
         compose.onNodeWithText("The video says Taj Mahal.").assertExists()
     }
 
@@ -132,9 +133,22 @@ class JobScreenTest {
             finding(entity(EntityType.CLAIM, "Water while standing hurts knees"), Verdict.UNCLEAR, Basis.AI_KNOWLEDGE),
             finding(entity(EntityType.BOOK, "Atomic Habits"), Verdict.BEST_MATCH, Basis.AI_KNOWLEDGE),
         )))
-        compose.onAllNodesWithText("Unverified, from AI knowledge").assertCountEquals(2)
-        compose.onNodeWithText("Confirmed").assertDoesNotExist()
-        compose.onNodeWithText("Supported").assertDoesNotExist()
+        compose.onNodeWithText("UNCLEAR").assertExists()
+        compose.onNodeWithText("UNVERIFIED").assertExists()
+        compose.onNodeWithText("VERIFIED").assertDoesNotExist()
+        compose.onNodeWithText("SUPPORTED").assertDoesNotExist()
+    }
+
+    @Test fun aiMemoryNeverReadsVerifiedOrSupportedWhateverItsVerdict() {
+        fun chip(v: Verdict) = JobCopy.verdictChip(finding(entity(EntityType.APP, "X"), v, Basis.AI_KNOWLEDGE, link = "https://example.com")).first
+        assertEquals(listOf("Unverified", "Unverified", "Unverified", "Unverified", "Unclear", "Unclear", "Contradicted"),
+            listOf(Verdict.CONFIRMED, Verdict.SUPPORTED, Verdict.BEST_MATCH, Verdict.NOT_CHECKED, Verdict.UNCLEAR, Verdict.NOT_FOUND, Verdict.DISPUTED).map(::chip))
+    }
+
+    @Test fun aBestMatchIsVerifiedOnlyWithAnApiSource() {
+        val e = entity(EntityType.REPO, "stowly")
+        assertEquals("Verified", JobCopy.verdictChip(finding(e, Verdict.BEST_MATCH, Basis.GITHUB_API, link = "https://github.com/kmori/stowly")).first)
+        assertEquals("Unverified", JobCopy.verdictChip(finding(e, Verdict.BEST_MATCH, Basis.GITHUB_API)).first)
     }
 
     // --- r2 candidates picker
@@ -146,7 +160,7 @@ class JobScreenTest {
             GhRepo("habi/latex", "https://github.com/habi/latex", null, 1),
         )
         show(job(JobState.DONE), result(listOf(finding(entity(EntityType.REPO, "he-justinsun-s-girlfriend-jinchin-latex", Evidence.SPOKEN), Verdict.BEST_MATCH, Basis.GITHUB_API, candidates = repos))))
-        compose.onNodeWithText("Which repo did the video mean?").assertExists()
+        compose.onNodeWithText("3 CANDIDATES · PICK THE RIGHT ONE").assertExists()
         repos.forEach { compose.onNodeWithText(it.fullName).assertExists() }
         compose.onNodeWithText("None of these").assertExists()
         compose.onNodeWithText("fuzzland/girlfriend").performScrollTo().performClick()
@@ -157,7 +171,7 @@ class JobScreenTest {
 
     @Test fun noEntitiesSaysNothingToLookUpAndOffersSharper() {
         show(job(JobState.DONE), result(emptyList()))
-        compose.onNodeWithText("Nothing specific to look up in this video").assertExists()
+        compose.onNodeWithText("Nothing to look up in this video").assertExists()
         compose.onNodeWithText("Try sharper video").assertExists()
     }
 
@@ -187,12 +201,58 @@ class JobScreenTest {
     // --- running states
 
     @Test fun waitingQuotaSaysWhenItStarts() {
-        show(job(JobState.WAITING_QUOTA, retryAt = now + 60_000))
-        compose.onNodeWithText("Waiting for your free AI quota").assertExists()
-        compose.onNodeWithText("Link: instagram.com").assertExists()
-        compose.onNodeWithText("Quota resets at ${JobCopy.time(now + 60_000)}", substring = true).assertExists()
-        compose.onNodeWithText("Cancel").performClick()
+        show(job(JobState.WAITING_QUOTA, retryAt = now + 118 * 60_000))
+        compose.onNodeWithText("Usage limit reached").assertExists()
+        compose.onNodeWithText("~${JobCopy.time(now + 118 * 60_000)}").assertExists()
+        compose.onNodeWithText("in about 1 h 58 m · estimate").assertExists()
+        compose.onNodeWithText("Cancel job").performClick()
+        compose.onNodeWithText("Switch account").performClick()
+        assertEquals(listOf(JobIntent.Cancel, JobIntent.SignIn), actions)
+    }
+
+    @Test fun runningShowsTheRunRecordAndCancels() {
+        show(job(JobState.ANALYSING).copy(startedAt = now - 12_000, downloadedAt = now - 8_000, sampledAt = now - 5_000, downloadBytes = 4_200_000, videoDurationSec = 38, frameCount = 24, hasAudio = true))
+        compose.onNodeWithText("4.2 MB · 0:38 video").assertExists()
+        compose.onNodeWithText("24 frames · audio track").assertExists()
+        listOf("0:04", "0:07", "0:12").forEach { compose.onNodeWithText(it).assertExists() } // two done steps, then the running clock
+        compose.onNodeWithText("Link received", substring = true).assertExists()
+        compose.onNodeWithText("Cancel job").performClick()
         assertEquals(listOf<JobIntent>(JobIntent.Cancel), actions)
+    }
+
+    @Test fun runningWithoutARunRecordShowsNoNumbers() {
+        show(job(JobState.DOWNLOADING))
+        compose.onAllNodesWithText("MB", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("frames ·", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("0:0", substring = true).assertCountEquals(0)
+    }
+
+    @Test fun zeroFramesFailureShowsTheRunCard() {
+        show(job(JobState.FAILED, FailureReason.VIDEO_UNREADABLE).copy(url = "https://x.com/a/status/1840", downloadBytes = 2_100_000, frameCount = 0))
+        compose.onNodeWithText("FAILED · 0 FRAMES").assertExists()
+        compose.onNodeWithText(JobCopy.NO_FRAMES_TITLE).assertExists()
+        compose.onNodeWithText("2.1 MB · done").assertExists()
+        compose.onNodeWithText("x.com/…/status/1840").assertExists()
+        compose.onNodeWithText("Open link in browser").performClick()
+        assertEquals(listOf<JobIntent>(JobIntent.Open("https://x.com/a/status/1840")), actions)
+    }
+
+    @Test fun resultTopBarSaysCompleteAndDeletesFromTheMenu() {
+        show(job(JobState.DONE), result(emptyList()))
+        compose.onNodeWithText("JOB J100-00 · SWEEP COMPLETE").assertExists()
+        compose.onNodeWithContentDescription("Open original").performClick()
+        compose.onNodeWithContentDescription("More").performClick()
+        compose.onNodeWithText("Delete").performClick()
+        assertEquals(listOf(JobIntent.Open("https://www.instagram.com/reel/x/"), JobIntent.Cancel), actions)
+    }
+
+    @Test fun copyHelpers() {
+        assertEquals("JOB 7F3A-21", JobCopy.shortId("7f3a21c0-aaaa"))
+        assertEquals("0:04", JobCopy.elapsed(1_000, 5_999))
+        assertEquals(null, JobCopy.elapsed(null, 5_000))
+        assertEquals("4.2 MB", JobCopy.megabytes(4_200_000))
+        assertEquals(listOf("38", "212", "4.1k", "12k"), listOf(38, 212, 4_100, 12_000).map(JobCopy::stars))
+        assertEquals("in about 1 m", JobCopy.waitFor(10_000))
     }
 
     @Test fun topBarShowsHostAndBack() {
@@ -237,12 +297,11 @@ class JobScreenTest {
         val a = dev.wolzard.recon.core.model.Answer("It is Codeium.", dev.wolzard.recon.core.model.AnswerStatus.VERIFIED, 0.9, listOf("caption at the start"))
         show(asked(), answered(a))
         compose.onNodeWithText("It is Codeium.").assertExists()
-        compose.onNodeWithText("Verified").assertExists()
-        compose.onNodeWithText("90%").assertExists()
+        compose.onAllNodesWithText("VERIFIED").assertCountEquals(2) // the answer and the Codeium card
         compose.onAllNodesWithText("caption at the start").assertCountEquals(2) // in the card and in the shared source list
-        val y = { tag: String -> compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.top }
-        val summaryTop = compose.onNodeWithText("SUMMARY").fetchSemanticsNode().boundsInRoot.top
-        val entitiesTop = compose.onNodeWithText("ENTITIES FOUND · 1", substring = true).fetchSemanticsNode().boundsInRoot.top
+        val y = { tag: String -> compose.onNodeWithTag(tag).fetchSemanticsNode().positionInRoot.y }
+        val summaryTop = compose.onNodeWithText("SUMMARY").fetchSemanticsNode().positionInRoot.y
+        val entitiesTop = compose.onNodeWithText("ENTITIES FOUND · 1", substring = true).fetchSemanticsNode().positionInRoot.y
         val q = y("your_question")
         val card = y("answer_card")
         assert(q < card && card < summaryTop && summaryTop < entitiesTop) { "order: question $q, answer $card, summary $summaryTop, entities $entitiesTop" }
@@ -251,21 +310,20 @@ class JobScreenTest {
     @Test fun unclearAnswerShowsItsStatus() {
         val a = dev.wolzard.recon.core.model.Answer("The video does not say who this is.", dev.wolzard.recon.core.model.AnswerStatus.UNCLEAR, 0.2)
         show(asked(), answered(a))
-        compose.onNodeWithText("Unclear").assertExists()
+        compose.onNodeWithText("UNCLEAR").assertExists()
         compose.onNodeWithText("The video does not say who this is.").assertExists()
     }
 
     @Test fun questionWithoutAnswerShowsAFallbackCard() {
         show(asked(), answered(null))
         compose.onNodeWithText(JobCopy.NO_ANSWER).assertExists()
-        compose.onNodeWithText("Unclear").assertExists()
+        compose.onNodeWithText("UNCLEAR").assertExists()
     }
 
     @Test fun mediaFindingShowsItsLabel() {
         val f = finding(entity(EntityType.MEDIA, "Inception"), Verdict.CONFIRMED, Basis.WIKIPEDIA)
         show(job(JobState.DONE), result(listOf(f)))
         compose.onNodeWithText("MEDIA").assertExists()
-        compose.onNodeWithText("Watch or listen: how").assertExists()
     }
 
     // --- Design turn 3 (2026-10-14): shared source numbering, no-source line, media qualifier
@@ -283,7 +341,7 @@ class JobScreenTest {
     @Test fun unverifiedAnswerWithoutSourcesSaysSo() {
         val a = dev.wolzard.recon.core.model.Answer("Probably Codeium.", dev.wolzard.recon.core.model.AnswerStatus.UNVERIFIED, 0.5)
         show(asked(), answered(a))
-        compose.onNodeWithText("Unverified").assertExists()
+        compose.onNodeWithText("UNVERIFIED").assertExists()
         compose.onNodeWithText(JobCopy.NO_SOURCE).assertExists()
         compose.onNodeWithTag("no_source").assertExists() // icon and text in one row
     }
@@ -337,7 +395,8 @@ class JobScreenTest {
         val d = dev.wolzard.recon.core.model.ClaimDomain.values()
         show(job(JobState.DONE), result(listOf(claim("h", d[0]), claim("l", d[1]), claim("f", d[2]))))
         compose.onAllNodesWithTag("advice_line").assertCountEquals(3)
-        compose.onAllNodesWithText(JobCopy.NOT_ADVICE).assertCountEquals(4) // one per claim + the footer
+        compose.onAllNodesWithText(JobCopy.NOT_ADVICE).assertCountEquals(1) // the footer; each line names its domain
+        compose.onNodeWithText(JobCopy.adviceLine(d[0])).assertExists()
         compose.onNodeWithTag("advice_footer").performScrollTo().assertExists()
     }
 
@@ -351,13 +410,13 @@ class JobScreenTest {
     @Test fun adviceLineIsOnlyOnTheSensitiveClaim() {
         show(job(JobState.DONE), result(listOf(claim("sensitive", dev.wolzard.recon.core.model.ClaimDomain.HEALTH), claim("plain", dev.wolzard.recon.core.model.ClaimDomain.OTHER, Verdict.SUPPORTED))))
         compose.onAllNodesWithTag("advice_line").assertCountEquals(1)
-        compose.onAllNodesWithText(JobCopy.NOT_ADVICE).assertCountEquals(2) // the line and the footer
+        compose.onAllNodesWithText(JobCopy.NOT_ADVICE).assertCountEquals(1) // the footer
     }
 
     @Test fun namedSourceIsShownOnTheClaim() {
         val f = claim("c", dev.wolzard.recon.core.model.ClaimDomain.HEALTH, Verdict.DISPUTED).copy(source = "WHO fact sheet")
         show(job(JobState.DONE), result(listOf(f)))
-        compose.onNodeWithText("Source: WHO fact sheet").assertExists()
+        compose.onNodeWithText("WHO fact sheet", substring = true).assertExists()
     }
 
     @Test fun waitingWithoutATimeShowsTryAgainLaterAndNoClock() {

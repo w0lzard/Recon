@@ -255,6 +255,33 @@ class RunJobTest {
         assertFalse(JobState.DONE in store.states)
     }
 
+    // --- D28: the run record behind the step card and the failed card
+
+    @Test fun pathBRecordsDownloadFramesAndStepTimes() = runTest {
+        job()
+        runJob(Analyzer(), link = Fetcher(audio = true, bytes = 5_000), sampler = Sampler(24))("j1")
+        val j = store.get("j1")!!
+        assertEquals(5_004L, j.downloadBytes)                              // video + separate audio
+        assertEquals(24, j.frameCount)
+        assertEquals(true, j.hasAudio)
+        assertEquals(listOf<Long?>(1_000, 1_000, 1_000, 1_000), listOf(j.startedAt, j.downloadedAt, j.sampledAt, j.analysedAt))
+    }
+
+    @Test fun zeroFramesAreRecordedAsZero() = runTest {
+        job()
+        runJob(Analyzer(), link = Fetcher(bytes = 5_000), sampler = Sampler(0, 0))("j1")
+        assertEquals(0, store.get("j1")!!.frameCount)
+    }
+
+    @Test fun pathAHasNoFrameCountButAStepTime() = runTest {
+        job()
+        runJob(Analyzer())("j1")
+        val j = store.get("j1")!!
+        assertNull(j.frameCount)
+        assertEquals(1_000L, j.sampledAt)
+        assertEquals(100L, j.downloadBytes)
+    }
+
     @Test fun zeroFramesThenFramesAfterRetrySucceeds() = runTest {
         job()
         runJob(Analyzer(), link = Fetcher(bytes = 5_000), sampler = Sampler(0, 4))("j1")

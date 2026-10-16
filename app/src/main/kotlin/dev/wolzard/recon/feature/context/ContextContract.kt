@@ -30,6 +30,7 @@ sealed interface ContextEffect {
 
 object ContextCopy {
     const val TITLE = "Add context"
+    const val SHARED_FILE = "Shared video"
     const val PLACEHOLDER = "Ask something about this video (optional)"
     const val SENT_WITH_VIDEO = "Sent to Gemini with the video"
     const val INVALID_LINK = "This link can't be used. Share a video link starting with http or https."

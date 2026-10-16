@@ -18,8 +18,9 @@ import kotlinx.coroutines.withContext
 /**
  * youtubedl-android access. One lock covers init, update and every download, because an update replaces the
  * yt-dlp zip in place and a download running at the same time fails with "ZipImportError: bad local file header"
- * (seen on the API 26 AVD, 2026-10-08). A fresh install updates once before its first download: the bundled
- * yt-dlp ages out (the 0.18.1 library ships 2025.11.12).
+ * (seen on the API 26 AVD, 2026-10-08). Updating downloads new code, so it is opt-in (Settings, F-Droid's inclusion
+ * policy); when on, an install that never updated does so before its first download, because the bundled yt-dlp ages
+ * out (the 0.18.1 library ships 2025.11.12).
  */
 object YtDlp {
     private val lock = Mutex()
@@ -59,9 +60,13 @@ object YtDlp {
     /** @return the update status, or null if it failed (the current version stays in use). */
     suspend fun update(context: Context): YoutubeDL.UpdateStatus? = use(context) { updateLocked(context) }
 
-    /** Called by downloads: updates first if this install never updated successfully. */
+    /** Settings → "Update yt-dlp": off until the user turns it on. */
+    fun autoUpdate(context: Context): Boolean = prefs(context).getBoolean(AUTO_UPDATE, false)
+    fun setAutoUpdate(context: Context, on: Boolean) = prefs(context).edit().putBoolean(AUTO_UPDATE, on).apply()
+
+    /** Called by downloads: with updates on, updates first if this install never updated successfully. */
     suspend fun <T> useUpdated(context: Context, block: suspend () -> T): T = use(context) {
-        if (!prefs(context).getBoolean(UPDATED, false)) updateLocked(context)
+        if (autoUpdate(context) && !prefs(context).getBoolean(UPDATED, false)) updateLocked(context)
         block()
     }
 
@@ -74,6 +79,7 @@ object YtDlp {
 
     private fun prefs(context: Context) = context.getSharedPreferences("ytdlp", Context.MODE_PRIVATE)
     private const val UPDATED = "updatedOnce"
+    private const val AUTO_UPDATE = "autoUpdate"
 }
 
 class YoutubeDlRunner(private val context: Context) : YtDlpRunner {

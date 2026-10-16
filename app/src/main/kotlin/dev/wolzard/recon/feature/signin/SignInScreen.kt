@@ -25,9 +25,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.sp
+import dev.wolzard.recon.designsystem.Symbols
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.ui.graphics.luminance
@@ -55,70 +63,100 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.wolzard.recon.core.copy.SetupCopy
-import dev.wolzard.recon.designsystem.StatusIcons
 import dev.wolzard.recon.designsystem.status
 
-/** The three steps of sign-in. Kept as one screen so the route, ViewModel and D25 return paths stay as they are. */
-internal enum class SignInStep { INTRO, WEB, PASTE }
+/** The two steps of sign-in. Kept as one screen so the route, ViewModel and D25 return paths stay as they are. */
+internal enum class SignInStep { INTRO, WEB }
 
 /**
- * Sign-in (D22, D25; layout D27): an intro with the risk row and two ways in, Google's page full-screen in a WebView,
- * or the paste-cookies fallback. Back from either way in returns to the intro.
+ * Sign-in (D22, D25; flow D27, look design 1c): an intro with the risk card, "Continue with Google" opening Google's page
+ * full-screen in a WebView, and the paste-cookies fallback inline under "Advanced". Back from the page returns to the intro.
+ * [onBack] null = no back arrow (first run, nothing to go back to).
  */
 @Composable
-fun SignInScreen(state: SignInState, signInUrl: String = SetupCopy.SIGN_IN_URL, onIntent: (SignInIntent) -> Unit) {
+fun SignInScreen(state: SignInState, signInUrl: String = SetupCopy.SIGN_IN_URL, onBack: (() -> Unit)? = null, onIntent: (SignInIntent) -> Unit) {
     var step by rememberSaveable { mutableStateOf(SignInStep.INTRO) }
+    var advanced by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = step != SignInStep.INTRO) { step = SignInStep.INTRO }
     when (step) {
-        SignInStep.INTRO -> Intro(state, onWeb = { step = SignInStep.WEB }, onPaste = { step = SignInStep.PASTE })
-        SignInStep.WEB -> WebStep(state, signInUrl, onIntent, onBack = { step = SignInStep.INTRO }, onPaste = { step = SignInStep.PASTE })
-        SignInStep.PASTE -> PasteStep(state, onIntent, onBack = { step = SignInStep.INTRO })
+        SignInStep.INTRO -> Intro(state, advanced, { advanced = it }, onBack, onIntent, onWeb = { step = SignInStep.WEB })
+        SignInStep.WEB -> WebStep(state, signInUrl, onIntent, onBack = { step = SignInStep.INTRO }, onPaste = { advanced = true; step = SignInStep.INTRO })
     }
 }
 
 @Composable
-private fun Intro(state: SignInState, onWeb: () -> Unit, onPaste: () -> Unit) {
+private fun Intro(state: SignInState, advanced: Boolean, onAdvanced: (Boolean) -> Unit, onBack: (() -> Unit)?, onIntent: (SignInIntent) -> Unit, onWeb: () -> Unit) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Text("STEP 2 OF 2 · ACCOUNT", color = muted, style = MaterialTheme.typography.labelSmall)
-        Text("Sign in to Google", style = MaterialTheme.typography.titleLarge)
-        Text(SetupCopy.SIGN_IN_INTRO, style = MaterialTheme.typography.bodyLarge)
-        RiskRow()
-        Status(state)
-        Button(onClick = onWeb, Modifier.fillMaxWidth().height(48.dp), enabled = !state.checking, shape = MaterialTheme.shapes.small) {
-            Icon(Icons.Filled.AccountCircle, contentDescription = null, Modifier.size(20.dp))
-            Text("Sign in with Google", Modifier.padding(start = 8.dp))
+    Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState())) {
+        Box(Modifier.fillMaxWidth().height(56.dp).padding(start = 4.dp), contentAlignment = Alignment.CenterStart) {
+            onBack?.let { IconButton(onClick = it) { Icon(Symbols.ArrowBack, "Back") } }
         }
-        OutlinedButton(onClick = onPaste, Modifier.fillMaxWidth().height(48.dp), enabled = !state.checking, shape = MaterialTheme.shapes.small) {
-            Text("Paste cookies instead")
+        Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 24.dp)) {
+            Text("STEP 2 OF 2 · ACCOUNT", color = muted, style = MaterialTheme.typography.labelSmall)
+            Spacer(Modifier.height(28.dp))
+            Text("Sign in to Google", style = MaterialTheme.typography.titleLarge.copy(fontSize = 24.sp, lineHeight = 30.sp))
+            Spacer(Modifier.height(20.dp))
+            Text(SetupCopy.SIGN_IN_INTRO, style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp, lineHeight = 24.sp))
+            Spacer(Modifier.height(20.dp))
+            RiskCard()
+            Status(state, Modifier.padding(top = 16.dp))
+            Spacer(Modifier.height(20.dp))
+            Button(onClick = onWeb, Modifier.fillMaxWidth().height(48.dp), enabled = !state.checking, shape = MaterialTheme.shapes.small) {
+                Icon(Symbols.AccountCircle, contentDescription = null, Modifier.size(20.dp))
+                Text("Continue with Google", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.labelLarge)
+            }
+            Spacer(Modifier.height(20.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(role = Role.Button) { onAdvanced(!advanced) },
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Icon(Symbols.ExpandMore, contentDescription = null, Modifier.size(20.dp).rotate(if (advanced) 180f else 0f), tint = muted)
+                Text("Advanced: paste cookie header", color = muted, style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp))
+            }
+            AnimatedVisibility(advanced, enter = fadeIn(), exit = fadeOut()) { Paste(state, onIntent) }
         }
-        Text(SetupCopy.WEBVIEW_BLOCKED_HELP, color = muted, style = MaterialTheme.typography.bodySmall)
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        // Fine print: the D25 storage sentence and the full risk wording, unchanged.
-        Text(SetupCopy.SIGN_IN_STORED, color = muted, style = MaterialTheme.typography.bodySmall)
-        Text(SetupCopy.ACCOUNT_RISK, Modifier.testTag("account_risk"), color = muted, style = MaterialTheme.typography.bodySmall)
     }
 }
 
-/** One compact row: warning glyph and the short risk line, in the Unverified ink (D24 status colours). */
+/** Design 1c: hairline card in the Unverified ink, warning glyph, ACCOUNT RISK label and the short risk line. */
 @Composable
-private fun RiskRow() {
+private fun RiskCard() {
     val warn = MaterialTheme.colorScheme.status.unverified
     Row(
-        Modifier.fillMaxWidth().border(1.dp, warn, MaterialTheme.shapes.small).padding(horizontal = 12.dp, vertical = 10.dp).testTag("risk_row"),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+        Modifier.fillMaxWidth().border(1.dp, warn, MaterialTheme.shapes.medium).padding(horizontal = 16.dp, vertical = 14.dp).testTag("risk_row"),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Icon(StatusIcons.Error, contentDescription = "Account risk", Modifier.size(18.dp), tint = warn)
-        Text(SetupCopy.RISK_SHORT, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium))
+        Icon(Symbols.Warning, contentDescription = null, Modifier.padding(top = 2.dp).size(20.dp), tint = warn)
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("ACCOUNT RISK", color = warn, style = MaterialTheme.typography.labelSmall)
+            Text(SetupCopy.RISK_SHORT, style = MaterialTheme.typography.bodyLarge)
+        }
+    }
+}
+
+/** The paste-cookies fallback, inline under "Advanced" (was its own step in D27). */
+@Composable
+private fun Paste(state: SignInState, onIntent: (SignInIntent) -> Unit) {
+    var pasted by remember { mutableStateOf("") } // not saveable: the cookie never goes into the saved-state Bundle
+    val ctx = LocalContext.current
+    Column(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(SetupCopy.PASTE_HELP, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+        OutlinedTextField(
+            value = pasted, onValueChange = { pasted = it }, label = { Text("Cookie header") }, isError = state.error != null,
+            placeholder = { Text("__Secure-1PSID=…; __Secure-1PSIDTS=…") }, minLines = 3,
+            keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Password),
+            visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth().testTag("cookie_field"), shape = MaterialTheme.shapes.small,
+        )
+        OutlinedButton(
+            onClick = { onIntent(SignInIntent.CookiesReceived(pasted)); clearPastedClip(ctx, pasted); pasted = "" },
+            Modifier.fillMaxWidth().height(48.dp), enabled = pasted.isNotBlank() && !state.checking, shape = MaterialTheme.shapes.small,
+        ) { Text("Use these cookies") }
     }
 }
 
@@ -137,7 +175,7 @@ private fun Status(state: SignInState, modifier: Modifier = Modifier) {
 private fun SlimBar(title: String, onBack: () -> Unit, action: (@Composable () -> Unit)? = null) {
     TopAppBar(
         title = { Text(title, style = MaterialTheme.typography.titleMedium) },
-        navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+        navigationIcon = { IconButton(onClick = onBack) { Icon(Symbols.ArrowBack, "Back") } },
         actions = { action?.invoke() },
         expandedHeight = 48.dp,
         colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
@@ -178,33 +216,6 @@ private fun WebStep(state: SignInState, url: String, onIntent: (SignInIntent) ->
 // A fixed scroll, nothing read or written: the focused field moves to the top so what follows it (Next) is visible.
 private const val SCROLL_FOCUSED_TO_TOP =
     "(function(){var e=document.activeElement;if(e&&e!==document.body){var r=e.getBoundingClientRect();window.scrollBy(0,r.top-16);}})()"
-
-@Composable
-private fun PasteStep(state: SignInState, onIntent: (SignInIntent) -> Unit, onBack: () -> Unit) {
-    var pasted by remember { mutableStateOf("") } // not saveable: the cookie never goes into the saved-state Bundle
-    val ctx = LocalContext.current
-    Column(Modifier.fillMaxSize().imePadding()) {
-        SlimBar("Paste cookies", onBack)
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        Column(
-            Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(SetupCopy.PASTE_HELP, style = MaterialTheme.typography.bodyMedium)
-            OutlinedTextField(
-                value = pasted, onValueChange = { pasted = it }, label = { Text("Cookie header") }, isError = state.error != null,
-                placeholder = { Text("__Secure-1PSID=…; __Secure-1PSIDTS=…") },
-                keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Password),
-                visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth().testTag("cookie_field"), shape = MaterialTheme.shapes.small,
-            )
-            Status(state)
-            Button(
-                onClick = { onIntent(SignInIntent.CookiesReceived(pasted)); clearPastedClip(ctx, pasted); pasted = "" },
-                Modifier.fillMaxWidth().height(48.dp), enabled = pasted.isNotBlank() && !state.checking, shape = MaterialTheme.shapes.small,
-            ) { Text("Use these cookies") }
-        }
-    }
-}
 
 @Composable
 private fun SignInWebView(modifier: Modifier, url: String, onCreated: (WebView) -> Unit = {}, onCookies: (String) -> Unit) {

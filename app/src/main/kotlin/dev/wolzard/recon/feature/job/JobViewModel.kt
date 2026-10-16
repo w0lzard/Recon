@@ -14,6 +14,7 @@ import dev.wolzard.recon.core.model.Verdict
 import dev.wolzard.recon.core.port.JobStore
 import dev.wolzard.recon.data.media.VideoFormatFetcher
 import dev.wolzard.recon.mvi.MviViewModel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 
@@ -42,11 +43,26 @@ class JobActions(private val store: JobStore, private val cancelWork: (Job) -> U
         return id
     }
 
-    /** Only a WAITING_QUOTA job can be cancelled; it is removed, not kept as failed. */
+    /** Share sheet: a shared video file, already copied, starts with its optional context. */
+    suspend fun startFile(localUri: String, sharedText: String, context: String?): String {
+        val id = store.create(sharedText, localUri, UserContext.clean(context))
+        enqueue(id, UserAction.RUN)
+        return id
+    }
+
+    /**
+     * Cancel job / Delete (design 1f, 1g, the result's overflow menu): the job is removed, not kept as failed.
+     * Cancelling a queued or running job's work inside the one-at-a-time chain also cancels the jobs queued behind it,
+     * so every QUEUED job is queued again (JobWorker skips one that already finished).
+     */
     suspend fun cancel(id: String): Boolean {
-        val job = store.get(id)?.takeIf { it.state == JobState.WAITING_QUOTA } ?: return false
-        cancelWork(job)
+        val job = store.get(id) ?: return false
+        val active = job.state != JobState.DONE && job.state != JobState.FAILED
+        if (active) cancelWork(job)
         store.delete(id)
+        if (active && job.state != JobState.WAITING_QUOTA) {
+            store.observeAll().first().filter { it.state == JobState.QUEUED }.asReversed().forEach { enqueue(it.id, UserAction.RUN) } // oldest first
+        }
         return true
     }
 

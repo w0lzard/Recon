@@ -11,11 +11,12 @@ import dev.wolzard.recon.mvi.CollectEffects
 
 /** Wires [SettingsViewModel] to [SettingsScreen]; navigation is the caller's. */
 @Composable
-fun SettingsRoute(vm: SettingsViewModel, onNotice: () -> Unit, onSignIn: () -> Unit) {
+fun SettingsRoute(vm: SettingsViewModel, onBack: () -> Unit, onNotice: () -> Unit, onSignIn: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
     CollectEffects(vm.effects) { effect ->
         when (effect) {
+            SettingsEffect.NavigateBack -> onBack()
             SettingsEffect.NavigateToSignIn -> onSignIn()
             SettingsEffect.NavigateToNotice -> onNotice()
             SettingsEffect.ClearWebViewCookies -> SignInWeb.clear(ctx)

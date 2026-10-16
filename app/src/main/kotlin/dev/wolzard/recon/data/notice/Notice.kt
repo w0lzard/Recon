@@ -18,6 +18,7 @@ class Notice(private val prefs: SharedPreferences, private val version: Int = NO
                 "finishes. When you share a link, it first asks the platform for the video's title, length and thumbnail to show " +
                 "them. Instagram, TikTok, X and other platforms may forbid downloading in their terms of service. You are " +
                 "responsible for what you share with Recon. Only share content you're allowed to process.",
+            "Saving videos is strictly for your own personal use.",
             "Recon uses your own Google account through Gemini web (gemini.google.com), not an official API. Videos and " +
                 "screenshots are sent there with your account. Google's terms apply.",
             "Google doesn't support apps using Gemini web and may limit, suspend or ban the account. The account-ban risk is " +

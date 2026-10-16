@@ -11,6 +11,7 @@ data class ContextState(
     val starting: Boolean = false,
     val error: String? = null,
     val preview: LinkPreview? = null,   // D26: best effort; null until (and unless) the metadata call returns
+    val duplicateJobId: String? = null, // D31: set when previous DONE job exists and context was typed
 ) {
     val remaining get() = UserContext.MAX_LENGTH - text.length
 }
@@ -21,6 +22,9 @@ sealed interface ContextIntent {
     data object Start : ContextIntent
     data object Skip : ContextIntent
     data object Back : ContextIntent
+    data object ViewPrevious : ContextIntent
+    data object Reanalyse : ContextIntent
+    data object DismissDuplicateDialog : ContextIntent
 }
 
 sealed interface ContextEffect {

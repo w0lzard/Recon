@@ -23,6 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -33,6 +34,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -112,6 +114,29 @@ fun ContextScreen(state: ContextState, compact: Boolean = false, onIntent: (Cont
                 enabled = !state.starting, shape = MaterialTheme.shapes.small,
             ) { Text("Start") }
         }
+    }
+
+    if (state.duplicateJobId != null) {
+        AlertDialog(
+            onDismissRequest = { onIntent(ContextIntent.DismissDuplicateDialog) },
+            title = { Text("Previous analysis exists") },
+            text = { Text("This video was already analysed. View the previous result, or re-analyse with your new question?") },
+            confirmButton = {
+                Button(
+                    onClick = { onIntent(ContextIntent.ViewPrevious) },
+                    shape = MaterialTheme.shapes.small,
+                ) {
+                    Text("View previous")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { onIntent(ContextIntent.Reanalyse) },
+                ) {
+                    Text("Re-analyse")
+                }
+            },
+        )
     }
 }
 

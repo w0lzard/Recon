@@ -3,6 +3,8 @@ package dev.wolzard.recon.feature.job
 import androidx.lifecycle.viewModelScope
 import dev.wolzard.recon.core.job.UserAction
 import dev.wolzard.recon.core.link.LinkRouter
+import dev.wolzard.recon.core.link.UrlNormalizer
+import dev.wolzard.recon.core.port.LinkResolver
 import dev.wolzard.recon.core.model.LinkPreview
 import dev.wolzard.recon.core.model.UserContext
 import dev.wolzard.recon.core.model.FailureReason
@@ -20,7 +22,21 @@ import kotlinx.serialization.json.Json
 
 /** User actions on a job. Requeueing goes through [enqueue] (JobQueue in the app); picking makes no AI call. */
 /** [cancelWork] drops the job's queued/delayed work and its shared copy (WorkManager + files in the app). */
-class JobActions(private val store: JobStore, private val cancelWork: (Job) -> Unit = {}, private val enqueue: (String, UserAction) -> Unit) {
+class JobActions(
+    private val store: JobStore,
+    private val cancelWork: (Job) -> Unit = {},
+    private val enqueue: (String, UserAction) -> Unit,
+) {
+    var normalizer: UrlNormalizer = UrlNormalizer(object : LinkResolver { override suspend fun resolve(url: String) = url })
+
+    constructor(
+        store: JobStore,
+        normalizer: UrlNormalizer,
+        cancelWork: (Job) -> Unit = {},
+        enqueue: (String, UserAction) -> Unit,
+    ) : this(store, cancelWork, enqueue) {
+        this.normalizer = normalizer
+    }
     private val json = Json { ignoreUnknownKeys = true }
 
     suspend fun requeue(id: String, action: UserAction) {
@@ -30,11 +46,12 @@ class JobActions(private val store: JobStore, private val cancelWork: (Job) -> U
 
     /**
      * D23 Start/Skip: validates the link again (it came from a share or paste, possibly long ago), then creates and
-     * queues the job with the cleaned context. Null = the link is not usable and nothing was created.
+     * queues the job with the cleaned context and D31 normalized link key. Null = the link is not usable and nothing was created.
      */
     suspend fun start(shared: String, context: String?, preview: LinkPreview? = null): String? {
         val link = LinkRouter.validLink(shared) ?: return null
-        val id = store.create(link, null, UserContext.clean(context))
+        val normalized = normalizer.normalize(link)
+        val id = store.create(link, null, UserContext.clean(context), normalizedUrl = normalized)
         // D26: kept for Home and the Job screen; the thumbnail only if https.
         if (preview != null) store.update(id) {
             it.copy(videoTitle = preview.title, videoDurationSec = preview.durationSec, thumbnailUrl = preview.thumbnailUrl?.takeIf { u -> u.startsWith("https://") })

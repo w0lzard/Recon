@@ -35,6 +35,7 @@
             android:name=".ShareActivity"
             android:exported="false"
             android:theme="@style/Theme.Recon.Sheet"
+            android:windowSoftInputMode="adjustResize"
             android:taskAffinity=""
             android:excludeFromRecents="true"
             android:launchMode="singleTop" />

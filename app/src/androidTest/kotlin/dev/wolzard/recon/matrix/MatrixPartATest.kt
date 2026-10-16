@@ -257,6 +257,13 @@ class MatrixPartATest {
             }
             try {
                 assertTrue("Start button bottom ($startBottom) must be above keyboard top ($imeTop)", startBottom <= imeTop)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    var density = 1f
+                    scenario.onActivity { density = it.resources.displayMetrics.density }
+                    val gapPx = imeTop - startBottom
+                    val gapDp = gapPx / density
+                    assertTrue("Gap between Start ($startBottom) and keyboard top ($imeTop) must be at most 32 dp on API 29+ (actual: ${gapDp}dp)", gapDp <= 32f)
+                }
             } catch (e: AssertionError) {
                 val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
                 automation.executeShellCommand("mkdir -p /sdcard/Download/matrix-artifacts").close()

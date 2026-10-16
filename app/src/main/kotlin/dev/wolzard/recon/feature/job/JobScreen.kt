@@ -172,7 +172,7 @@ private fun SaveVideoSection(
     val currentSave = saveWorkInfos.firstOrNull()
 
     var selectedOption by remember(saveOptions) {
-        mutableStateOf(saveOptions?.firstOrNull { it.isDefault } ?: saveOptions?.firstOrNull())
+        mutableStateOf(saveOptions?.firstOrNull { it.isDefault && it.isEnabled } ?: saveOptions?.firstOrNull { it.isEnabled })
     }
     var storageError by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingOptionForMobileData by remember { mutableStateOf<VideoSaveOption?>(null) }
@@ -191,6 +191,7 @@ private fun SaveVideoSection(
                 formatId = opt.formatId,
                 title = job.videoTitle ?: "video",
                 targetUri = uri.toString(),
+                realHeight = opt.realHeight,
             )
             onIntent(JobIntent.DismissSaveDialog)
         }
@@ -204,6 +205,7 @@ private fun SaveVideoSection(
                 url = job.url ?: "",
                 formatId = option.formatId,
                 title = job.videoTitle ?: "video",
+                realHeight = option.realHeight,
             )
             onIntent(JobIntent.DismissSaveDialog)
         } else {
@@ -263,6 +265,7 @@ private fun SaveVideoSection(
             }
         }
         WorkInfo.State.SUCCEEDED -> {
+            val resStr = currentSave.outputData.getString(SaveVideoWorker.KEY_RESOLUTION)
             OutlinedCard(
                 modifier = Modifier.fillMaxWidth().testTag("save_succeeded"),
                 shape = MaterialTheme.shapes.medium,
@@ -280,7 +283,8 @@ private fun SaveVideoSection(
                     ) {
                         Icon(StatusIcons.Check, contentDescription = null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.status.verified)
                         Column {
-                            Text("Video saved", style = MaterialTheme.typography.titleSmall)
+                            val savedTitle = if (resStr != null) "Saved $resStr video" else "Video saved"
+                            Text(savedTitle, style = MaterialTheme.typography.titleSmall)
                             Text("Saved to Movies/Recon", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
@@ -396,23 +400,48 @@ private fun SaveVideoSection(
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     saveOptions.forEach { opt ->
+                        val enabled = opt.isEnabled
+                        val selected = (opt == selectedOption)
                         Row(
-                            Modifier.fillMaxWidth().selectable(
-                                selected = (opt == selectedOption),
-                                onClick = { selectedOption = opt },
-                                role = Role.RadioButton,
-                            ).padding(vertical = 4.dp),
+                            Modifier.fillMaxWidth()
+                                .then(
+                                    if (enabled) Modifier.selectable(
+                                        selected = selected,
+                                        onClick = { selectedOption = opt },
+                                        role = Role.RadioButton,
+                                    ) else Modifier
+                                )
+                                .padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            RadioButton(selected = (opt == selectedOption), onClick = null)
+                            RadioButton(
+                                selected = selected && enabled,
+                                onClick = if (enabled) { { selectedOption = opt } } else null,
+                                enabled = enabled,
+                            )
                             Spacer(Modifier.width(8.dp))
                             Column {
-                                Text(opt.resolutionLabel, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium))
+                                val titleColor = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                                Text(opt.resolutionLabel, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = titleColor)
+                                val subText = if (enabled) {
+                                    "${opt.vcodec} + ${opt.acodec} · ${opt.formattedSize}"
+                                } else {
+                                    opt.disabledReason ?: "Not available"
+                                }
                                 Text(
-                                    "${opt.vcodec} + ${opt.acodec} · ${opt.formattedSize}",
+                                    subText,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
+                                val note = opt.note
+                                if (enabled && note != null && selected) {
+                                    Spacer(Modifier.height(2.dp))
+                                    Text(
+                                        note,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.status.unverified,
+                                    )
+                                }
                             }
                         }
                     }
@@ -422,7 +451,7 @@ private fun SaveVideoSection(
                 Button(
                     onClick = { selectedOption?.let { startSaving(it) } },
                     shape = MaterialTheme.shapes.small,
-                    enabled = selectedOption != null,
+                    enabled = selectedOption != null && selectedOption?.isEnabled == true,
                 ) {
                     Text("Save")
                 }

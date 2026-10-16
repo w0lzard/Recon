@@ -40,6 +40,8 @@ class SaveVideoWorker(context: Context, params: WorkerParameters) : CoroutineWor
         val formatId = inputData.getString(KEY_FORMAT_ID) ?: return Result.failure()
         val title = inputData.getString(KEY_TITLE) ?: "video"
         val targetUriStr = inputData.getString(KEY_TARGET_URI)
+        val realHeight = inputData.getInt(KEY_REAL_HEIGHT, 0)
+        val resStr = if (realHeight > 0) "${realHeight}p" else null
 
         runCatching { setForeground(notifier.saveForegroundInfo(jobId, title, 0f)) }
 
@@ -78,11 +80,12 @@ class SaveVideoWorker(context: Context, params: WorkerParameters) : CoroutineWor
                 throw IllegalStateException("Target URI required on Android 9 and below")
             }
 
-            notifier.saveFinished(jobId, title, success = true, uri = savedUri)
+            notifier.saveFinished(jobId, title, success = true, uri = savedUri, resolution = resStr)
             return Result.success(
                 workDataOf(
                     KEY_SAVED_URI to savedUri?.toString(),
                     KEY_DESTINATION to "Movies/Recon",
+                    KEY_RESOLUTION to resStr,
                 )
             )
         } catch (e: CancellationException) {
@@ -113,6 +116,8 @@ class SaveVideoWorker(context: Context, params: WorkerParameters) : CoroutineWor
         const val KEY_PROGRESS = "progress"
         const val KEY_SAVED_URI = "savedUri"
         const val KEY_DESTINATION = "destination"
+        const val KEY_RESOLUTION = "resolution"
+        const val KEY_REAL_HEIGHT = "realHeight"
         const val KEY_ERROR = "error"
 
         fun workName(jobId: String) = "save-video-$jobId"
@@ -124,6 +129,7 @@ class SaveVideoWorker(context: Context, params: WorkerParameters) : CoroutineWor
             formatId: String,
             title: String,
             targetUri: String? = null,
+            realHeight: Int = 0,
         ) {
             val input = workDataOf(
                 KEY_JOB_ID to jobId,
@@ -131,6 +137,7 @@ class SaveVideoWorker(context: Context, params: WorkerParameters) : CoroutineWor
                 KEY_FORMAT_ID to formatId,
                 KEY_TITLE to title,
                 KEY_TARGET_URI to targetUri,
+                KEY_REAL_HEIGHT to realHeight,
             )
             val request = OneTimeWorkRequestBuilder<SaveVideoWorker>()
                 .setInputData(input)

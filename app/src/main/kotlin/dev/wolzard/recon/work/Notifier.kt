@@ -58,12 +58,13 @@ class Notifier(private val context: Context) {
     }
 
     /** Save completed notification. */
-    fun saveFinished(jobId: String, title: String, success: Boolean, uri: android.net.Uri?) {
+    fun saveFinished(jobId: String, title: String, success: Boolean, uri: android.net.Uri?, resolution: String? = null) {
         if (!manager.areNotificationsEnabled()) return
         channel()
         val nTitle = if (success) "Video saved" else "Couldn't save video"
         val nText = if (success) {
-            if (title.isNotEmpty()) "Saved ${title.take(30)} to Movies/Recon." else "Saved to Movies/Recon."
+            val resPrefix = if (resolution != null) "$resolution " else ""
+            if (title.isNotEmpty()) "Saved $resPrefix${title.take(30)} to Movies/Recon." else "Saved to Movies/Recon."
         } else {
             "Save failed. Tap to retry."
         }

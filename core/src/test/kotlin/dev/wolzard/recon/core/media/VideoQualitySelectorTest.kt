@@ -3,6 +3,7 @@ package dev.wolzard.recon.core.media
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -16,6 +17,7 @@ class VideoQualitySelectorTest {
       "duration": 60.0,
       "formats": [
         {"format_id": "18", "ext": "mp4", "width": 640, "height": 360, "vcodec": "avc1.42001E", "acodec": "mp4a.40.2", "filesize": 5000000},
+        {"format_id": "135", "ext": "mp4", "width": 854, "height": 480, "vcodec": "avc1.4d401f", "acodec": "none", "filesize": 10000000},
         {"format_id": "137", "ext": "mp4", "width": 1920, "height": 1080, "vcodec": "avc1.640028", "acodec": "none", "filesize": 25000000},
         {"format_id": "248", "ext": "webm", "width": 1920, "height": 1080, "vcodec": "vp9", "acodec": "none", "filesize": 20000000},
         {"format_id": "399", "ext": "mp4", "width": 1920, "height": 1080, "vcodec": "av01.0.08M.08", "acodec": "none", "filesize": 15000000},
@@ -28,52 +30,79 @@ class VideoQualitySelectorTest {
     """.trimIndent()
 
     @Test
-    fun formatsSelectedUpTo4KWithProperCodecs() {
+    fun presetToSelectorMappingProvidesThreePresetsWithProperCodecs() {
         val options = VideoQualitySelector.parseOptions(youtubeJson)
-        // Expected resolutions: 2160p (4K), 1440p (2K), 1080p, 360p
-        assertEquals(4, options.size)
+        // Exactly three presets: 480p, 1080p (default), 4K
+        assertEquals(3, options.size)
 
-        // 2160p: VP9 + Opus (h264 not available at 4K)
-        val opt4k = options.first { it.height == 2160 }
-        assertEquals("2160p (4K)", opt4k.resolutionLabel)
-        assertEquals("vp9", opt4k.vcodec)
-        assertEquals("opus", opt4k.acodec)
-        assertEquals("313+251", opt4k.formatId)
-        assertEquals(101_500_000L, opt4k.estimatedSizeBytes) // 100MB + 1.5MB
-        assertFalse(opt4k.isDefault)
+        // 1. Preset 480p: h264 + AAC
+        val p480 = options[0]
+        assertEquals("480p", p480.presetName)
+        assertEquals("480p", p480.resolutionLabel)
+        assertEquals(480, p480.realHeight)
+        assertEquals("h264", p480.vcodec)
+        assertEquals("aac", p480.acodec)
+        assertEquals("135+140", p480.formatId)
+        assertEquals(12_000_000L, p480.estimatedSizeBytes) // 10MB + 2MB
+        assertFalse(p480.isDefault)
+        assertTrue(p480.isEnabled)
 
-        // 1440p: VP9 + Opus (h264 not available at 1440p)
-        val opt1440 = options.first { it.height == 1440 }
-        assertEquals("1440p (2K)", opt1440.resolutionLabel)
-        assertEquals("vp9", opt1440.vcodec)
-        assertEquals("opus", opt1440.acodec)
-        assertEquals("271+251", opt1440.formatId)
-        assertEquals(51_500_000L, opt1440.estimatedSizeBytes) // 50MB + 1.5MB
+        // 2. Preset 1080p: h264 + AAC (default)
+        val p1080 = options[1]
+        assertEquals("1080p", p1080.presetName)
+        assertEquals("1080p", p1080.resolutionLabel)
+        assertEquals(1080, p1080.realHeight)
+        assertEquals("h264", p1080.vcodec)
+        assertEquals("aac", p1080.acodec)
+        assertEquals("137+140", p1080.formatId)
+        assertEquals(27_000_000L, p1080.estimatedSizeBytes) // 25MB + 2MB
+        assertTrue(p1080.isDefault)
+        assertTrue(p1080.isEnabled)
 
-        // 1080p: prefers h264 + AAC, excludes VP9 (248) and AV1 (399)
-        val opt1080 = options.first { it.height == 1080 }
-        assertEquals("1080p", opt1080.resolutionLabel)
-        assertEquals("h264", opt1080.vcodec)
-        assertEquals("aac", opt1080.acodec)
-        assertEquals("137+140", opt1080.formatId)
-        assertEquals(27_000_000L, opt1080.estimatedSizeBytes) // 25MB + 2MB
-        assertTrue("1080p should be default", opt1080.isDefault)
-
-        // 360p: muxed format 18
-        val opt360 = options.first { it.height == 360 }
-        assertEquals("360p", opt360.resolutionLabel)
-        assertEquals("18", opt360.formatId)
-        assertEquals("h264", opt360.vcodec)
-        assertEquals("aac", opt360.acodec)
-        assertEquals(5_000_000L, opt360.estimatedSizeBytes)
+        // 3. Preset 4K: VP9 + Opus (enabled because 2160p exists)
+        val p4k = options[2]
+        assertEquals("4K", p4k.presetName)
+        assertEquals("4K", p4k.resolutionLabel)
+        assertEquals(2160, p4k.realHeight)
+        assertEquals("vp9", p4k.vcodec)
+        assertEquals("opus", p4k.acodec)
+        assertEquals("313+251", p4k.formatId)
+        assertEquals(101_500_000L, p4k.estimatedSizeBytes) // 100MB + 1.5MB
+        assertTrue(p4k.isEnabled)
+        assertNull(p4k.disabledReason)
+        assertEquals("Large file, may play poorly on older phones", p4k.note)
     }
 
     @Test
-    fun maxResolutionLowerThan1080pIsLabeledAndMadeDefault() {
+    fun fourKUnavailableWhenSourceOffersNo2160p() {
+        val no4kJson = """
+        {
+          "id": "no4k",
+          "title": "1080p Max Video",
+          "duration": 30.0,
+          "formats": [
+            {"format_id": "135", "ext": "mp4", "width": 854, "height": 480, "vcodec": "avc1.4d401f", "acodec": "none", "filesize": 6000000},
+            {"format_id": "137", "ext": "mp4", "width": 1920, "height": 1080, "vcodec": "avc1.640028", "acodec": "none", "filesize": 18000000},
+            {"format_id": "140", "ext": "m4a", "vcodec": "none", "acodec": "mp4a.40.2", "filesize": 1000000}
+          ]
+        }
+        """.trimIndent()
+
+        val options = VideoQualitySelector.parseOptions(no4kJson)
+        assertEquals(3, options.size)
+
+        val p4k = options[2]
+        assertEquals("4K", p4k.presetName)
+        assertFalse("4K must be disabled when source has no 2160p", p4k.isEnabled)
+        assertEquals("4K not available, best is 1080p", p4k.disabledReason)
+    }
+
+    @Test
+    fun belowPresetLabelWhenSourceMaxIsLower() {
         val lowerResJson = """
         {
           "id": "lower",
-          "title": "Low Res Video",
+          "title": "720p Max Video",
           "duration": 30.0,
           "formats": [
             {"format_id": "136", "ext": "mp4", "width": 1280, "height": 720, "vcodec": "avc1.4d401f", "acodec": "none", "filesize": 10000000},
@@ -84,14 +113,26 @@ class VideoQualitySelectorTest {
         """.trimIndent()
 
         val options = VideoQualitySelector.parseOptions(lowerResJson)
-        assertEquals(2, options.size)
+        assertEquals(3, options.size)
 
-        val best = options.first()
-        assertEquals("720p (best available)", best.resolutionLabel)
-        assertEquals(720, best.height)
-        assertTrue("Top option when < 1080p should be default", best.isDefault)
-        assertEquals("136+140", best.formatId)
-        assertEquals(11_000_000L, best.estimatedSizeBytes)
+        // 1080p preset falls back to real resolution: 720p
+        val p1080 = options[1]
+        assertEquals("1080p", p1080.presetName)
+        assertEquals("720p", p1080.resolutionLabel)
+        assertEquals(720, p1080.realHeight)
+        assertTrue(p1080.isDefault)
+        assertEquals("136+140", p1080.formatId)
+
+        // 480p preset falls back to real resolution: 360p
+        val p480 = options[0]
+        assertEquals("480p", p480.presetName)
+        assertEquals("360p", p480.resolutionLabel)
+        assertEquals(360, p480.realHeight)
+
+        // 4K preset disabled with best is 720p
+        val p4k = options[2]
+        assertFalse(p4k.isEnabled)
+        assertEquals("4K not available, best is 720p", p4k.disabledReason)
     }
 
     @Test
@@ -110,10 +151,18 @@ class VideoQualitySelectorTest {
         """.trimIndent()
 
         val options = VideoQualitySelector.parseOptions(av1Only1080p)
-        // 1080p AV1 should be excluded completely!
-        assertFalse("AV1 must be excluded", options.any { it.vcodec.contains("av1") || it.vcodec.contains("av01") })
-        assertEquals(1, options.size)
-        assertEquals("720p (best available)", options.first().resolutionLabel)
+        assertEquals(3, options.size)
+
+        // 1080p preset ignores AV1 and picks the highest valid h264 (720p)
+        val p1080 = options[1]
+        assertEquals("720p", p1080.resolutionLabel)
+        assertEquals(720, p1080.realHeight)
+        assertEquals("136+140", p1080.formatId)
+
+        // 4K preset disabled
+        val p4k = options[2]
+        assertFalse(p4k.isEnabled)
+        assertEquals("4K not available, best is 720p", p4k.disabledReason)
     }
 
     @Test
@@ -130,14 +179,14 @@ class VideoQualitySelectorTest {
         """.trimIndent()
 
         val options = VideoQualitySelector.parseOptions(tiktokJson)
-        assertEquals(1, options.size)
-        val opt = options.first()
-        assertEquals("download", opt.formatId)
-        assertEquals("h264", opt.vcodec)
-        assertEquals("aac", opt.acodec)
-        assertEquals(8_500_000L, opt.estimatedSizeBytes)
-        assertEquals("1080p", opt.resolutionLabel) // 1080x1920 is 1080p vertical
-        assertTrue(opt.isDefault)
+        assertEquals(3, options.size)
+        val p1080 = options[1]
+        assertEquals("download", p1080.formatId)
+        assertEquals("h264", p1080.vcodec)
+        assertEquals("aac", p1080.acodec)
+        assertEquals(8_500_000L, p1080.estimatedSizeBytes)
+        assertEquals("1080p", p1080.resolutionLabel)
+        assertTrue(p1080.isDefault)
     }
 
     @Test
@@ -155,12 +204,11 @@ class VideoQualitySelectorTest {
         """.trimIndent()
 
         val options = VideoQualitySelector.parseOptions(bitrateJson)
-        assertEquals(1, options.size)
-        val opt = options.first()
+        val p1080 = options[1]
         // Video: 4000 kbps * 1000 / 8 * 10s = 5,000,000 bytes
         // Audio: 128 kbps * 1000 / 8 * 10s = 160,000 bytes
         // Total: 5,160,000 bytes
-        assertEquals(5_160_000L, opt.estimatedSizeBytes)
+        assertEquals(5_160_000L, p1080.estimatedSizeBytes)
     }
 
     @Test

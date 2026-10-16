@@ -64,6 +64,7 @@ class SaveVideoWorkerTest {
                 SaveVideoWorker.KEY_FORMAT_ID to "137+140",
                 SaveVideoWorker.KEY_TITLE to "Sample Video",
                 SaveVideoWorker.KEY_TARGET_URI to targetUri.toString(),
+                SaveVideoWorker.KEY_REAL_HEIGHT to 1080,
             )
 
             fakeRunner.onRun = { destDir ->
@@ -77,6 +78,7 @@ class SaveVideoWorkerTest {
             assertEquals(ListenableWorker.Result.success(workDataOf(
                 SaveVideoWorker.KEY_SAVED_URI to targetUri.toString(),
                 SaveVideoWorker.KEY_DESTINATION to "Movies/Recon",
+                SaveVideoWorker.KEY_RESOLUTION to "1080p",
             )), result)
 
             assertEquals("dummy merged video content", targetFile.readText())

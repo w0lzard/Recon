@@ -13,14 +13,19 @@ import kotlinx.serialization.json.longOrNull
 
 @Serializable
 data class VideoSaveOption(
-    val resolutionLabel: String,
-    val height: Int,
+    val presetName: String,               // "480p", "1080p", "4K"
+    val resolutionLabel: String,          // e.g. "480p", "1080p", "4K", or real resolution e.g. "720p"
+    val realHeight: Int,                  // e.g. 480, 1080, 720, 2160
+    val height: Int,                      // target tier height: 480, 1080, 2160
     val width: Int,
     val vcodec: String,
     val acodec: String,
     val formatId: String,
     val estimatedSizeBytes: Long,
     val isDefault: Boolean = false,
+    val isEnabled: Boolean = true,
+    val disabledReason: String? = null,   // "4K not available, best is <res>"
+    val note: String? = null,             // "Large file, may play poorly on older phones"
 ) {
     val formattedSize: String get() = VideoQualitySelector.formatBytes(estimatedSizeBytes)
 }
@@ -55,13 +60,15 @@ object VideoQualitySelector {
         val isOpus: Boolean get() = acodec.startsWith("opus", ignoreCase = true)
 
         val effectiveHeight: Int get() = if (height > 0 && width > 0) minOf(height, width) else height
+        val bitrateOrSize: Long get() = filesize.takeIf { it > 0 } ?: filesizeApprox.takeIf { it > 0 } ?: (tbr * 1000).toLong()
     }
 
     /**
-     * Parses yt-dlp `--dump-json` output and extracts selectable video save options.
-     * Offers resolutions the source really has up to 4K (2160p).
-     * Prefers h264 + AAC; allows VP9 + Opus only for 2160p and 1440p; excludes AV1.
-     * Defaults to 1080p, or marks best available if max < 1080p.
+     * Parses yt-dlp `--dump-json` output and extracts three presets: 480p, 1080p (default), 4K.
+     * 480p and 1080p use h264 + AAC; 4K uses VP9 + Opus and is enabled only when source offers 2160p.
+     * AV1 is excluded.
+     * When source's best is below a preset, shows the real resolution in the label.
+     * Disables 4K with "4K not available, best is <res>".
      */
     fun parseOptions(jsonOutput: String): List<VideoSaveOption> {
         val root = runCatching {
@@ -104,129 +111,114 @@ object VideoQualitySelector {
             )
         }
 
-        return selectOptions(rawFormats, duration)
+        return selectPresets(rawFormats, duration)
     }
 
-    fun selectOptions(formats: List<RawFormat>, durationSec: Double): List<VideoSaveOption> {
-        // Exclude AV1
+    fun selectPresets(formats: List<RawFormat>, durationSec: Double): List<VideoSaveOption> {
         val validFormats = formats.filterNot { it.isAv1 }
-
         val audioFormats = validFormats.filter { it.isAudioOnly }
-        val bestAacAudio = audioFormats.filter { it.isAac }.maxByOrNull { it.filesize.takeIf { s -> s > 0 } ?: (it.abr * 1000).toLong() }
-        val bestOpusAudio = audioFormats.filter { it.isOpus }.maxByOrNull { it.filesize.takeIf { s -> s > 0 } ?: (it.abr * 1000).toLong() }
-        val fallbackAudio = audioFormats.maxByOrNull { it.filesize.takeIf { s -> s > 0 } ?: (it.abr * 1000).toLong() }
+        val bestAacAudio = audioFormats.filter { it.isAac }.maxByOrNull { it.bitrateOrSize } ?: audioFormats.maxByOrNull { it.bitrateOrSize }
+        val bestOpusAudio = audioFormats.filter { it.isOpus }.maxByOrNull { it.bitrateOrSize } ?: audioFormats.maxByOrNull { it.bitrateOrSize }
 
         val videoFormats = validFormats.filter { it.isVideo }
         if (videoFormats.isEmpty()) return emptyList()
 
-        // Standard target resolution tiers (capped at 4K / 2160p)
-        val targetTiers = listOf(2160, 1440, 1080, 720, 480, 360, 240)
+        val maxAvailableHeight = videoFormats.maxOfOrNull { it.effectiveHeight } ?: 0
+        val h264Formats = videoFormats.filter { it.isH264 }
 
-        // Group video formats by standard resolution tier
-        val optionsByTier = mutableMapOf<Int, VideoSaveOption>()
-
-        for (tier in targetTiers) {
-            val tierFormats = videoFormats.filter { fmt ->
-                when (tier) {
-                    2160 -> fmt.effectiveHeight >= 2160
-                    1440 -> fmt.effectiveHeight in 1440..2159
-                    1080 -> fmt.effectiveHeight in 1080..1439
-                    720 -> fmt.effectiveHeight in 720..1079
-                    480 -> fmt.effectiveHeight in 480..719
-                    360 -> fmt.effectiveHeight in 360..479
-                    240 -> fmt.effectiveHeight in 240..359
-                    else -> false
-                }
-            }
-            if (tierFormats.isEmpty()) continue
-
-            // Codec preference:
-            // 1. Prefer h264 + AAC for all resolutions
-            // 2. Allow VP9 + Opus ONLY for 2160p and 1440p
-            val h264Video = tierFormats.filter { it.isH264 }.maxByOrNull { it.bitrateOrSize }
-            val vp9Video = if (tier >= 1440) tierFormats.filter { it.isVp9 }.maxByOrNull { it.bitrateOrSize } else null
-
-            val chosenVideo = h264Video ?: vp9Video ?: continue
-            val chosenAudio = when {
-                chosenVideo.isMuxed -> null
-                chosenVideo.isH264 -> bestAacAudio ?: fallbackAudio
-                chosenVideo.isVp9 -> bestOpusAudio ?: fallbackAudio
-                else -> fallbackAudio
-            }
-
-            val formatId = if (chosenAudio != null) "${chosenVideo.formatId}+${chosenAudio.formatId}" else chosenVideo.formatId
-            val vcodecLabel = if (chosenVideo.isH264) "h264" else if (chosenVideo.isVp9) "vp9" else chosenVideo.vcodec
-            val acodecLabel = if (chosenAudio != null) {
-                if (chosenAudio.isAac) "aac" else if (chosenAudio.isOpus) "opus" else chosenAudio.acodec
-            } else if (chosenVideo.isAac) "aac" else chosenVideo.acodec
-
-            val codecStr = "$vcodecLabel + $acodecLabel"
-            val estimatedSize = estimateSize(chosenVideo, chosenAudio, durationSec)
-
-            optionsByTier[tier] = VideoSaveOption(
-                resolutionLabel = resolutionLabelForTier(tier),
-                height = chosenVideo.effectiveHeight.takeIf { it > 0 } ?: tier,
-                width = chosenVideo.width,
-                vcodec = vcodecLabel,
-                acodec = acodecLabel,
-                formatId = formatId,
-                estimatedSizeBytes = estimatedSize,
-                isDefault = false,
-            )
+        // --- 1. Preset 480p (h264 + AAC) ---
+        val chosen480Video = if (maxAvailableHeight >= 480) {
+            h264Formats.filter { it.effectiveHeight in 480..719 }.maxByOrNull { it.bitrateOrSize }
+                ?: h264Formats.filter { it.effectiveHeight <= 480 }.maxByOrNull { it.bitrateOrSize }
+                ?: h264Formats.minByOrNull { it.effectiveHeight }
+                ?: videoFormats.filter { it.effectiveHeight <= 480 }.maxByOrNull { it.bitrateOrSize }
+                ?: videoFormats.minByOrNull { it.effectiveHeight }
+        } else {
+            h264Formats.maxByOrNull { it.bitrateOrSize } ?: videoFormats.maxByOrNull { it.bitrateOrSize }
         }
 
-        if (optionsByTier.isEmpty()) {
-            // Handle edge-case non-standard resolution muxed format (e.g. single 540p file)
-            val bestMuxed = videoFormats.filter { it.isMuxed && (it.isH264 || it.effectiveHeight >= 1440) }.maxByOrNull { it.effectiveHeight }
-            if (bestMuxed != null) {
-                val tier = bestMuxed.effectiveHeight
-                val estSize = estimateSize(bestMuxed, null, durationSec)
-                optionsByTier[tier] = VideoSaveOption(
-                    resolutionLabel = "${tier}p",
-                    height = bestMuxed.height,
-                    width = bestMuxed.width,
-                    vcodec = if (bestMuxed.isH264) "h264" else bestMuxed.vcodec,
-                    acodec = if (bestMuxed.isAac) "aac" else bestMuxed.acodec,
-                    formatId = bestMuxed.formatId,
-                    estimatedSizeBytes = estSize,
-                    isDefault = true,
-                )
-            }
+        val chosen480Audio = if (chosen480Video?.isMuxed == true) null else bestAacAudio
+        val real480Height = chosen480Video?.effectiveHeight ?: 480
+        val label480 = if (real480Height < 480) "${real480Height}p" else "480p"
+        val formatId480 = if (chosen480Audio != null && chosen480Video != null) "${chosen480Video.formatId}+${chosen480Audio.formatId}"
+            else chosen480Video?.formatId.orEmpty()
+        val size480 = if (chosen480Video != null) estimateSize(chosen480Video, chosen480Audio, durationSec) else 0L
+
+        val preset480 = VideoSaveOption(
+            presetName = "480p",
+            resolutionLabel = label480,
+            realHeight = real480Height,
+            height = 480,
+            width = chosen480Video?.width ?: 640,
+            vcodec = "h264",
+            acodec = "aac",
+            formatId = formatId480,
+            estimatedSizeBytes = size480,
+            isDefault = false,
+            isEnabled = chosen480Video != null,
+        )
+
+        // --- 2. Preset 1080p (default, h264 + AAC) ---
+        val chosen1080Video = if (maxAvailableHeight >= 1080) {
+            h264Formats.filter { it.effectiveHeight in 1080..1439 }.maxByOrNull { it.bitrateOrSize }
+                ?: h264Formats.maxByOrNull { it.bitrateOrSize }
+                ?: videoFormats.filter { it.effectiveHeight in 1080..1439 }.maxByOrNull { it.bitrateOrSize }
+                ?: videoFormats.maxByOrNull { it.bitrateOrSize }
+        } else {
+            h264Formats.maxByOrNull { it.bitrateOrSize } ?: videoFormats.maxByOrNull { it.bitrateOrSize }
         }
 
-        val sorted = optionsByTier.values.sortedByDescending { it.height }
-        if (sorted.isEmpty()) return emptyList()
+        val chosen1080Audio = if (chosen1080Video?.isMuxed == true) null else bestAacAudio
+        val real1080Height = chosen1080Video?.effectiveHeight ?: 1080
+        val label1080 = if (real1080Height < 1080) "${real1080Height}p" else "1080p"
+        val formatId1080 = if (chosen1080Audio != null && chosen1080Video != null) "${chosen1080Video.formatId}+${chosen1080Audio.formatId}"
+            else chosen1080Video?.formatId.orEmpty()
+        val size1080 = if (chosen1080Video != null) estimateSize(chosen1080Video, chosen1080Audio, durationSec) else 0L
 
-        val maxAvailableHeight = sorted.first().height
-        val isLowerThan1080 = maxAvailableHeight < 1080
+        val preset1080 = VideoSaveOption(
+            presetName = "1080p",
+            resolutionLabel = label1080,
+            realHeight = real1080Height,
+            height = 1080,
+            width = chosen1080Video?.width ?: 1920,
+            vcodec = "h264",
+            acodec = "aac",
+            formatId = formatId1080,
+            estimatedSizeBytes = size1080,
+            isDefault = true,
+            isEnabled = chosen1080Video != null,
+        )
 
-        return sorted.mapIndexed { index, opt ->
-            val isDefault = if (isLowerThan1080) {
-                index == 0 // Highest available is default when max < 1080p
-            } else {
-                opt.height == 1080 || (opt.height in 1080..1439)
-            }
-            val label = if (isLowerThan1080 && index == 0) {
-                "${opt.height}p (best available)"
-            } else {
-                opt.resolutionLabel
-            }
-            opt.copy(resolutionLabel = label, isDefault = isDefault)
-        }
-    }
+        // --- 3. Preset 4K (VP9 + Opus, enabled only when source offers 2160p) ---
+        val has2160p = maxAvailableHeight >= 2160
+        val chosen4kVideo = if (has2160p) {
+            val formats2160 = videoFormats.filter { it.effectiveHeight >= 2160 }
+            formats2160.filter { it.isVp9 }.maxByOrNull { it.bitrateOrSize }
+                ?: formats2160.maxByOrNull { it.bitrateOrSize }
+        } else null
 
-    private val RawFormat.bitrateOrSize: Long
-        get() = filesize.takeIf { it > 0 } ?: filesizeApprox.takeIf { it > 0 } ?: (tbr * 1000).toLong()
+        val chosen4kAudio = if (chosen4kVideo?.isMuxed == true) null else bestOpusAudio
+        val formatId4k = if (chosen4kAudio != null && chosen4kVideo != null) "${chosen4kVideo.formatId}+${chosen4kAudio.formatId}"
+            else chosen4kVideo?.formatId.orEmpty()
+        val size4k = if (chosen4kVideo != null) estimateSize(chosen4kVideo, chosen4kAudio, durationSec) else 0L
 
-    private fun resolutionLabelForTier(tier: Int): String = when (tier) {
-        2160 -> "2160p (4K)"
-        1440 -> "1440p (2K)"
-        1080 -> "1080p"
-        720 -> "720p"
-        480 -> "480p"
-        360 -> "360p"
-        240 -> "240p"
-        else -> "${tier}p"
+        val preset4k = VideoSaveOption(
+            presetName = "4K",
+            resolutionLabel = "4K",
+            realHeight = chosen4kVideo?.effectiveHeight ?: 2160,
+            height = 2160,
+            width = chosen4kVideo?.width ?: 3840,
+            vcodec = "vp9",
+            acodec = "opus",
+            formatId = formatId4k,
+            estimatedSizeBytes = size4k,
+            isDefault = false,
+            isEnabled = has2160p && chosen4kVideo != null,
+            disabledReason = if (!has2160p || chosen4kVideo == null) "4K not available, best is ${maxAvailableHeight}p" else null,
+            note = "Large file, may play poorly on older phones",
+        )
+
+        return listOf(preset480, preset1080, preset4k)
     }
 
     private fun estimateSize(video: RawFormat, audio: RawFormat?, durationSec: Double): Long {

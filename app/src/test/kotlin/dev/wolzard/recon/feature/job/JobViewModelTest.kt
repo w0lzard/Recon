@@ -174,8 +174,8 @@ class JobViewModelTest {
 
         vm.onIntent(JobIntent.RequestSaveVideo)
         withTimeout(5_000) { while (vm.state.value.saveOptions == null) delay(10) }
-        assertEquals(1, vm.state.value.saveOptions?.size)
-        assertEquals("1080p", vm.state.value.saveOptions?.first()?.resolutionLabel)
+        assertEquals(3, vm.state.value.saveOptions?.size)
+        assertEquals("1080p", vm.state.value.saveOptions?.first { it.isDefault }?.resolutionLabel)
 
         vm.onIntent(JobIntent.DismissSaveDialog)
         assertNull(vm.state.value.saveOptions)

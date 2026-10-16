@@ -69,7 +69,7 @@ class RealSaveTest {
         val options = fetcher.fetchOptions(url)
         assertTrue("Options should not be empty", options.isNotEmpty())
 
-        val chosen = options.firstOrNull { it.height == 1080 } ?: options.first()
+        val chosen = options.first { it.presetName == "1080p" }
         val destDir = File(dir, "yt_1080").apply { mkdirs() }
         val args = listOf(
             "-f", chosen.formatId,
@@ -103,9 +103,9 @@ class RealSaveTest {
         val options = fetcher.fetchOptions(url)
         assertTrue("Options should not be empty", options.isNotEmpty())
 
-        val opt4k = options.firstOrNull { it.height >= 2160 }
-        assertNotNull("4K option must exist for Big Buck Bunny", opt4k)
-        assertEquals("vp9", opt4k!!.vcodec)
+        val opt4k = options.first { it.presetName == "4K" }
+        assertTrue("4K option must be enabled for Big Buck Bunny", opt4k.isEnabled)
+        assertEquals("vp9", opt4k.vcodec)
         assertEquals("opus", opt4k.acodec)
         assertTrue("Estimated size must be > 0", opt4k.estimatedSizeBytes > 0)
     }
@@ -117,7 +117,7 @@ class RealSaveTest {
         val fetcher = VideoFormatFetcher(runner)
         val options = fetcher.fetchOptions(url)
         assertTrue("Options should not be empty", options.isNotEmpty())
-        val chosen = options.last()
+        val chosen = options.first { it.presetName == "480p" }
         val destDir = File(dir, "single_save").apply { mkdirs() }
         val args = listOf(
             "-f", chosen.formatId,

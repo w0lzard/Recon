@@ -31,3 +31,4 @@ This project includes and links against the following third-party software:
 - **Build Flags:** `--enable-gpl --enable-version3 --enable-libx264 --enable-libx265 --enable-libopus --enable-libvpx --enable-libwebp --enable-shared ...`
 - **License:** GNU General Public License v3.0 (GPL-3.0) (due to `--enable-gpl --enable-version3`, libx264, libx265)
 - **License Link:** [https://www.gnu.org/licenses/gpl-3.0.html](https://www.gnu.org/licenses/gpl-3.0.html)
+- **Usage:** Bundled for on-demand video saving and stream merging (decision D28 in [`docs/plan.md`](docs/plan.md))

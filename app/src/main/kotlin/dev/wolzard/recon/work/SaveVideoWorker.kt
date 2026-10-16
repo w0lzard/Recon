@@ -19,7 +19,7 @@ import org.koin.core.component.inject
 import java.io.File
 
 /**
- * WorkManager worker that re-downloads a video at a chosen quality and merges streams with FFmpeg through yt-dlp.
+ * WorkManager worker (D28) that re-downloads a video at a chosen quality and merges streams with FFmpeg through yt-dlp.
  * Runs in the foreground with a progress notification. Cancellable at any time.
  * On API 29+ saves to MediaStore under Movies/Recon; on API 26-28 stream-copies to [KEY_TARGET_URI].
  * Guarantees temp directory cleanup on cancel, failure, and completion.

@@ -46,7 +46,7 @@ Recon can save a high-quality copy of an analysed video for personal use. On any
 - **1080p (default):** full HD (h264 + AAC)
 - **4K:** ultra HD (VP9 + Opus; enabled when the source offers 2160p)
 
-Streams are downloaded and merged on-device using yt-dlp and the bundled FFmpeg module, then stream-copied into `Movies/Recon` via MediaStore on Android 10+ (API 29+), or via the system document picker on Android 8–9 (API 26–28).
+Streams are downloaded and merged on-device using yt-dlp and the bundled FFmpeg module (decision D28 in [`docs/plan.md`](docs/plan.md)), then stream-copied into `Movies/Recon` via MediaStore on Android 10+ (API 29+), or via the system document picker on Android 8–9 (API 26–28).
 
 Bundling native FFmpeg binaries increases release APK size:
 - **arm64-v8a:** 20.0 MB → 55.7 MB (+35.7 MB)

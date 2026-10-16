@@ -85,6 +85,23 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import dev.wolzard.recon.core.link.LinkRouter
+import dev.wolzard.recon.core.media.VideoQualitySelector
+import dev.wolzard.recon.core.media.VideoSaveOption
+import dev.wolzard.recon.data.media.MediaStoreSaver
+import dev.wolzard.recon.data.media.NetworkHelper
+import dev.wolzard.recon.work.SaveVideoWorker
 import dev.wolzard.recon.core.model.Answer
 import dev.wolzard.recon.core.model.Basis
 import dev.wolzard.recon.core.model.AnswerStatus
@@ -102,7 +119,15 @@ import dev.wolzard.recon.core.model.Verdict
 @OptIn(ExperimentalMaterial3Api::class)
 /** Stateless: everything comes from [job]/[result]; [now] decides whether Retry is enabled yet. */
 @Composable
-fun JobScreen(job: Job, result: JobResult?, now: Long, onIntent: (JobIntent) -> Unit) {
+fun JobScreen(
+    job: Job,
+    result: JobResult?,
+    now: Long,
+    isProbingFormats: Boolean = false,
+    saveOptions: List<VideoSaveOption>? = null,
+    saveError: String? = null,
+    onIntent: (JobIntent) -> Unit,
+) {
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text(job.displayHost(), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = Mono, fontWeight = FontWeight.Medium)) },
@@ -119,12 +144,295 @@ fun JobScreen(job: Job, result: JobResult?, now: Long, onIntent: (JobIntent) -> 
             val done = job.state == JobState.DONE && result != null
             if (done) VideoHeader(job)
             if (question != null) YourQuestion(question, large = done)
+            val url = job.url
+            if (done && url != null && LinkRouter.isWebUrl(url)) {
+                SaveVideoSection(job, isProbingFormats, saveOptions, saveError, onIntent)
+            }
             when {
                 job.state == JobState.FAILED -> Failed(job, now, onIntent)
                 job.state == JobState.DONE && result != null -> Done(result, question != null, onIntent)
                 else -> Running(job, onIntent)
             }
         }
+    }
+}
+
+@Composable
+private fun SaveVideoSection(
+    job: Job,
+    isProbingFormats: Boolean,
+    saveOptions: List<VideoSaveOption>?,
+    saveError: String?,
+    onIntent: (JobIntent) -> Unit,
+) {
+    val context = LocalContext.current
+    val workManager = remember(context) { WorkManager.getInstance(context) }
+    val saveWorkInfos by workManager.getWorkInfosForUniqueWorkFlow(SaveVideoWorker.workName(job.id))
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+    val currentSave = saveWorkInfos.firstOrNull()
+
+    var selectedOption by remember(saveOptions) {
+        mutableStateOf(saveOptions?.firstOrNull { it.isDefault } ?: saveOptions?.firstOrNull())
+    }
+    var storageError by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingOptionForMobileData by remember { mutableStateOf<VideoSaveOption?>(null) }
+    var pendingOptionForSaf by remember { mutableStateOf<VideoSaveOption?>(null) }
+
+    val createDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("video/mp4"),
+    ) { uri: Uri? ->
+        val opt = pendingOptionForSaf
+        pendingOptionForSaf = null
+        if (uri != null && opt != null) {
+            SaveVideoWorker.enqueue(
+                context = context,
+                jobId = job.id,
+                url = job.url ?: "",
+                formatId = opt.formatId,
+                title = job.videoTitle ?: "video",
+                targetUri = uri.toString(),
+            )
+            onIntent(JobIntent.DismissSaveDialog)
+        }
+    }
+
+    fun executeSave(option: VideoSaveOption) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            SaveVideoWorker.enqueue(
+                context = context,
+                jobId = job.id,
+                url = job.url ?: "",
+                formatId = option.formatId,
+                title = job.videoTitle ?: "video",
+            )
+            onIntent(JobIntent.DismissSaveDialog)
+        } else {
+            pendingOptionForSaf = option
+            val clean = MediaStoreSaver.cleanFileName(job.videoTitle ?: "video")
+            createDocumentLauncher.launch("$clean.mp4")
+        }
+    }
+
+    fun startSaving(option: VideoSaveOption) {
+        val freeBytes = context.cacheDir.usableSpace
+        if (!VideoQualitySelector.hasEnoughStorage(freeBytes, option.estimatedSizeBytes)) {
+            val needed = VideoQualitySelector.formatBytes(VideoQualitySelector.requiredStorage(option.estimatedSizeBytes))
+            val free = VideoQualitySelector.formatBytes(freeBytes)
+            storageError = "Not enough free storage. Merging requires at least $needed free space (2x estimate), but only $free is available."
+            return
+        }
+
+        if (NetworkHelper.isMobileData(context)) {
+            pendingOptionForMobileData = option
+            return
+        }
+
+        executeSave(option)
+    }
+
+    when (currentSave?.state) {
+        WorkInfo.State.RUNNING, WorkInfo.State.ENQUEUED -> {
+            val progress = currentSave.progress.getFloat(SaveVideoWorker.KEY_PROGRESS, 0f)
+            OutlinedCard(
+                modifier = Modifier.fillMaxWidth().testTag("save_running"),
+                shape = MaterialTheme.shapes.medium,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Reticle(Modifier.size(18.dp))
+                            Text("Saving video...", style = MaterialTheme.typography.titleSmall)
+                        }
+                        Text("${(progress * 100).toInt()}%", style = MaterialTheme.typography.bodySmall.copy(fontFamily = Mono))
+                    }
+                    LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        OutlinedButton(
+                            onClick = { SaveVideoWorker.cancel(context, job.id) },
+                            shape = MaterialTheme.shapes.small,
+                        ) {
+                            Text("Cancel")
+                        }
+                    }
+                }
+            }
+        }
+        WorkInfo.State.SUCCEEDED -> {
+            OutlinedCard(
+                modifier = Modifier.fillMaxWidth().testTag("save_succeeded"),
+                shape = MaterialTheme.shapes.medium,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.status.verified),
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Row(
+                        Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(StatusIcons.Check, contentDescription = null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.status.verified)
+                        Column {
+                            Text("Video saved", style = MaterialTheme.typography.titleSmall)
+                            Text("Saved to Movies/Recon", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    val savedUriStr = currentSave.outputData.getString(SaveVideoWorker.KEY_SAVED_URI)
+                    if (savedUriStr != null) {
+                        Button(
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_VIEW).apply {
+                                    setDataAndType(Uri.parse(savedUriStr), "video/*")
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                context.startActivity(intent)
+                            },
+                            shape = MaterialTheme.shapes.small,
+                        ) {
+                            Text("Play")
+                        }
+                    }
+                }
+            }
+        }
+        WorkInfo.State.FAILED -> {
+            OutlinedCard(
+                modifier = Modifier.fillMaxWidth().testTag("save_failed"),
+                shape = MaterialTheme.shapes.medium,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.status.unverified),
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(StatusIcons.Error, contentDescription = null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.status.unverified)
+                        Text("Save failed", style = MaterialTheme.typography.titleSmall)
+                    }
+                    val errorMsg = currentSave.outputData.getString(SaveVideoWorker.KEY_ERROR) ?: "Could not download or merge video"
+                    Text(errorMsg, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        Button(
+                            onClick = { onIntent(JobIntent.RequestSaveVideo) },
+                            shape = MaterialTheme.shapes.small,
+                        ) {
+                            Text("Try again")
+                        }
+                    }
+                }
+            }
+        }
+        else -> {
+            OutlinedButton(
+                onClick = { onIntent(JobIntent.RequestSaveVideo) },
+                modifier = Modifier.fillMaxWidth().height(48.dp).testTag("save_video_button"),
+                shape = MaterialTheme.shapes.small,
+                enabled = !isProbingFormats,
+            ) {
+                if (isProbingFormats) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Checking formats...")
+                } else {
+                    Icon(StatusIcons.Download, contentDescription = null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Save video")
+                }
+            }
+        }
+    }
+
+    if (saveError != null) {
+        AlertDialog(
+            onDismissRequest = { onIntent(JobIntent.DismissSaveDialog) },
+            title = { Text("Cannot save video") },
+            text = { Text(saveError) },
+            confirmButton = { TextButton(onClick = { onIntent(JobIntent.DismissSaveDialog) }) { Text("OK") } },
+        )
+    }
+
+    if (storageError != null) {
+        AlertDialog(
+            onDismissRequest = { storageError = null },
+            title = { Text("Not enough storage") },
+            text = { Text(storageError ?: "") },
+            confirmButton = { TextButton(onClick = { storageError = null }) { Text("OK") } },
+        )
+    }
+
+    if (pendingOptionForMobileData != null) {
+        val opt = pendingOptionForMobileData!!
+        AlertDialog(
+            onDismissRequest = { pendingOptionForMobileData = null },
+            title = { Text("Mobile data warning") },
+            text = { Text("You are on mobile data. Saving in ${opt.resolutionLabel} will use approximately ${opt.formattedSize}. Continue?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        pendingOptionForMobileData = null
+                        executeSave(opt)
+                    },
+                    shape = MaterialTheme.shapes.small,
+                ) {
+                    Text("Save anyway")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingOptionForMobileData = null }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    if (saveOptions != null) {
+        AlertDialog(
+            onDismissRequest = { onIntent(JobIntent.DismissSaveDialog) },
+            title = { Text("Choose quality") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    saveOptions.forEach { opt ->
+                        Row(
+                            Modifier.fillMaxWidth().selectable(
+                                selected = (opt == selectedOption),
+                                onClick = { selectedOption = opt },
+                                role = Role.RadioButton,
+                            ).padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = (opt == selectedOption), onClick = null)
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text(opt.resolutionLabel, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium))
+                                Text(
+                                    "${opt.vcodec} + ${opt.acodec} · ${opt.formattedSize}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { selectedOption?.let { startSaving(it) } },
+                    shape = MaterialTheme.shapes.small,
+                    enabled = selectedOption != null,
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { onIntent(JobIntent.DismissSaveDialog) }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 }
 

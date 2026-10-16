@@ -30,6 +30,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -159,5 +160,25 @@ class JobViewModelTest {
         withTimeout(5_000) { while (store.get(expired)?.state != JobState.QUEUED) delay(10) }
         assertEquals(listOf(expired to UserAction.RUN), queued)
         assertEquals("is this real?", store.get(expired)?.userContext)
+    }
+
+    @Test fun requestSaveVideoProbesFormatsAndDismissClears() = runBlocking {
+        val id = jobWithPicker()
+        val fakeFetcher = dev.wolzard.recon.data.media.VideoFormatFetcher(object : dev.wolzard.recon.data.media.YtDlpRunner {
+            override suspend fun run(url: String, args: List<String>, processId: String, onProgress: (Float) -> Unit): String {
+                return """{"id":"yeNPwz5QcPw","formats":[{"format_id":"137","ext":"mp4","width":1920,"height":1080,"vcodec":"avc1","acodec":"none","filesize":20000000},{"format_id":"140","ext":"m4a","vcodec":"none","acodec":"mp4a","filesize":5000000}]}"""
+            }
+        })
+        val vm = JobViewModel(id, store, JobActions(store, enqueue = { i, a -> queued += i to a }), fakeFetcher)
+        withTimeout(5_000) { while (vm.state.value.job == null) delay(10) }
+
+        vm.onIntent(JobIntent.RequestSaveVideo)
+        withTimeout(5_000) { while (vm.state.value.saveOptions == null) delay(10) }
+        assertEquals(1, vm.state.value.saveOptions?.size)
+        assertEquals("1080p", vm.state.value.saveOptions?.first()?.resolutionLabel)
+
+        vm.onIntent(JobIntent.DismissSaveDialog)
+        assertNull(vm.state.value.saveOptions)
+        assertFalse(vm.state.value.isProbingFormats)
     }
 }

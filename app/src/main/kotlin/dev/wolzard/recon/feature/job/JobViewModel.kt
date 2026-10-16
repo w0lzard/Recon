@@ -12,6 +12,7 @@ import dev.wolzard.recon.core.model.JobResult
 import dev.wolzard.recon.core.model.JobState
 import dev.wolzard.recon.core.model.Verdict
 import dev.wolzard.recon.core.port.JobStore
+import dev.wolzard.recon.data.media.VideoFormatFetcher
 import dev.wolzard.recon.mvi.MviViewModel
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
@@ -65,13 +66,17 @@ class JobActions(private val store: JobStore, private val cancelWork: (Job) -> U
     fun result(job: Job?): JobResult? = job?.resultJson?.let { runCatching { json.decodeFromString(JobResult.serializer(), it) }.getOrNull() }
 }
 
-class JobViewModel(private val id: String, store: JobStore, private val actions: JobActions) :
-    MviViewModel<JobViewState, JobIntent, JobEffect>(JobViewState()) {
+class JobViewModel(
+    private val id: String,
+    store: JobStore,
+    private val actions: JobActions,
+    private val formatFetcher: VideoFormatFetcher? = null,
+) : MviViewModel<JobViewState, JobIntent, JobEffect>(JobViewState()) {
     private companion object { val SIGN_IN_FAILURES = setOf(FailureReason.API_KEY_MISSING, FailureReason.API_KEY_INVALID) }
 
     init {
         viewModelScope.launch {
-            store.observe(id).collect { job -> setState { JobViewState(job, actions.result(job)) } }
+            store.observe(id).collect { job -> setState { copy(job = job, result = actions.result(job)) } }
         }
     }
 
@@ -81,6 +86,8 @@ class JobViewModel(private val id: String, store: JobStore, private val actions:
             JobIntent.OpenSettings -> send(JobEffect.NavigateToSettings)
             JobIntent.Back -> send(JobEffect.NavigateBack)
             is JobIntent.Open -> send(JobEffect.OpenUrl(intent.url))
+            JobIntent.DismissSaveDialog -> setState { copy(saveOptions = null, isProbingFormats = false, saveError = null) }
+            JobIntent.RequestSaveVideo -> requestSaveVideo()
             else -> viewModelScope.launch {
                 when (intent) {
                     JobIntent.Retry -> actions.requeue(id, UserAction.RUN)
@@ -94,6 +101,24 @@ class JobViewModel(private val id: String, store: JobStore, private val actions:
                     JobIntent.Cancel -> { actions.cancel(id); send(JobEffect.NavigateBack) }
                     else -> Unit
                 }
+            }
+        }
+    }
+
+    private fun requestSaveVideo() {
+        val job = state.value.job
+        val url = job?.url ?: LinkRouter.extractUrl(job?.sharedText.orEmpty())
+        if (url == null || !LinkRouter.isWebUrl(url)) {
+            setState { copy(saveError = "No web link available to save") }
+            return
+        }
+        setState { copy(isProbingFormats = true, saveError = null) }
+        viewModelScope.launch {
+            val options = formatFetcher?.fetchOptions(url).orEmpty()
+            if (options.isEmpty()) {
+                setState { copy(isProbingFormats = false, saveError = "Could not find downloadable formats for this video") }
+            } else {
+                setState { copy(isProbingFormats = false, saveOptions = options) }
             }
         }
     }

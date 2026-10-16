@@ -20,5 +20,15 @@ fun JobRoute(vm: JobViewModel, clock: () -> Long, onBack: () -> Unit, onSignIn: 
             is JobEffect.OpenUrl -> if (effect.url.startsWith("https://")) ctx.openCustomTab(effect.url)
         }
     }
-    state.job?.let { JobScreen(it, state.result, clock(), vm::onIntent) }
+    state.job?.let {
+        JobScreen(
+            job = it,
+            result = state.result,
+            now = clock(),
+            isProbingFormats = state.isProbingFormats,
+            saveOptions = state.saveOptions,
+            saveError = state.saveError,
+            onIntent = vm::onIntent,
+        )
+    }
 }

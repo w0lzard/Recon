@@ -32,6 +32,7 @@ import dev.wolzard.recon.data.link.ThumbnailLoader
 import dev.wolzard.recon.data.media.AndroidFrameSampler
 import dev.wolzard.recon.data.media.ContentUriFetcher
 import dev.wolzard.recon.core.port.FrameSampler
+import dev.wolzard.recon.data.media.VideoFormatFetcher
 import dev.wolzard.recon.data.media.YoutubeDlRunner
 import dev.wolzard.recon.data.media.YtDlpFetcher
 import dev.wolzard.recon.data.media.YtDlpRunner
@@ -95,7 +96,8 @@ val appModule = module {
     }
     viewModel { SettingsViewModel(get(), get()) }
     single { JobActions(get(), { job -> JobQueue.cancel(androidContext(), job) }) { id, action -> JobQueue.enqueue(androidContext(), id, action) } }
-    viewModel { params -> JobViewModel(params.get(), get(), get()) }
+    single { VideoFormatFetcher(get()) }
+    viewModel { params -> JobViewModel(params.get(), get(), get(), get()) }
     single { LinkPreviewFetcher({ url -> get<YtDlpRunner>().run(url, listOf("--dump-json", "--skip-download", "--no-playlist"), "preview-${java.util.UUID.randomUUID()}") {} }) }
     single { ThumbnailLoader(get()) }
     viewModel { params -> ContextViewModel(params.get(), get(), get<LinkPreviewFetcher>()::fetch) }

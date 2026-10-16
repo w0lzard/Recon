@@ -2,6 +2,7 @@ package dev.wolzard.recon.data.media
 
 import android.content.Context
 import android.util.Log
+import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLException
 import com.yausername.youtubedl_android.YoutubeDLRequest
@@ -26,7 +27,11 @@ object YtDlp {
 
     suspend fun <T> use(context: Context, block: suspend () -> T): T = lock.withLock {
         if (!ready) {
-            withContext(Dispatchers.IO) { YoutubeDL.getInstance().init(context.applicationContext) }
+            withContext(Dispatchers.IO) {
+                val app = context.applicationContext
+                YoutubeDL.getInstance().init(app)
+                FFmpeg.getInstance().init(app)
+            }
             ready = true
         }
         block()

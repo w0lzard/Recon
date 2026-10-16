@@ -8,7 +8,7 @@ plugins {
 }
 
 // Release signing from keystore.properties (git-ignored, created in T14). Without it, release APKs are unsigned
-// (recon-0.4.2-arm64-v8a-release-unsigned.apk): what F-Droid builds and then checks byte for byte against ours.
+// (recon-0.5.0-arm64-v8a-release-unsigned.apk): what F-Droid builds and then checks byte for byte against ours.
 val keystoreProps = rootProject.file("keystore.properties").takeIf { it.exists() }
     ?.let { f -> Properties().apply { f.inputStream().use(::load) } }
 // APK names (AGP pattern <archivesName>-<abi>-<buildType>.apk): recon-0.1.0-arm64-v8a-release.apk.
@@ -22,8 +22,8 @@ android {
         minSdk = 26
         targetSdk = 37
         // Literal values: F-Droid reads both with a regex. Each ABI APK gets versionCode * 10 + its ABI digit (below).
-        versionCode = 7
-        versionName = "0.4.2"
+        versionCode = 8
+        versionName = "0.5.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "RELEASES_REPO", "\"${providers.gradleProperty("recon.releasesRepo").get()}\"")
     }
@@ -83,7 +83,7 @@ ksp { arg("room.schemaLocation", "$projectDir/schemas") }   // D23: the exported
 // T15 matches release assets by this pattern; see README → "Which APK".
 base.archivesName.set("recon-${android.defaultConfig.versionName}")
 
-// F-Droid's ABI order, lowest digit of the versionCode: 0.4.2 (7) is 71 for armeabi-v7a, 72 for arm64-v8a.
+// F-Droid's ABI order, lowest digit of the versionCode: 0.5.0 (8) is 81 for armeabi-v7a, 82 for arm64-v8a.
 val abiDigit = mapOf("armeabi-v7a" to 1, "arm64-v8a" to 2, "x86" to 3, "x86_64" to 4)
 
 // x86_64 is for the emulator only (debug + gate); release ships arm64-v8a and armeabi-v7a.

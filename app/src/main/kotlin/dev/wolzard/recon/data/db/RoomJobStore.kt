@@ -16,10 +16,10 @@ class RoomJobStore(private val db: ReconDb, private val clock: () -> Long = Syst
     override fun observe(id: String): Flow<Job?> = dao.observe(id).map { it?.toJob() }
     override suspend fun get(id: String): Job? = dao.get(id)?.toJob()
 
-    override suspend fun create(sharedText: String, localUri: String?, userContext: String?): String {
+    override suspend fun create(sharedText: String, localUri: String?, userContext: String?, normalizedUrl: String?): String {
         val now = clock()
         val id = UUID.randomUUID().toString()
-        dao.insert(Job(id = id, sharedText = sharedText, localUri = localUri, userContext = UserContext.clean(userContext), createdAt = now, updatedAt = now).toEntity())
+        dao.insert(Job(id = id, sharedText = sharedText, localUri = localUri, userContext = UserContext.clean(userContext), normalizedUrl = normalizedUrl, createdAt = now, updatedAt = now).toEntity())
         return id
     }
 
@@ -31,6 +31,9 @@ class RoomJobStore(private val db: ReconDb, private val clock: () -> Long = Syst
     override suspend fun delete(id: String) = dao.delete(id)
 
     override suspend fun findRunning(): List<Job> = dao.inStates(RUNNING).map { it.toJob() }
+
+    override suspend fun findByNormalizedUrl(normalizedUrl: String): List<Job> =
+        dao.findByNormalizedUrl(normalizedUrl).map { it.toJob() }
 
     private companion object { val RUNNING = listOf(JobState.DOWNLOADING, JobState.ANALYSING, JobState.RESEARCHING) }
 }

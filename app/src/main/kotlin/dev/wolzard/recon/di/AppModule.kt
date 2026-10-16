@@ -14,6 +14,8 @@ import dev.wolzard.recon.core.port.VideoAnalyzer
 import dev.wolzard.recon.data.db.MIGRATION_1_2
 import dev.wolzard.recon.data.db.MIGRATION_2_3
 import dev.wolzard.recon.data.db.MIGRATION_3_4
+import dev.wolzard.recon.data.db.MIGRATION_4_5
+import dev.wolzard.recon.core.link.UrlNormalizer
 import dev.wolzard.recon.data.db.ReconDb
 import dev.wolzard.recon.data.db.RoomJobStore
 import dev.wolzard.recon.data.gemini.GeminiWebBackend
@@ -64,9 +66,10 @@ import org.koin.dsl.module
 
 val appModule = module {
     single { OkHttpClient() }
-    single { Room.databaseBuilder(androidContext(), ReconDb::class.java, "recon.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build() }
+    single { Room.databaseBuilder(androidContext(), ReconDb::class.java, "recon.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build() }
     single<JobStore> { RoomJobStore(get()) }
     single<LinkResolver> { OkHttpLinkResolver(get()) }
+    single { UrlNormalizer(get()) }
     single<SecretStore> { KeystoreSecretStore(androidContext()) }
     single { GeminiWebClient(get(), get()) }
     single { GeminiWebBackend(get()) } binds arrayOf(VideoAnalyzer::class, LanguageModel::class)
@@ -109,12 +112,19 @@ val appModule = module {
         val ctx = androidContext()
         SettingsViewModel(get(), get(), signingSha256(ctx), YtDlp.autoUpdate(ctx)) { on -> YtDlp.setAutoUpdate(ctx, on); YtDlpUpdateWorker.sync(ctx, on) }
     }
-    single { JobActions(get(), { job -> JobQueue.cancel(androidContext(), job) }) { id, action -> JobQueue.enqueue(androidContext(), id, action) } }
+    single {
+        JobActions(
+            store = get(),
+            normalizer = get(),
+            cancelWork = { job -> JobQueue.cancel(androidContext(), job) },
+            enqueue = { id, action -> JobQueue.enqueue(androidContext(), id, action) },
+        )
+    }
     single { VideoFormatFetcher(get()) }
     viewModel { params -> JobViewModel(params.get(), get(), get(), get()) }
     single { LinkPreviewFetcher({ url -> get<YtDlpRunner>().run(url, listOf("--dump-json", "--skip-download", "--no-playlist"), "preview-${java.util.UUID.randomUUID()}") {} }) }
     single { ThumbnailLoader(get()) }
     viewModel { dev.wolzard.recon.ShareSheetViewModel(get()) }
-    viewModel { params -> ContextViewModel(params.get(), get(), params.values.getOrNull(1) as? String, get<LinkPreviewFetcher>()::fetch) }
+    viewModel { params -> ContextViewModel(params.get(), get(), get(), get(), params.values.getOrNull(1) as? String, get<LinkPreviewFetcher>()::fetch) }
     viewModel { HomeViewModel(get(), get()) }
 }

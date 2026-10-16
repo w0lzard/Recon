@@ -36,6 +36,7 @@ data class Job(
     val downloadBytes: Long? = null,
     val frameCount: Int? = null,            // Path B only; 0 = the sampler read none
     val hasAudio: Boolean? = null,          // Path B only
+    val normalizedUrl: String? = null,      // D31: canonical link key (e.g. youtube:<id>)
 )
 
 /** Persisted as JSON in JobEntity.resultJson. */

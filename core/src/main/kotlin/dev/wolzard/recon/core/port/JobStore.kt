@@ -7,8 +7,9 @@ interface JobStore {
     fun observeAll(): Flow<List<Job>>          // newest first
     fun observe(id: String): Flow<Job?>
     suspend fun get(id: String): Job?
-    suspend fun create(sharedText: String, localUri: String?, userContext: String? = null): String
+    suspend fun create(sharedText: String, localUri: String?, userContext: String? = null, normalizedUrl: String? = null): String
     suspend fun update(id: String, transform: (Job) -> Job)
     suspend fun delete(id: String)
     suspend fun findRunning(): List<Job>       // DOWNLOADING / ANALYSING / RESEARCHING
+    suspend fun findByNormalizedUrl(normalizedUrl: String): List<Job>
 }

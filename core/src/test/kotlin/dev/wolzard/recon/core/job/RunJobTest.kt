@@ -57,7 +57,8 @@ class RunJobTest {
         override fun observeAll() = jobs.map { it.values.toList() }
         override fun observe(id: String) = jobs.map { it[id] }
         override suspend fun get(id: String) = jobs.value[id]
-        override suspend fun create(sharedText: String, localUri: String?, userContext: String?) = error("unused")
+        override suspend fun create(sharedText: String, localUri: String?, userContext: String?, normalizedUrl: String?) = error("unused")
+        override suspend fun findByNormalizedUrl(normalizedUrl: String) = emptyList<Job>()
         override suspend fun update(id: String, transform: (Job) -> Job) {
             val old = jobs.value.getValue(id)
             val new = transform(old)

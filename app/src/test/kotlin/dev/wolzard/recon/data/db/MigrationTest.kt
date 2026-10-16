@@ -48,7 +48,7 @@ class MigrationTest {
         db.close()
     }
 
-    private fun open() = Room.databaseBuilder(ctx, ReconDb::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).allowMainThreadQueries().build()
+    private fun open() = Room.databaseBuilder(ctx, ReconDb::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).allowMainThreadQueries().build()
 
     @Test fun v1RowsKeepTheirDataAndGetNoContext() {
         createV1(insertRow = true)
@@ -155,6 +155,53 @@ class MigrationTest {
             val cols = generateSequence { if (c.moveToNext()) c.getString(1) else null }.toList()
             assertEquals(true, "userContext" in cols)
             assertEquals(false, "videoTitle" in cols || "thumbnailUrl" in cols || "videoDurationSec" in cols)
+        }
+        db.close()
+    }
+
+    // --- D31: version 4 to 5 adds the normalizedUrl canonical link key column
+
+    @Test fun v4RowsKeepTheirDataAndGetNoNormalizedUrl() {
+        create(4) { db ->
+            db.execSQL(
+                "INSERT INTO jobs (id, sharedText, url, localUri, state, failure, failureDetail, retryAtEpochMs, progress, analysisJson, resultJson, createdAt, updatedAt, userContext, videoTitle, videoDurationSec, thumbnailUrl, startedAt, downloadedAt, sampledAt, analysedAt, downloadBytes, frameCount, hasAudio) " +
+                    "VALUES ('j4', 'https://youtu.be/d', 'https://youtu.be/d', NULL, 'DONE', NULL, NULL, NULL, NULL, NULL, '{\"r\":4}', 70, 80, NULL, 'Title', 40, NULL, 1, 2, 3, 4, 1000, 10, 1)",
+            )
+        }
+        val room = open()
+        try {
+            val store = RoomJobStore(room)
+            val job = runBlocking { store.get("j4") }!!
+            assertEquals("https://youtu.be/d", job.url)
+            assertNull(job.normalizedUrl)
+        } finally {
+            room.close()
+        }
+    }
+
+    @Test fun migratedV4DatabaseStoresNormalizedUrlAndQueriesByIt() {
+        create(4) { }
+        val room = open()
+        try {
+            val store = RoomJobStore(room)
+            val id = runBlocking { store.create("https://youtu.be/d", null, "context", normalizedUrl = "youtube:d") }
+            val job = runBlocking { store.get(id) }!!
+            assertEquals("youtube:d", job.normalizedUrl)
+            val byNormalized = runBlocking { store.findByNormalizedUrl("youtube:d") }
+            assertEquals(listOf(job), byNormalized)
+        } finally {
+            room.close()
+        }
+    }
+
+    @Test fun v4SchemaHasNoNormalizedUrlColumn() { // guards the test itself
+        create(4) { }
+        val db = SQLiteDatabase.openDatabase(ctx.getDatabasePath(name).path, null, SQLiteDatabase.OPEN_READONLY)
+        db.rawQuery("PRAGMA table_info(jobs)", null).use { c ->
+            val cols = generateSequence { if (c.moveToNext()) c.getString(1) else null }.toList()
+            assertEquals(true, "userContext" in cols)
+            assertEquals(true, "startedAt" in cols)
+            assertEquals(false, "normalizedUrl" in cols)
         }
         db.close()
     }

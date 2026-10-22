@@ -45,6 +45,7 @@
 - **2026-10-17, D29 share sheet & D30 confidence percentage removal (owner):**
   - Share sheet merged to main with `android:windowSoftInputMode="adjustResize"` for API 26-28. Open item 3 (advice footer whenever claims list is non-empty) remains open.
   - D30 establishes status badge only; confidence percentage is removed from the answer card and future library entries.
+- **2026-10-16, Library & Knowledge Capture Plan:** see [`docs/library-plan.md`](library-plan.md) for the 6-step roadmap (D29 duplicate check, D30 library DB & FTS4, D31 GitHub maturity, D32 search by need & structured schema, D33 user curation & backup, D34 freshness & Ask the Library).
 - **2026-10-16, D28 youtubedl-android ffmpeg module and on-demand video saving (owner, branch `design-extras`).**
   - Reverses the earlier no-ffmpeg decision (D5) for saving only. Analysis pipeline initialises only YoutubeDL (FFmpeg initialized lazily only on save path; separate files for YouTube, no merge).
   - Option A chosen: quality picker offers three presets: 480p (h264 + AAC), 1080p default (h264 + AAC), and 4K (VP9 + Opus; enabled only when source offers 2160p; disabled with "4K not available, best is <res>" plus 4K playback advisory note). Real resolution shown in label and success message when source's best is below a preset. Storage check (2x estimate for merge) and mobile data warning. Stream-copies to MediaStore `Movies/Recon` on API 29+ or document URI via SAF on API 26-28. Zero memory buffering.

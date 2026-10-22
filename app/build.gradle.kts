@@ -25,6 +25,7 @@ android {
         versionCode = 9
         versionName = "0.5.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunnerArguments["clearPackageData"] = "true"
         buildConfigField("String", "RELEASES_REPO", "\"${providers.gradleProperty("recon.releasesRepo").get()}\"")
     }
 
@@ -75,7 +76,10 @@ android {
         compose = true
         buildConfig = true
     }
-    testOptions { unitTests.isIncludeAndroidResources = true }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        execution = "ANDROIDX_TEST_ORCHESTRATOR"
+    }
 }
 
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }   // D23: the exported schemas are the record of each version; MigrationTest builds v1 from 1.json
@@ -130,6 +134,10 @@ dependencies {
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.rules)
+    androidTestImplementation(libs.androidx.test.espresso.core)
+    androidTestUtil(libs.androidx.test.orchestrator)
+    androidTestUtil(libs.androidx.test.services)
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test.junit4)
     testImplementation(platform(libs.koin.bom))

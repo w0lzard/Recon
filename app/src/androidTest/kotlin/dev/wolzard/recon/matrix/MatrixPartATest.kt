@@ -106,6 +106,9 @@ import kotlin.time.Duration.Companion.seconds
  */
 @RunWith(AndroidJUnit4::class)
 class MatrixPartATest {
+    @get:Rule val permissionRule: androidx.test.rule.GrantPermissionRule =
+        if (android.os.Build.VERSION.SDK_INT >= 33) androidx.test.rule.GrantPermissionRule.grant(android.Manifest.permission.POST_NOTIFICATIONS)
+        else androidx.test.rule.GrantPermissionRule.grant()
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     private val ctx: Context = ApplicationProvider.getApplicationContext()

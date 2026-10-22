@@ -32,6 +32,9 @@ import org.koin.core.context.GlobalContext
 /** Share sheet on a device: the real activity, Room and Koin graph; no job is run against Gemini. */
 @RunWith(AndroidJUnit4::class)
 class ShareSheetTest {
+    @get:Rule val permissionRule: androidx.test.rule.GrantPermissionRule =
+        if (android.os.Build.VERSION.SDK_INT >= 33) androidx.test.rule.GrantPermissionRule.grant(android.Manifest.permission.POST_NOTIFICATIONS)
+        else androidx.test.rule.GrantPermissionRule.grant()
     @get:Rule val compose = createEmptyComposeRule()
     private val ctx: Context = ApplicationProvider.getApplicationContext()
     private val koin get() = GlobalContext.get()

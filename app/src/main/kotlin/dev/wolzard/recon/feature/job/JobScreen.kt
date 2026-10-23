@@ -858,7 +858,7 @@ private fun Done(job: Job, result: JobResult, onIntent: (JobIntent) -> Unit) {
                 ClaimRow(f, result)
             }
         }
-        if (claims.any { it.value.entity.domain?.sensitive == true }) Text(JobCopy.NOT_ADVICE, Modifier.testTag("advice_footer"), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        Text(JobCopy.NOT_ADVICE, Modifier.testTag("advice_footer"), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
     }
 
     val sourceCount = result.sources.size + answerSources.size

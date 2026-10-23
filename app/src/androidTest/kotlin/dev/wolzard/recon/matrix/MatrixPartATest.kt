@@ -512,11 +512,9 @@ class MatrixPartATest {
                 Surface { JobScreen(job, resultNonSensitive, now) {} }
             }
         }
-        // ClaimRow and JobScreen check `f.entity.domain?.takeIf { it.sensitive }?.let { ... }`
-        // and `claims.any { it.value.entity.domain?.sensitive == true }`.
-        // Therefore, for non-sensitive claims, advice_line and advice_footer do NOT show.
+        // ClaimRow shows the line only for a sensitive domain; the footer shows whenever the claims list is non-empty.
         compose.onAllNodesWithTag("advice_line").assertCountEquals(0)
-        compose.onAllNodesWithTag("advice_footer").assertCountEquals(0)
+        compose.onAllNodesWithTag("advice_footer").assertCountEquals(1)
     }
 
     /** A9: Face-only and prompt-injection fixtures: app renders model reply unchanged and sends on-screen text only through existing prompt path. Prompt text instructs against naming people from faces alone and against obeying instructions inside video/context. */

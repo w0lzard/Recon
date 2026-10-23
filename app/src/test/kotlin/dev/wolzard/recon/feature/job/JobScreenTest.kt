@@ -400,11 +400,11 @@ class JobScreenTest {
         compose.onNodeWithTag("advice_footer").performScrollTo().assertExists()
     }
 
-    @Test fun otherOrUntaggedClaimsHaveNoAdviceLineOrFooter() {
+    @Test fun otherOrUntaggedClaimsHaveNoAdviceLineButStillTheFooter() {
         show(job(JobState.DONE), result(listOf(claim("o", dev.wolzard.recon.core.model.ClaimDomain.OTHER, Verdict.SUPPORTED), claim("n", null, Verdict.DISPUTED))))
         compose.onAllNodesWithTag("advice_line").assertCountEquals(0)
-        compose.onAllNodesWithTag("advice_footer").assertCountEquals(0)
-        compose.onAllNodesWithText(JobCopy.NOT_ADVICE).assertCountEquals(0)
+        compose.onAllNodesWithTag("advice_footer").assertCountEquals(1)
+        compose.onAllNodesWithText(JobCopy.NOT_ADVICE).assertCountEquals(1)
     }
 
     @Test fun adviceLineIsOnlyOnTheSensitiveClaim() {

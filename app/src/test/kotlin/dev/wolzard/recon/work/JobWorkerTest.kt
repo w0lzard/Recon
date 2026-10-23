@@ -47,6 +47,7 @@ class JobWorkerTest {
         startKoin {
             modules(module {
                 single { store }
+                single<dev.wolzard.recon.core.port.EntryStore> { dev.wolzard.recon.data.db.RoomEntryStore(db) }
                 single<JobRunner> { JobRunner { id, _ -> seenStates += store.get(id)!!.state; behaviour(id) } }
                 single { Notifier(ctx) }
                 single { ResultPresenter(ctx, get()) }

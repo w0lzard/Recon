@@ -70,6 +70,7 @@ val appModule = module {
     single { OkHttpClient() }
     single { Room.databaseBuilder(androidContext(), ReconDb::class.java, "recon.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7).build() }
     single<JobStore> { RoomJobStore(get()) }
+    single<dev.wolzard.recon.core.port.EntryStore> { dev.wolzard.recon.data.db.RoomEntryStore(get()) }
     single<LinkResolver> { OkHttpLinkResolver(get()) }
     single { UrlNormalizer(get()) }
     single<SecretStore> { KeystoreSecretStore(androidContext()) }

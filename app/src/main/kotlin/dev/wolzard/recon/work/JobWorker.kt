@@ -7,6 +7,7 @@ import androidx.work.WorkerParameters
 import dev.wolzard.recon.core.model.FailureReason
 import dev.wolzard.recon.core.model.JobResult
 import dev.wolzard.recon.core.model.JobState
+import dev.wolzard.recon.core.port.EntryStore
 import dev.wolzard.recon.core.port.JobStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
@@ -17,6 +18,7 @@ import java.io.File
 /** Runs one job in a foreground `dataSync` worker (T12). */
 class JobWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params), KoinComponent {
     private val store: JobStore by inject()
+    private val entries: EntryStore by inject()
     private val runner: JobRunner by inject()
     private val notifier: Notifier by inject()
     private val presenter: ResultPresenter by inject()
@@ -57,10 +59,18 @@ class JobWorker(context: Context, params: WorkerParameters) : CoroutineWorker(co
         }
         when (job.state) {
             JobState.WAITING_QUOTA -> JobQueue.enqueueAfter(applicationContext, id, action, (job.retryAtEpochMs ?: clock()) - clock())
-            JobState.DONE, JobState.FAILED -> presenter.finished(job, summary(job))
+            JobState.DONE, JobState.FAILED -> {
+                presenter.finished(job, summary(job))
+                if (job.state == JobState.DONE) fileInLibrary(job)
+            }
             else -> Unit
         }
         return Result.success()
+    }
+
+    /** The library is a convenience: a failure here must never fail the job that just finished. */
+    private suspend fun fileInLibrary(job: dev.wolzard.recon.core.model.Job) {
+        try { entries.linkJob(job) } catch (e: CancellationException) { throw e } catch (e: Exception) { /* the backfill picks it up later */ }
     }
 
     /**

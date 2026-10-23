@@ -31,6 +31,8 @@ sealed interface JobIntent {
     data object DismissSaveDialog : JobIntent
     /** Failed card: puts the run's facts (no link, cookies or tokens) on the clipboard. */
     data object CopyDiagnostics : JobIntent
+    /** Empty result: the viewer adds a note or question and the video is analysed again. */
+    data class AddContextAndRetry(val text: String) : JobIntent
 }
 
 sealed interface JobEffect {

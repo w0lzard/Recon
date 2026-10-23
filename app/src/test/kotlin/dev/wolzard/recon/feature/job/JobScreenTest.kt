@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -173,6 +174,19 @@ class JobScreenTest {
         show(job(JobState.DONE), result(emptyList()))
         compose.onNodeWithText("Nothing to look up in this video").assertExists()
         compose.onNodeWithText("Try sharper video").assertExists()
+    }
+
+    @Test fun noEntitiesAndNoAnswerOffersAddContextAndRetry() {
+        show(job(JobState.DONE), result(emptyList()))
+        compose.onNodeWithTag("add_context_retry").performScrollTo().performClick()
+        compose.onNodeWithTag("retry_context").performTextInput("Which app is this?")
+        compose.onNodeWithText("Retry").performClick()
+        assertEquals(listOf<JobIntent>(JobIntent.AddContextAndRetry("Which app is this?")), actions)
+    }
+
+    @Test fun aSharedFileCannotAddContextAndRetry() {
+        show(job(JobState.DONE).copy(localUri = "/files/shared/x/video.mp4"), result(emptyList()))
+        compose.onAllNodesWithTag("add_context_retry").assertCountEquals(0)
     }
 
     @Test fun youtubeUrlRouteNeverOffersSharper() {

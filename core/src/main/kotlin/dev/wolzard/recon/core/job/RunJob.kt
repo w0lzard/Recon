@@ -39,6 +39,7 @@ enum class UserAction {
     RUN,             // first run, Retry, or resume after process death
     RESEARCH_ONLY,   // "Check again" / "Look up": research from the saved analysis (1 call)
     TRY_SHARPER,     // D21: re-download ≤ 720p and re-analyse
+    REANALYSE,       // D35: "Add context and retry": a fresh analysis of the same video with the job's new note
 }
 
 /** analysisJson payload: lets Retry/Check again resume at RESEARCHING without paying for analysis again (D7). */
@@ -76,7 +77,7 @@ class RunJob(
                 return
             }
             val budget = CallBudget(MAX_CALLS)
-            val saved = job.analysisJson?.takeIf { action != UserAction.TRY_SHARPER }
+            val saved = job.analysisJson?.takeIf { action != UserAction.TRY_SHARPER && action != UserAction.REANALYSE }
                 ?.let { runCatching { json.decodeFromString(SavedAnalysis.serializer(), it) }.getOrNull() }
             val analysis = saved ?: analyse(job, dir, action, budget)
             if (saved == null) store.update(jobId) { it.copy(analysisJson = json.encodeToString(SavedAnalysis.serializer(), analysis), analysedAt = clock()) }

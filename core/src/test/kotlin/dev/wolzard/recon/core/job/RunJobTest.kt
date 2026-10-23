@@ -450,6 +450,16 @@ class RunJobTest {
         assertEquals(listOf<String?>("Is this true?"), a.contexts)
     }
 
+    @Test fun reanalyseIgnoresTheSavedAnalysisAndUsesTheNewNote() = runTest {
+        val saved = Json.encodeToString(SavedAnalysis.serializer(), SavedAnalysis(analysis(emptyList()).result, "m1", "A"))
+        job(analysisJson = saved, userContext = "Which app is this?")
+        val a = Analyzer()
+        runJob(a)("j1", UserAction.REANALYSE)
+        assertEquals(1, a.inputs.size)   // RUN would have resumed from the saved analysis with no call
+        assertEquals(listOf<String?>("Which app is this?"), a.contexts)
+        assertEquals(JobState.DONE, state())
+    }
+
     @Test fun retryAfterFailureReusesTheStoredContext() = runTest {
         job(userContext = "Where is this?")
         runJob(Analyzer(AnalyzerException(FailureReason.MODEL_BUSY)))("j1")

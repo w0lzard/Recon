@@ -49,6 +49,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import dev.wolzard.recon.core.model.UserContext
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
@@ -652,6 +654,26 @@ private fun Failed(job: Job) {
     if (job.localUri != null && reason != FailureReason.UNSUPPORTED_LINK) Text("Share the video again to try once more; Recon's copy is gone.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
 }
 
+/** D35: an empty result with no answer can be asked again with a note or question; one new analysis, same video. */
+@Composable
+private fun AddContextAndRetry(current: String, onIntent: (JobIntent) -> Unit) {
+    var open by rememberSaveable { mutableStateOf(false) }
+    var text by rememberSaveable { mutableStateOf(current) }
+    OutlinedButton(onClick = { open = true }, Modifier.padding(top = 8.dp).height(48.dp).testTag("add_context_retry"), shape = MaterialTheme.shapes.small) { Text("Add context and retry") }
+    if (open) AlertDialog(
+        onDismissRequest = { open = false },
+        title = { Text("Add context") },
+        text = {
+            OutlinedTextField(
+                text, { text = it.take(UserContext.MAX_LENGTH) }, Modifier.fillMaxWidth().testTag("retry_context"),
+                label = { Text("What should Recon look for?") }, supportingText = { Text("${UserContext.MAX_LENGTH - text.length} left") },
+            )
+        },
+        confirmButton = { TextButton(onClick = { open = false; onIntent(JobIntent.AddContextAndRetry(text)) }) { Text("Retry") } },
+        dismissButton = { TextButton(onClick = { open = false }) { Text("Cancel") } },
+    )
+}
+
 /** The failure table's actions (plan → State machine) in the design's bottom bar: one filled action, then text actions. */
 @Composable
 private fun FailedActions(job: Job, now: Long, onIntent: (JobIntent) -> Unit) {
@@ -846,6 +868,7 @@ private fun Done(job: Job, result: JobResult, onIntent: (JobIntent) -> Unit) {
             Icon(JobIcons.SearchOff, null, Modifier.size(28.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(JobCopy.NOTHING_FOUND, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
             Text(JobCopy.NOTHING_FOUND_DETAIL, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
+            if (result.analysis.answer == null && job.localUri == null) AddContextAndRetry(job.userContext.orEmpty(), onIntent)
         }
     }
     if (entities.isNotEmpty()) SectionLabel("ENTITIES FOUND · ${entities.size}")

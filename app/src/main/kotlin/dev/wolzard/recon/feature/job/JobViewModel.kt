@@ -45,6 +45,12 @@ class JobActions(
         enqueue(id, action)
     }
 
+    /** D35 "Add context and retry": the cleaned note replaces the job's own and the video is analysed afresh (one new call). */
+    suspend fun reanalyseWithContext(id: String, context: String?) {
+        store.update(id) { it.copy(userContext = UserContext.clean(context)) }
+        requeue(id, UserAction.REANALYSE)
+    }
+
     /**
      * D23 Start/Skip: validates the link again (it came from a share or paste, possibly long ago), then creates and
      * queues the job with the cleaned context and D31 normalized link key. Null = the link is not usable and nothing was created.
@@ -136,6 +142,7 @@ class JobViewModel(
                         ?.let { actions.requeue(id, UserAction.RUN) }
                     JobIntent.CheckAgain, JobIntent.LookUp -> actions.requeue(id, UserAction.RESEARCH_ONLY)
                     JobIntent.TrySharper -> actions.requeue(id, UserAction.TRY_SHARPER)
+                    is JobIntent.AddContextAndRetry -> actions.reanalyseWithContext(id, intent.text)
                     is JobIntent.Pick -> actions.pick(id, intent.findingIndex, intent.repo)
                     JobIntent.Cancel -> { actions.cancel(id); send(JobEffect.NavigateBack) }
                     else -> Unit

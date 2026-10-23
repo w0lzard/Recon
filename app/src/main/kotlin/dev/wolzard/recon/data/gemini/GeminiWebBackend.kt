@@ -2,6 +2,7 @@ package dev.wolzard.recon.data.gemini
 
 import dev.wolzard.recon.core.json.ResultParser
 import dev.wolzard.recon.core.model.AnalysisInput
+import dev.wolzard.recon.core.model.AnalyzerException
 import dev.wolzard.recon.core.model.UserContext
 import dev.wolzard.recon.core.port.Analysis
 import dev.wolzard.recon.core.port.LanguageModel
@@ -30,7 +31,13 @@ class GeminiWebBackend(private val web: GeminiWebClient) : VideoAnalyzer, Langua
         val uploaded = coroutineScope { files.map { (f, mime) -> async { web.upload(f, mime) to f.name } }.awaitAll() }
         val prompt = Prompts.analyze(language, userContext) + "\n\nJSON schema:\n" + Prompts.ANALYZE_SCHEMA +
             ((input as? AnalysisInput.YouTubeUrl)?.let { "\n\nVideo: ${it.url}" }.orEmpty())
-        return Analysis(ResultParser.parseAnalysis(web.generate(prompt, uploaded), allowAnswer = UserContext.clean(userContext) != null), MODEL)
+        val text = web.generate(prompt, uploaded)
+        val result = try {
+            ResultParser.parseAnalysis(text, allowAnswer = UserContext.clean(userContext) != null)
+        } catch (e: AnalyzerException) {
+            throw AnalyzerException(e.reason, e.retryAtEpochMs, e.message, e, raw = text) // the unreadable reply is kept on the job
+        }
+        return Analysis(result, MODEL, raw = text)
     }
 
     /** [googleSearch] is ignored: the web app decides on its own when to search, and returns no sources here. */

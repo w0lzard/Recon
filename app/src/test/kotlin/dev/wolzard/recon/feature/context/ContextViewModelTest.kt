@@ -170,6 +170,7 @@ class ContextViewModelTest {
         store.update(id) { it.copy(state = dev.wolzard.recon.core.model.JobState.FAILED, failure = dev.wolzard.recon.core.model.FailureReason.NETWORK) }
         val v = ContextViewModel(link, actions, store, normalizer)
         v.onIntent(ContextIntent.Skip)
+        kotlinx.coroutines.withTimeout(5_000) { while (queued.isEmpty()) kotlinx.coroutines.delay(10) } // Room runs the update on its own thread
         assertEquals(1, jobs().size)
         assertEquals(dev.wolzard.recon.core.model.JobState.QUEUED, store.get(id)!!.state)
         assertEquals(listOf(id to UserAction.RUN), queued)

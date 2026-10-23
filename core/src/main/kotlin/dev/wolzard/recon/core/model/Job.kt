@@ -59,4 +59,6 @@ class AnalyzerException(
     val retryAtEpochMs: Long? = null,
     message: String? = null,
     cause: Throwable? = null,
+    /** The model's reply when it could not be parsed (D35). */
+    val raw: String? = null,
 ) : Exception(message ?: reason.name, cause)

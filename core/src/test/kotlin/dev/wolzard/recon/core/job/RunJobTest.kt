@@ -216,6 +216,19 @@ class RunJobTest {
         assertEquals(JobState.ANALYSING, j.failedStep) // D35: the step that was running
     }
 
+    @Test fun modelReplyIsKeptOnTheJob() = runTest {
+        job()
+        runJob(Analyzer(analysis().copy(raw = """{"entities":[]}""")))("j1")
+        assertEquals("""{"entities":[]}""", store.get("j1")!!.rawJson)
+    }
+
+    @Test fun unreadableModelReplyIsKeptToo() = runTest {
+        job()
+        runJob(Analyzer(AnalyzerException(FailureReason.MODEL_OUTPUT_INVALID, raw = "first"), AnalyzerException(FailureReason.MODEL_OUTPUT_INVALID, raw = "not json at all")))("j1") // Path A, then Path B
+        assertEquals("not json at all", store.get("j1")!!.rawJson)
+        assertEquals(FailureReason.MODEL_OUTPUT_INVALID, store.get("j1")!!.failure)
+    }
+
     @Test fun noQuotaWaitBackendNeverWritesWaitingQuota() = runTest {
         // The web backend wires quotaWaitUntil = { null } (AppModule): a usage-limit error must end in FAILED, never WAITING_QUOTA.
         job()

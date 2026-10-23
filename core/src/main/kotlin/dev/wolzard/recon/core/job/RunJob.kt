@@ -129,7 +129,7 @@ class RunJob(
             store.update(job.id) { it.copy(url = resolved) }
             if (LinkRouter.classify(resolved) is Route.YouTube && analyzer.supportsYouTubeUrl && action != UserAction.TRY_SHARPER) {
                 store.update(job.id) { it.copy(state = JobState.ANALYSING, sampledAt = clock()) } // the model reads the video itself
-                when (val r = attempt(budget, timeouts.pathA) { analyzer.analyze(AnalysisInput.YouTubeUrl(resolved), lang, job.userContext) }) {
+                when (val r = attempt(job.id, budget, timeouts.pathA) { analyzer.analyze(AnalysisInput.YouTubeUrl(resolved), lang, job.userContext) }) {
                     is Attempt.Ok -> return SavedAnalysis(r.analysis.result, r.analysis.model, "youtube-url")
                     is Attempt.Failed -> lastError = r.error // falls through to the download path
                 }
@@ -152,7 +152,7 @@ class RunJob(
         if (media.audio == null && media.video.length() <= timeouts.maxPathABytes) {
             if (!budget.canSpend()) throw lastError ?: AnalyzerException(FailureReason.UNKNOWN, message = "call budget used up")
             store.update(job.id) { it.copy(state = JobState.ANALYSING, progress = null, sampledAt = clock()) } // sent whole; no frames of ours
-            when (val r = attempt(budget, timeouts.pathA) { analyzer.analyze(AnalysisInput.VideoFile(media.video, mime(media.video)), lang, job.userContext) }) {
+            when (val r = attempt(job.id, budget, timeouts.pathA) { analyzer.analyze(AnalysisInput.VideoFile(media.video, mime(media.video)), lang, job.userContext) }) {
                 is Attempt.Ok -> return SavedAnalysis(r.analysis.result, r.analysis.model, "A")
                 is Attempt.Failed -> lastError = r.error
             }
@@ -171,7 +171,7 @@ class RunJob(
         if (frames.frames.isEmpty()) throw AnalyzerException(FailureReason.VIDEO_UNREADABLE, message = "no frame could be decoded")
         if (!budget.canSpend()) throw lastError ?: AnalyzerException(FailureReason.UNKNOWN, message = "call budget used up")
         val input = AnalysisInput.FramesAndAudio(frames.frames, audio)
-        return when (val r = attempt(budget, timeouts.pathB) { analyzer.analyze(input, lang, job.userContext) }) {
+        return when (val r = attempt(job.id, budget, timeouts.pathB) { analyzer.analyze(input, lang, job.userContext) }) {
             is Attempt.Ok -> SavedAnalysis(r.analysis.result, r.analysis.model, "B")
             is Attempt.Failed -> throw r.error
         }
@@ -190,15 +190,22 @@ class RunJob(
     }
 
     /** One analysis call. Quota/sign-in/busy failures end the job (another path would hit the same wall). */
-    private suspend fun attempt(budget: CallBudget, timeout: Duration, call: suspend () -> Analysis): Attempt {
+    private suspend fun attempt(jobId: String, budget: CallBudget, timeout: Duration, call: suspend () -> Analysis): Attempt {
         budget.spend()
         val result = try {
             withTimeoutOrNull(timeout) { call() }
         } catch (e: AnalyzerException) {
+            keepRaw(jobId, e.raw)
             if (e.reason in TERMINAL) throw e
             return Attempt.Failed(e)
         }
+        keepRaw(jobId, result?.raw)
         return result?.let { Attempt.Ok(it) } ?: Attempt.Failed(AnalyzerException(FailureReason.NETWORK, message = "analysis timed out"))
+    }
+
+    /** D35: the model's reply as received, capped; the last attempt's reply wins. */
+    private suspend fun keepRaw(jobId: String, raw: String?) {
+        if (raw != null) store.update(jobId) { it.copy(rawJson = raw.take(RAW_MAX)) }
     }
 
     private suspend fun fail(id: String, reason: FailureReason, detail: String?, retryAt: Long?) {
@@ -235,6 +242,7 @@ class RunJob(
 
     private companion object {
         const val MAX_CALLS = 2
+        const val RAW_MAX = 100_000
         val TERMINAL = setOf(
             FailureReason.QUOTA_EXCEEDED, FailureReason.API_KEY_MISSING, FailureReason.API_KEY_INVALID,
             FailureReason.MODEL_BUSY,

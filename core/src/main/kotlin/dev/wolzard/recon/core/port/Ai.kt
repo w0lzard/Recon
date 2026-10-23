@@ -10,7 +10,8 @@ interface VideoAnalyzer {
     suspend fun analyze(input: AnalysisInput, language: String, userContext: String? = null): Analysis
 }
 
-data class Analysis(val result: AnalysisResult, val model: String)   // model = the one that answered
+/** model = the one that answered; raw = its reply as received (D35), kept on the job for diagnosis. */
+data class Analysis(val result: AnalysisResult, val model: String, val raw: String? = null)
 
 interface LanguageModel {
     /**

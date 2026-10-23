@@ -17,7 +17,11 @@ sealed interface ShareOutcome {
     data class NeedsContext(val link: String) : ShareOutcome
     /** Share sheet: the video file is already copied to [localUri]; the job is created by Start or Skip. */
     data class FileNeedsContext(val localUri: String, val sharedText: String) : ShareOutcome
+    /** Text with no web link: no job is created; the caller shows [ShareCopy.NO_LINK] inline. */
+    data object NoLink : ShareOutcome
 }
+
+object ShareCopy { const val NO_LINK = "That isn't a video link. Copy the link from the app's Share menu and paste it here." }
 
 /**
  * Share intake (T12). A shared video is copied **immediately** (the URI grant is temporary, R14) into
@@ -28,7 +32,7 @@ class ShareIntake(private val context: Context, private val store: JobStore, pri
     /**
      * A shared video file starts at once, or with [fileContext] (the share sheet) is only copied, and Start or Skip
      * creates the job. Text with a valid web link creates nothing yet: the context screen starts the job (D23). Text
-     * without one still becomes a job, which fails with UNSUPPORTED_LINK and says so.
+     * without one creates nothing and is answered with [ShareOutcome.NoLink].
      * @return null if the intent isn't a usable share.
      */
     suspend fun accept(intent: Intent, fileContext: Boolean = false): ShareOutcome? {
@@ -45,7 +49,7 @@ class ShareIntake(private val context: Context, private val store: JobStore, pri
         } else {
             val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.takeIf { it.isNotBlank() } ?: return null
             LinkRouter.validLink(text)?.let { return ShareOutcome.NeedsContext(it) }
-            store.create(text, null)
+            return ShareOutcome.NoLink
         }
         JobQueue.enqueue(context, id)
         return ShareOutcome.Started(id)

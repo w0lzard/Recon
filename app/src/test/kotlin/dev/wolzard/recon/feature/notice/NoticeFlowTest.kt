@@ -113,11 +113,9 @@ class NoticeFlowTest {
     @Test fun heldShareIsValidatedOnlyWhenReleased() = runBlocking {
         val gate = ShareGate(Notice(prefs), intake::accept)
         gate.share(share("javascript:alert(1) file:///data/data/dev.wolzard.recon/databases/recon.db intent://x#Intent;end"))
-        val id = (gate.accepted() as ShareOutcome.Started).jobId
-        // Released through the same intake as any share: no web link survives, so RunJob fails it as UNSUPPORTED_LINK.
-        val job = store.get(id)!!
-        assertNull(job.url)
-        assertNull(LinkRouter.extractUrl(job.sharedText))
+        // Released through the same intake as any share: no web link survives, so it is NoLink and creates no job.
+        assertEquals(ShareOutcome.NoLink, gate.accepted())
+        assertTrue(jobs().isEmpty())
         // A non-share intent held before accept is dropped by the intake.
         gate.share(Intent(Intent.ACTION_VIEW))
         assertNull(gate.accepted())

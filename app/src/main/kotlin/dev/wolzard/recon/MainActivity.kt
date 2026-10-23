@@ -70,9 +70,13 @@ class MainActivity : ComponentActivity() {
     /** A valid link waiting for its optional context (D23). */
     private val openContext = MutableStateFlow<String?>(null)
 
+    /** A text share had no link: Home shows the inline error. */
+    private val shareWithoutLink = MutableStateFlow(false)
+
     private fun show(outcome: ShareOutcome?) = when (outcome) {
         is ShareOutcome.Started -> openJob.value = outcome.jobId
         is ShareOutcome.NeedsContext -> openContext.value = outcome.link
+        ShareOutcome.NoLink -> shareWithoutLink.value = true
         is ShareOutcome.FileNeedsContext, null -> Unit // only the share sheet asks for it
     }
 
@@ -97,7 +101,7 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(Unit) { firstFrameDrawn = true }
                 CompositionLocalProvider(LocalThumbnails provides thumbnails::load) {
                     ReconNavHost(
-                        start, openJob, openContext, clock,
+                        start, openJob, openContext, shareWithoutLink, clock,
                         noticeNeeded = { notice.needed },
                         signedIn = signedIn,
                         onNoticeAccepted = { lifecycleScope.launch { show(shares.accepted()) } },

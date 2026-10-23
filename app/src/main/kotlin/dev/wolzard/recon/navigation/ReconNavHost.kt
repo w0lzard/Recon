@@ -13,7 +13,9 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.toRoute
 import dev.wolzard.recon.feature.context.ContextRoute
+import dev.wolzard.recon.feature.home.HomeIntent
 import dev.wolzard.recon.feature.home.HomeRoute
+import dev.wolzard.recon.feature.home.HomeViewModel
 import dev.wolzard.recon.feature.job.JobIntent
 import dev.wolzard.recon.feature.job.JobRoute
 import dev.wolzard.recon.feature.job.JobViewModel
@@ -50,12 +52,14 @@ fun ReconNavHost(
     start: Any,
     pendingJob: MutableStateFlow<String?>,
     pendingLink: MutableStateFlow<String?>,
+    shareWithoutLink: MutableStateFlow<Boolean>,
     clock: () -> Long,
     noticeNeeded: () -> Boolean,
     signedIn: () -> Boolean,
     onNoticeAccepted: () -> Unit,
 ) {
     val nav = rememberNavController()
+    val homeVm: HomeViewModel = koinViewModel()
     val pending by pendingJob.collectAsStateWithLifecycle()
     LaunchedEffect(pending) {
         pending?.let { nav.navigate(JobDestination(it)) { launchSingleTop = true }; pendingJob.value = null }
@@ -64,10 +68,14 @@ fun ReconNavHost(
     LaunchedEffect(link) {
         link?.let { nav.navigate(ContextDestination(it)); pendingLink.value = null }
     }
+    val noLink by shareWithoutLink.collectAsStateWithLifecycle()
+    LaunchedEffect(noLink) {
+        if (noLink) { nav.navigate(HomeDestination) { launchSingleTop = true }; homeVm.onIntent(HomeIntent.SharedWithoutLink); shareWithoutLink.value = false }
+    }
     Scaffold { padding ->
         NavHost(nav, startDestination = start, modifier = Modifier.padding(padding)) {
             composable<HomeDestination> {
-                HomeRoute(koinViewModel(), onOpenJob = { nav.navigate(JobDestination(it)) }, onOpenSettings = { nav.navigate(SettingsDestination) }, onAddContext = { nav.navigate(ContextDestination(it)) })
+                HomeRoute(homeVm, onOpenJob = { nav.navigate(JobDestination(it)) }, onOpenSettings = { nav.navigate(SettingsDestination) }, onAddContext = { nav.navigate(ContextDestination(it)) })
             }
             composable<JobDestination> { entry ->
                 val id = entry.toRoute<JobDestination>().id

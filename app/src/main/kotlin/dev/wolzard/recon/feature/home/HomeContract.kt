@@ -10,6 +10,8 @@ sealed interface HomeIntent {
     data class OpenLink(val url: String) : HomeIntent
     data class DismissUpdate(val version: String) : HomeIntent
     /** [text] = the link field (typed, pasted or filled from the clipboard); a valid link opens the context screen (D23). */
+    /** A text share held no link: show the same inline error as a bad paste. */
+    data object SharedWithoutLink : HomeIntent
     data class PasteLink(val text: String) : HomeIntent
 }
 

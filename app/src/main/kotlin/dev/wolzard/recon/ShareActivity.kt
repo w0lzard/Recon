@@ -71,6 +71,7 @@ import dev.wolzard.recon.designsystem.ReconTheme
 import dev.wolzard.recon.feature.context.ContextRoute
 import dev.wolzard.recon.feature.job.JobRoute
 import dev.wolzard.recon.work.ShareIntake
+import dev.wolzard.recon.work.ShareCopy
 import dev.wolzard.recon.work.ShareOutcome
 import dev.wolzard.recon.work.Visible
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -89,6 +90,8 @@ sealed interface SheetStep {
     data class VideoFile(val localUri: String, val sharedText: String) : SheetStep
     data class Job(val id: String) : SheetStep
     data object Nothing : SheetStep
+    /** A text share with no link: an inline message in the sheet; no job. */
+    data object NoLink : SheetStep
 }
 
 class ShareSheetViewModel(private val intake: ShareIntake) : ViewModel() {
@@ -99,6 +102,7 @@ class ShareSheetViewModel(private val intake: ShareIntake) : ViewModel() {
             is ShareOutcome.NeedsContext -> SheetStep.Link(o.link)
             is ShareOutcome.FileNeedsContext -> SheetStep.VideoFile(o.localUri, o.sharedText)
             is ShareOutcome.Started -> SheetStep.Job(o.jobId)
+            ShareOutcome.NoLink -> SheetStep.NoLink
             null -> SheetStep.Nothing
         }
     }
@@ -199,7 +203,7 @@ fun ShareSheet(step: SheetStep, onDismiss: () -> Unit, onJob: (String) -> Unit, 
     val sheet = rememberStandardBottomSheetState(initialValue = SheetValue.PartiallyExpanded, skipHiddenState = false)
     val scaffold = rememberBottomSheetScaffoldState(bottomSheetState = sheet)
     LaunchedEffect(sheet) { snapshotFlow { sheet.currentValue }.drop(1).collect { if (it == SheetValue.Hidden) onDismiss() } }
-    val fitsContent = step is SheetStep.Link || step is SheetStep.VideoFile
+    val fitsContent = step is SheetStep.Link || step is SheetStep.VideoFile || step is SheetStep.NoLink
     // imePadding: the whole sheet area ends at the keyboard, so the sheet rides up with it and keeps its own height.
     BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
         val full = maxHeight
@@ -248,6 +252,10 @@ private fun SheetContent(step: SheetStep, onDismiss: () -> Unit, onJob: (String)
             koinViewModel(key = step.id) { parametersOf(step.id) }, koinInject(),
             onBack = onDismiss, onSignIn = { onOpenApp(step.id) }, onSettings = { onOpenApp(null) },
         )
+    }
+    SheetStep.NoLink -> Column(Modifier.fillMaxWidth().padding(16.dp).navigationBarsPadding().testTag("no_link"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(ShareCopy.NO_LINK, style = MaterialTheme.typography.bodyLarge)
+        Button(shape = MaterialTheme.shapes.small, onClick = onDismiss) { Text("OK") }
     }
     SheetStep.Loading, SheetStep.Nothing -> Unit
 }

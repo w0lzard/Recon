@@ -5,6 +5,7 @@ import dev.wolzard.recon.core.link.LinkRouter
 import dev.wolzard.recon.core.port.JobStore
 import dev.wolzard.recon.data.update.UpdateChecker
 import dev.wolzard.recon.mvi.MviViewModel
+import dev.wolzard.recon.work.ShareCopy
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
@@ -16,16 +17,15 @@ class HomeViewModel(store: JobStore, private val updates: UpdateChecker) : MviVi
         }
     }
 
-    private companion object { const val NO_LINK = "That isn't a video link. Copy the link from the app's Share menu and paste it here." }
-
     override fun onIntent(intent: HomeIntent) = when (intent) {
         is HomeIntent.OpenJob -> send(HomeEffect.NavigateToJob(intent.id))
         HomeIntent.OpenSettings -> send(HomeEffect.NavigateToSettings)
         is HomeIntent.OpenLink -> send(HomeEffect.OpenInBrowser(intent.url))
         is HomeIntent.DismissUpdate -> updates.dismiss(intent.version)
+        HomeIntent.SharedWithoutLink -> setState { copy(pasteError = ShareCopy.NO_LINK) }
         is HomeIntent.PasteLink -> {
             val link = LinkRouter.validLink(intent.text)
-            setState { copy(pasteError = if (link == null) NO_LINK else null) }
+            setState { copy(pasteError = if (link == null) ShareCopy.NO_LINK else null) }
             if (link != null) send(HomeEffect.NavigateToContext(link))
             Unit
         }

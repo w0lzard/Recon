@@ -103,13 +103,12 @@ class JobWorkerTest {
         assertEquals(60_000L, info.initialDelayMillis)
     }
 
-    @Test fun textShareWithoutLinkCreatesFailingJobAndEnqueuesWork() = runBlocking {
+    @Test fun textShareWithoutLinkCreatesNoJobAndEnqueuesNothing() = runBlocking {
         val intake = ShareIntake(ctx, store, ContentUriFetcher(ctx))
-        val id = (intake.accept(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "no link in here")) as ShareOutcome.Started).jobId
-        assertEquals("no link in here", store.get(id)!!.sharedText)
-        val infos = WorkManager.getInstance(ctx).getWorkInfosForUniqueWork(JobQueue.NAME).get()
-        assertEquals(1, infos.size)
-        assertTrue(infos.single().tags.contains(JobQueue.tag(id)))
+        val out = intake.accept(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "no link in here"))
+        assertEquals(ShareOutcome.NoLink, out)
+        assertTrue(store.observeAll().first().isEmpty())
+        assertTrue(WorkManager.getInstance(ctx).getWorkInfosForUniqueWork(JobQueue.NAME).get().isEmpty())
     }
 
     @Test fun textShareWithValidLinkWaitsForContextAndCreatesNothing() = runBlocking {

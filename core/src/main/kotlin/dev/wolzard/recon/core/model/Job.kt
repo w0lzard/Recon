@@ -38,6 +38,8 @@ data class Job(
     val frameCount: Int? = null,            // Path B only; 0 = the sampler read none
     val hasAudio: Boolean? = null,          // Path B only
     val normalizedUrl: String? = null,      // D31: canonical link key (e.g. youtube:<id>)
+    val failedStep: JobState? = null,       // D35: the step that was running when the job failed (diagnostics)
+    val rawJson: String? = null,            // D35: the model's reply as received, before parsing
 )
 
 /** Persisted as JSON in JobEntity.resultJson. */

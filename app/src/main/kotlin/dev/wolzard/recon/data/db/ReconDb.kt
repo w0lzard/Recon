@@ -45,6 +45,8 @@ data class JobEntity(
     val frameCount: Int? = null,
     val hasAudio: Boolean? = null,
     val normalizedUrl: String? = null,  // D31
+    val failedStep: JobState? = null,   // D35: the step that was running when the job failed
+    val rawJson: String? = null,        // D35: the model's reply, as received
 )
 
 @Dao
@@ -59,7 +61,7 @@ interface JobDao {
     @Query("DELETE FROM jobs WHERE id = :id") suspend fun delete(id: String)
 }
 
-@Database(entities = [JobEntity::class], version = 5, exportSchema = true)
+@Database(entities = [JobEntity::class], version = 6, exportSchema = true)
 abstract class ReconDb : RoomDatabase() {
     abstract fun jobs(): JobDao
 }
@@ -94,11 +96,19 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
     }
 }
 
+/** D35: jobs gain the step that failed and the model's raw reply. Existing rows keep NULL = not known. */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE jobs ADD COLUMN failedStep TEXT")
+        db.execSQL("ALTER TABLE jobs ADD COLUMN rawJson TEXT")
+    }
+}
+
 fun JobEntity.toJob() = Job(
     id, sharedText, url, localUri, state, failure, failureDetail, retryAtEpochMs, progress, analysisJson, resultJson, createdAt, updatedAt, userContext, videoTitle, videoDurationSec, thumbnailUrl,
-    startedAt, downloadedAt, sampledAt, analysedAt, downloadBytes, frameCount, hasAudio, normalizedUrl,
+    startedAt, downloadedAt, sampledAt, analysedAt, downloadBytes, frameCount, hasAudio, normalizedUrl, failedStep, rawJson,
 )
 fun Job.toEntity() = JobEntity(
     id, sharedText, url, localUri, state, failure, failureDetail, retryAtEpochMs, progress, analysisJson, resultJson, createdAt, updatedAt, userContext, videoTitle, videoDurationSec, thumbnailUrl,
-    startedAt, downloadedAt, sampledAt, analysedAt, downloadBytes, frameCount, hasAudio, normalizedUrl,
+    startedAt, downloadedAt, sampledAt, analysedAt, downloadBytes, frameCount, hasAudio, normalizedUrl, failedStep, rawJson,
 )

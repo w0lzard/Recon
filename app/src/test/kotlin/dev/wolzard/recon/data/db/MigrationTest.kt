@@ -42,13 +42,17 @@ class MigrationTest {
     private fun create(version: Int, fill: (SQLiteDatabase) -> Unit) {
         val schema = Json.parseToJsonElement(File("schemas/dev.wolzard.recon.data.db.ReconDb/$version.json").readText()).jsonObject["database"]!!.jsonObject
         val db = SQLiteDatabase.openOrCreateDatabase(ctx.getDatabasePath(name), null)
-        schema["entities"]!!.jsonArray.forEach { db.execSQL(it.jsonObject["createSql"]!!.jsonPrimitive.content.replace("\${TABLE_NAME}", it.jsonObject["tableName"]!!.jsonPrimitive.content)) }
+        schema["entities"]!!.jsonArray.forEach { e ->
+            val table = e.jsonObject["tableName"]!!.jsonPrimitive.content
+            db.execSQL(e.jsonObject["createSql"]!!.jsonPrimitive.content.replace("\${TABLE_NAME}", table))
+            e.jsonObject["indices"]?.jsonArray?.forEach { db.execSQL(it.jsonObject["createSql"]!!.jsonPrimitive.content.replace("\${TABLE_NAME}", table)) } // v5 onwards
+        }
         fill(db)
         db.version = version
         db.close()
     }
 
-    private fun open() = Room.databaseBuilder(ctx, ReconDb::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).allowMainThreadQueries().build()
+    private fun open() = Room.databaseBuilder(ctx, ReconDb::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).allowMainThreadQueries().build()
 
     @Test fun v1RowsKeepTheirDataAndGetNoContext() {
         createV1(insertRow = true)
@@ -202,6 +206,42 @@ class MigrationTest {
             assertEquals(true, "userContext" in cols)
             assertEquals(true, "startedAt" in cols)
             assertEquals(false, "normalizedUrl" in cols)
+        }
+        db.close()
+    }
+
+    // --- D35: version 5 to 6 adds the failed step and the model's raw reply
+
+    @Test fun v5RowsKeepTheirDataAndStoreTheNewColumns() {
+        create(5) { db ->
+            db.execSQL(
+                "INSERT INTO jobs (id, sharedText, url, localUri, state, failure, failureDetail, retryAtEpochMs, progress, analysisJson, resultJson, createdAt, updatedAt, normalizedUrl) " +
+                    "VALUES ('j5', 'https://youtu.be/e', 'https://youtu.be/e', NULL, 'FAILED', 'NETWORK', 'timed out', NULL, NULL, NULL, NULL, 90, 100, 'youtube:e')",
+            )
+        }
+        val room = open()
+        try {
+            val store = RoomJobStore(room)
+            val job = runBlocking { store.get("j5") }!!
+            assertEquals("youtube:e", job.normalizedUrl)
+            assertEquals(dev.wolzard.recon.core.model.FailureReason.NETWORK, job.failure)
+            assertNull(job.failedStep); assertNull(job.rawJson)
+            runBlocking { store.update("j5") { it.copy(failedStep = dev.wolzard.recon.core.model.JobState.ANALYSING, rawJson = "{\"x\":1}") } }
+            val after = runBlocking { store.get("j5") }!!
+            assertEquals(dev.wolzard.recon.core.model.JobState.ANALYSING, after.failedStep)
+            assertEquals("{\"x\":1}", after.rawJson)
+        } finally {
+            room.close()
+        }
+    }
+
+    @Test fun v5SchemaHasNoFailedStepOrRawJson() { // guards the test itself
+        create(5) { }
+        val db = SQLiteDatabase.openDatabase(ctx.getDatabasePath(name).path, null, SQLiteDatabase.OPEN_READONLY)
+        db.rawQuery("PRAGMA table_info(jobs)", null).use { c ->
+            val cols = generateSequence { if (c.moveToNext()) c.getString(1) else null }.toList()
+            assertEquals(true, "normalizedUrl" in cols)
+            assertEquals(false, "failedStep" in cols || "rawJson" in cols)
         }
         db.close()
     }

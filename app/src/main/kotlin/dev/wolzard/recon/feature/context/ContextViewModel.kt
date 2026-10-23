@@ -4,6 +4,8 @@ import androidx.lifecycle.viewModelScope
 import dev.wolzard.recon.core.link.LinkRouter
 import dev.wolzard.recon.core.link.UrlNormalizer
 import dev.wolzard.recon.core.link.hostOf
+import dev.wolzard.recon.core.job.UserAction
+import dev.wolzard.recon.core.model.FailureReason
 import dev.wolzard.recon.core.model.JobState
 import dev.wolzard.recon.core.model.LinkPreview
 import dev.wolzard.recon.core.model.UserContext
@@ -69,9 +71,12 @@ class ContextViewModel(
                                 send(ContextEffect.OpenJob(existing.id))
                                 return@launch
                             }
-                            JobState.FAILED -> {
-                                // FAILED: start fresh attempt without prompting
-                            }
+                            JobState.FAILED -> if (existing.failure == FailureReason.NETWORK && existing.localUri == null) {
+                                // The same link again after a network failure retries that job instead of starting another.
+                                actions.requeue(existing.id, UserAction.RUN)
+                                send(ContextEffect.OpenJob(existing.id))
+                                return@launch
+                            } // other failures: start a fresh attempt without prompting
                         }
                     }
                 }

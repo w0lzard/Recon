@@ -1,8 +1,11 @@
 package dev.wolzard.recon.work
 
 import android.content.Context
+import androidx.work.BackoffPolicy
+import androidx.work.Constraints
 import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
@@ -26,6 +29,9 @@ object JobQueue {
     private const val KEY_ID = "jobId"
     private const val KEY_ACTION = "action"
     private const val KEY_REQUEUE = "requeue"
+    private const val BACKOFF_SECONDS = 30L
+    /** Automatic tries after the first run, for FailureReason.NETWORK only. */
+    const val NETWORK_RETRIES = 3
 
     fun tag(id: String) = "job:$id"
     fun waitName(id: String) = "recon-wait-$id"
@@ -40,6 +46,9 @@ object JobQueue {
     fun enqueue(context: Context, id: String, action: UserAction = UserAction.RUN) {
         val request = OneTimeWorkRequestBuilder<JobWorker>()
             .setInputData(input(id, action))
+            // A job shared offline waits for a connection; a NETWORK failure retries with this backoff (JobWorker, 3 tries).
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_SECONDS, TimeUnit.SECONDS)
             .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .addTag(tag(id))
             .build()

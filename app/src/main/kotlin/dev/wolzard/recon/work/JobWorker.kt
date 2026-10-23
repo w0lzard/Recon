@@ -47,6 +47,12 @@ class JobWorker(context: Context, params: WorkerParameters) : CoroutineWorker(co
         }
 
         val job = store.get(id) ?: return Result.success()
+        // NETWORK only: back to QUEUED (the failure stays on the job) and WorkManager retries with backoff once online.
+        // ponytail: a backing-off job holds the one-at-a-time chain; it is capped at NETWORK_RETRIES tries.
+        if (job.state == JobState.FAILED && job.failure == FailureReason.NETWORK && runAttemptCount < JobQueue.NETWORK_RETRIES) {
+            store.update(id) { it.copy(state = JobState.QUEUED, progress = null) }
+            return Result.retry()
+        }
         when (job.state) {
             JobState.WAITING_QUOTA -> JobQueue.enqueueAfter(applicationContext, id, action, (job.retryAtEpochMs ?: clock()) - clock())
             JobState.DONE, JobState.FAILED -> presenter.finished(job, summary(job))

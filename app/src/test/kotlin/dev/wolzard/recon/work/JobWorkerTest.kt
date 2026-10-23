@@ -86,6 +86,31 @@ class JobWorkerTest {
         assertEquals(FailureReason.UNKNOWN, job.failure)
     }
 
+    @Test fun networkFailureIsQueuedAgainAndRetriedWithBackoffUntilThreeTries() = runBlocking {
+        val id = store.create("https://youtu.be/x", null)
+        behaviour = { store.update(it) { j -> j.copy(state = JobState.FAILED, failure = FailureReason.NETWORK) } }
+        assertEquals(ListenableWorker.Result.retry(), worker(id).doWork())
+        assertEquals(JobState.QUEUED, store.get(id)!!.state)
+        store.update(id) { it.copy(state = JobState.FAILED) }
+        val last = TestListenableWorkerBuilder<JobWorker>(ctx).setInputData(JobQueue.input(id, UserAction.RUN)).setRunAttemptCount(JobQueue.NETWORK_RETRIES).build()
+        assertEquals(ListenableWorker.Result.success(), last.doWork())
+        assertEquals(JobState.FAILED, store.get(id)!!.state)
+    }
+
+    @Test fun otherFailuresAreNeverRetriedAutomatically() = runBlocking {
+        val id = store.create("https://youtu.be/x", null)
+        behaviour = { store.update(it) { j -> j.copy(state = JobState.FAILED, failure = FailureReason.DOWNLOAD_FAILED) } }
+        assertEquals(ListenableWorker.Result.success(), worker(id).doWork())
+        assertEquals(JobState.FAILED, store.get(id)!!.state)
+    }
+
+    @Test fun jobRequestNeedsANetworkAndBacksOffExponentially() {
+        val id = "j1"
+        JobQueue.enqueue(ctx, id)
+        val info = WorkManager.getInstance(ctx).getWorkInfosByTag(JobQueue.tag(id)).get().single()
+        assertEquals(androidx.work.NetworkType.CONNECTED, info.constraints.requiredNetworkType)
+    }
+
     @Test fun startupSweepDeletesOrphanDirsAndKeepsThisJobsDir() = runBlocking {
         val id = store.create("https://youtu.be/x", null)
         val orphan = File(ctx.cacheDir, "jobs/orphan-job").apply { mkdirs(); File(this, "video.mp4").writeText("x") }

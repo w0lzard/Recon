@@ -162,4 +162,16 @@ class ContextViewModelTest {
         ContextViewModel("", actions, localUri = "/data/shared/abc/video.mp4") { fetched = true; null }
         assertEquals(false, fetched)
     }
+
+    @Test fun sameLinkAfterANetworkFailureRetriesThatJob() = runBlocking {
+        val link = "https://www.instagram.com/reel/abc/"
+        val normalizer = dev.wolzard.recon.core.link.UrlNormalizer(object : dev.wolzard.recon.core.port.LinkResolver { override suspend fun resolve(url: String) = url })
+        val id = store.create(link, null, normalizedUrl = normalizer.normalize(link))
+        store.update(id) { it.copy(state = dev.wolzard.recon.core.model.JobState.FAILED, failure = dev.wolzard.recon.core.model.FailureReason.NETWORK) }
+        val v = ContextViewModel(link, actions, store, normalizer)
+        v.onIntent(ContextIntent.Skip)
+        assertEquals(1, jobs().size)
+        assertEquals(dev.wolzard.recon.core.model.JobState.QUEUED, store.get(id)!!.state)
+        assertEquals(listOf(id to UserAction.RUN), queued)
+    }
 }

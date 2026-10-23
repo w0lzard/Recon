@@ -190,6 +190,28 @@ class ScreenshotsTest {
         File(dir, "duplicate_notice$suffix.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
+    // --- D37: the library
+
+    private val libraryEntries = listOf(
+        dev.wolzard.recon.core.model.Entry(1, EntityType.REPO, "github:kmori/stowly", "kmori/stowly", "Symlink farm that keeps dotfiles in one repo.", "https://github.com/kmori/stowly", 4100, "Verified", 3, now, now),
+        dev.wolzard.recon.core.model.Entry(2, EntityType.APP, "app:tern", "Tern", "Terminal emulator seen in the window title.", null, null, "Unverified", 1, now, now),
+        dev.wolzard.recon.core.model.Entry(3, EntityType.MEDIA, "media:paper-satellites", "Paper Satellites", "Film, 2019.", "https://papersatellitesfilm.com", null, "Verified", 1, now, now),
+    )
+
+    @Test fun libraryList() = shot("library") { dev.wolzard.recon.feature.library.LibraryScreen(dev.wolzard.recon.feature.library.LibraryState(entries = libraryEntries, loaded = true)) {} }
+
+    @Test fun libraryEmpty() = shot("library_empty") { dev.wolzard.recon.feature.library.LibraryScreen(dev.wolzard.recon.feature.library.LibraryState(loaded = true)) {} }
+
+    @Test fun entryDetail() = shot("entry_detail") {
+        val rows = listOf(
+            HomeRow.from(job(JobState.DONE).copy(id = "a", videoTitle = "My desk setup and the CLI behind my dotfiles", createdAt = now - 3_600_000), now),
+            HomeRow.from(job(JobState.DONE).copy(id = "b", videoTitle = "Dotfiles in 60 seconds", createdAt = now - 90_000_000), now),
+        )
+        dev.wolzard.recon.feature.library.EntryScreen(
+            dev.wolzard.recon.feature.library.EntryState(libraryEntries[0].copy(aliases = listOf("kmori-stowly", "stowly")), rows, loaded = true),
+        ) {}
+    }
+
     @Test fun contextFilled() = shot("context_filled") {
         ContextScreen(ContextState("https://www.instagram.com/reel/abc/", "instagram.com", text = "What song is this, and who sings it?")) {}
     }

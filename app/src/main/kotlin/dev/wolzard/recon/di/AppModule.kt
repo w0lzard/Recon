@@ -16,6 +16,7 @@ import dev.wolzard.recon.data.db.MIGRATION_2_3
 import dev.wolzard.recon.data.db.MIGRATION_3_4
 import dev.wolzard.recon.data.db.MIGRATION_4_5
 import dev.wolzard.recon.data.db.MIGRATION_5_6
+import dev.wolzard.recon.data.db.MIGRATION_6_7
 import dev.wolzard.recon.core.link.UrlNormalizer
 import dev.wolzard.recon.data.db.ReconDb
 import dev.wolzard.recon.data.db.RoomJobStore
@@ -67,7 +68,7 @@ import org.koin.dsl.module
 
 val appModule = module {
     single { OkHttpClient() }
-    single { Room.databaseBuilder(androidContext(), ReconDb::class.java, "recon.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).build() }
+    single { Room.databaseBuilder(androidContext(), ReconDb::class.java, "recon.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7).build() }
     single<JobStore> { RoomJobStore(get()) }
     single<LinkResolver> { OkHttpLinkResolver(get()) }
     single { UrlNormalizer(get()) }

@@ -52,7 +52,7 @@ class MigrationTest {
         db.close()
     }
 
-    private fun open() = Room.databaseBuilder(ctx, ReconDb::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).allowMainThreadQueries().build()
+    private fun open() = Room.databaseBuilder(ctx, ReconDb::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7).allowMainThreadQueries().build()
 
     @Test fun v1RowsKeepTheirDataAndGetNoContext() {
         createV1(insertRow = true)
@@ -243,6 +243,45 @@ class MigrationTest {
             assertEquals(true, "normalizedUrl" in cols)
             assertEquals(false, "failedStep" in cols || "rawJson" in cols)
         }
+        db.close()
+    }
+
+    // --- D37: version 6 to 7 adds the library tables and the FTS4 name index
+
+    @Test fun v6RowsSurviveAndTheLibraryWorksWithSearchAndCascades() = runBlocking {
+        create(6) { db ->
+            db.execSQL(
+                "INSERT INTO jobs (id, sharedText, url, localUri, state, failure, failureDetail, retryAtEpochMs, progress, analysisJson, resultJson, createdAt, updatedAt) " +
+                    "VALUES ('j6', 'https://youtu.be/f', 'https://youtu.be/f', NULL, 'DONE', NULL, NULL, NULL, NULL, NULL, '{\"r\":6}', 110, 120)",
+            )
+        }
+        val room = open()
+        try {
+            assertEquals("{\"r\":6}", RoomJobStore(room).get("j6")!!.resultJson)
+            val dao = room.entries()
+            val id = dao.insert(EntryEntity(canonicalType = "repo", canonicalKey = "github:kmori/stowly", name = "kmori/stowly", summary = "Dotfile manager", primaryLink = null, stars = 4100, status = "Verified", createdAt = 1, updatedAt = 2))
+            dao.insertAlias(AliasEntity(entryId = id, alias = "stowly"))
+            dao.insertLink(EntryJobEntity(id, "j6", 3))
+            assertEquals(listOf(id), dao.observeList(1, emptyList(), "\"dotfile\"*", "dotfile", 10).first().map { it.entry.id })
+            assertEquals(listOf(id), dao.observeList(1, emptyList(), "\"stow\"*", "stow", 10).first().map { it.entry.id }) // prefix, by name
+            assertEquals(1, dao.observeList(0, listOf("repo"), "", "", 10).first().single().videos)
+            assertEquals(emptyList<Long>(), dao.observeList(0, listOf("app"), "", "", 10).first().map { it.entry.id })
+            // The index follows edits: the old word stops matching, the new one starts.
+            dao.update(dao.byKey("github:kmori/stowly")!!.copy(summary = "Symlink farm"))
+            assertEquals(emptyList<Long>(), dao.observeList(1, emptyList(), "\"dotfile\"*", "dotfile", 10).first().map { it.entry.id })
+            assertEquals(listOf(id), dao.observeList(1, emptyList(), "\"symlink\"*", "symlink", 10).first().map { it.entry.id })
+            // Deleting the video removes the link; with no video left the entry is not listed.
+            RoomJobStore(room).delete("j6")
+            assertEquals(emptyList<Long>(), dao.observeList(1, emptyList(), "", "", 10).first().map { it.entry.id })
+        } finally {
+            room.close()
+        }
+    }
+
+    @Test fun v6SchemaHasNoLibraryTables() { // guards the test itself
+        create(6) { }
+        val db = SQLiteDatabase.openDatabase(ctx.getDatabasePath(name).path, null, SQLiteDatabase.OPEN_READONLY)
+        db.rawQuery("SELECT name FROM sqlite_master WHERE name LIKE 'entr%'", null).use { assertEquals(0, it.count) }
         db.close()
     }
 }

@@ -1,7 +1,6 @@
 package dev.wolzard.recon.work
 
 import android.content.Context
-import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
@@ -29,6 +28,7 @@ object JobQueue {
     private const val KEY_ID = "jobId"
     private const val KEY_ACTION = "action"
     private const val KEY_REQUEUE = "requeue"
+    private const val KEY_TRIES = "tries"
     private const val BACKOFF_SECONDS = 30L
     /** Automatic tries after the first run, for FailureReason.NETWORK only. */
     const val NETWORK_RETRIES = 3
@@ -36,19 +36,22 @@ object JobQueue {
     fun tag(id: String) = "job:$id"
     fun waitName(id: String) = "recon-wait-$id"
 
-    fun input(id: String, action: UserAction, requeue: Boolean = false): Data =
-        workDataOf(KEY_ID to id, KEY_ACTION to action.name, KEY_REQUEUE to requeue)
+    fun input(id: String, action: UserAction, requeue: Boolean = false, tries: Int = 0): Data =
+        workDataOf(KEY_ID to id, KEY_ACTION to action.name, KEY_REQUEUE to requeue, KEY_TRIES to tries)
 
     fun idOf(d: Data): String? = d.getString(KEY_ID)
     fun actionOf(d: Data): UserAction = d.getString(KEY_ACTION)?.let { runCatching { UserAction.valueOf(it) }.getOrNull() } ?: UserAction.RUN
     fun isRequeue(d: Data) = d.getBoolean(KEY_REQUEUE, false)
+    /** Automatic NETWORK retries already used by this job's run. */
+    fun triesOf(d: Data) = d.getInt(KEY_TRIES, 0)
+    /** Wait before automatic retry number [tries] + 1: 30 s, 60 s, 120 s. Spent in separate wait work, not in the chain. */
+    fun retryDelayMs(tries: Int) = TimeUnit.SECONDS.toMillis(BACKOFF_SECONDS shl tries)
 
-    fun enqueue(context: Context, id: String, action: UserAction = UserAction.RUN) {
+    fun enqueue(context: Context, id: String, action: UserAction = UserAction.RUN, tries: Int = 0) {
         val request = OneTimeWorkRequestBuilder<JobWorker>()
-            .setInputData(input(id, action))
-            // A job shared offline waits for a connection; a NETWORK failure retries with this backoff (JobWorker, 3 tries).
+            .setInputData(input(id, action, tries = tries))
+            // A job shared offline waits for a connection; a NETWORK failure waits in its own delayed work (JobWorker, 3 tries).
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_SECONDS, TimeUnit.SECONDS)
             .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .addTag(tag(id))
             .build()
@@ -71,9 +74,9 @@ object JobQueue {
     }
 
     /** No network calls until [delayMs] has passed; then the job re-joins the main chain once. */
-    fun enqueueAfter(context: Context, id: String, action: UserAction, delayMs: Long) {
+    fun enqueueAfter(context: Context, id: String, action: UserAction, delayMs: Long, tries: Int = 0) {
         val request = OneTimeWorkRequestBuilder<JobWorker>()
-            .setInputData(input(id, action, requeue = true))
+            .setInputData(input(id, action, requeue = true, tries = tries))
             .setInitialDelay(delayMs.coerceAtLeast(0), TimeUnit.MILLISECONDS)
             .addTag(tag(id))
             .build()

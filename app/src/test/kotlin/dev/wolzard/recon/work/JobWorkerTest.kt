@@ -86,13 +86,19 @@ class JobWorkerTest {
         assertEquals(FailureReason.UNKNOWN, job.failure)
     }
 
-    @Test fun networkFailureIsQueuedAgainAndRetriedWithBackoffUntilThreeTries() = runBlocking {
+    @Test fun networkFailureWaitsInItsOwnWorkWithDoublingDelayUntilThreeTries() = runBlocking {
         val id = store.create("https://youtu.be/x", null)
         behaviour = { store.update(it) { j -> j.copy(state = JobState.FAILED, failure = FailureReason.NETWORK) } }
-        assertEquals(ListenableWorker.Result.retry(), worker(id).doWork())
+        assertEquals(ListenableWorker.Result.success(), worker(id).doWork())
         assertEquals(JobState.QUEUED, store.get(id)!!.state)
+        val wait = WorkManager.getInstance(ctx).getWorkInfosForUniqueWork(JobQueue.waitName(id)).get().single()
+        assertEquals(30_000L, wait.initialDelayMillis)
+        assertEquals(60_000L, JobQueue.retryDelayMs(1))
+        assertEquals(120_000L, JobQueue.retryDelayMs(2))
+        // The chain is not held: nothing of this job sits in it.
+        assertTrue(WorkManager.getInstance(ctx).getWorkInfosForUniqueWork(JobQueue.NAME).get().isEmpty())
         store.update(id) { it.copy(state = JobState.FAILED) }
-        val last = TestListenableWorkerBuilder<JobWorker>(ctx).setInputData(JobQueue.input(id, UserAction.RUN)).setRunAttemptCount(JobQueue.NETWORK_RETRIES).build()
+        val last = TestListenableWorkerBuilder<JobWorker>(ctx).setInputData(JobQueue.input(id, UserAction.RUN, tries = JobQueue.NETWORK_RETRIES)).build()
         assertEquals(ListenableWorker.Result.success(), last.doWork())
         assertEquals(JobState.FAILED, store.get(id)!!.state)
     }
@@ -104,7 +110,7 @@ class JobWorkerTest {
         assertEquals(JobState.FAILED, store.get(id)!!.state)
     }
 
-    @Test fun jobRequestNeedsANetworkAndBacksOffExponentially() {
+    @Test fun jobRequestNeedsANetwork() {
         val id = "j1"
         JobQueue.enqueue(ctx, id)
         val info = WorkManager.getInstance(ctx).getWorkInfosByTag(JobQueue.tag(id)).get().single()

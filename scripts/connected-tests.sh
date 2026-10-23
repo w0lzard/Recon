@@ -3,6 +3,11 @@
 # number of tests, all passing. Gradle can say BUILD SUCCESSFUL after an install failure with zero
 # tests run, and an old report would hide that, so old results are deleted first.
 # Usage: scripts/connected-tests.sh [expected] [extra gradlew args...]
+# Env:
+#   ANDROID_SERIAL  device to use (e.g. emulator-5556 when several AVDs run). Physical devices are refused.
+#   MAX_SKIPPED     skipped tests allowed (default 0). Live opt-in tests skip (orchestrator reports them as
+#                   assumption failures, counted here as skipped); the live B1-B6 tests need MAX_SKIPPED=6.
+# Real failures stay FAILED, e.g. YtDlpFetcherLargeTest (YouTube bot-check) fails the run; it is never counted as skipped.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 dir=app/build/outputs/androidTest-results/connected/debug

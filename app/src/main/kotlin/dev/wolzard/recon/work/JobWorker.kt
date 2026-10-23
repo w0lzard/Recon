@@ -28,7 +28,7 @@ class JobWorker(context: Context, params: WorkerParameters) : CoroutineWorker(co
         val id = JobQueue.idOf(inputData) ?: return Result.failure()
         val action = JobQueue.actionOf(inputData)
         if (JobQueue.isRequeue(inputData)) {
-            JobQueue.enqueue(applicationContext, id, action) // waited for quota; re-join the one-at-a-time chain
+            JobQueue.enqueue(applicationContext, id, action, JobQueue.triesOf(inputData)) // waited for quota; re-join the one-at-a-time chain
             return Result.success()
         }
         // Deleted, or finished already (a job queued twice after a cancel, see JobActions.cancel): nothing to run.
@@ -47,11 +47,13 @@ class JobWorker(context: Context, params: WorkerParameters) : CoroutineWorker(co
         }
 
         val job = store.get(id) ?: return Result.success()
-        // NETWORK only: back to QUEUED (the failure stays on the job) and WorkManager retries with backoff once online.
-        // ponytail: a backing-off job holds the one-at-a-time chain; it is capped at NETWORK_RETRIES tries.
-        if (job.state == JobState.FAILED && job.failure == FailureReason.NETWORK && runAttemptCount < JobQueue.NETWORK_RETRIES) {
+        // NETWORK only: back to QUEUED (the failure stays on the job) and wait in separate delayed work, so the
+        // one-at-a-time chain is free meanwhile (waits are 30/60/120 s); then it re-joins the chain, which needs a connection.
+        val tries = JobQueue.triesOf(inputData)
+        if (job.state == JobState.FAILED && job.failure == FailureReason.NETWORK && tries < JobQueue.NETWORK_RETRIES) {
             store.update(id) { it.copy(state = JobState.QUEUED, progress = null) }
-            return Result.retry()
+            JobQueue.enqueueAfter(applicationContext, id, action, JobQueue.retryDelayMs(tries), tries + 1)
+            return Result.success()
         }
         when (job.state) {
             JobState.WAITING_QUOTA -> JobQueue.enqueueAfter(applicationContext, id, action, (job.retryAtEpochMs ?: clock()) - clock())

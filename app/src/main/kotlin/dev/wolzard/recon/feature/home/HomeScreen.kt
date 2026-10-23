@@ -31,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -187,6 +188,23 @@ private fun RepeatedFailureBanner(reason: FailureReason) {
     }
 }
 
+/** One Recent row; the Library's entry screen lists its videos with the same row. */
+@Composable
+internal fun JobRow(r: HomeRow, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 88.dp).clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Thumb(r.thumbnailUrl, 50.dp, 50.dp, shape = MaterialTheme.shapes.small, fallback = r.tileIcon)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            if (r.title != null) Text(r.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium))
+            else Text(r.host, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge.copy(fontFamily = Mono, fontWeight = FontWeight.Medium, fontSize = 14.sp))
+            Text(r.detail, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        }
+        StatusChip(r.state, r.kind, icon = r.icon)
+    }
+}
+
 @Composable
 fun HomeScreen(state: HomeState, onIntent: (HomeIntent) -> Unit) {
     val rows = state.rows
@@ -194,6 +212,7 @@ fun HomeScreen(state: HomeState, onIntent: (HomeIntent) -> Unit) {
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().height(64.dp).padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Wordmark(Modifier.weight(1f))
+            IconButton(onClick = { onIntent(HomeIntent.OpenLibrary) }, Modifier.testTag("open_library")) { Icon(Symbols.MenuBook, contentDescription = "Library") }
             IconButton(onClick = { onIntent(HomeIntent.OpenSettings) }) { Icon(Symbols.Settings, contentDescription = "Settings") }
         }
         // ponytail: the update banner lives in Settings now (design 1l); HomeState.update stays for the next layout pass.
@@ -217,22 +236,14 @@ fun HomeScreen(state: HomeState, onIntent: (HomeIntent) -> Unit) {
         }
         Spacer(Modifier.height(16.dp))
         HorizontalDivider(color = line)
-        Text("RECENT · ${rows.size}", Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 6.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
-        LazyColumn {
+        Text("RECENT · ${state.total.coerceAtLeast(rows.size)}", Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 6.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+        LazyColumn(Modifier.testTag("home_list")) {
             items(rows, key = { it.id }) { r ->
-                Row(
-                    Modifier.fillMaxWidth().heightIn(min = 88.dp).clickable { onIntent(HomeIntent.OpenJob(r.id)) }.padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Thumb(r.thumbnailUrl, 50.dp, 50.dp, shape = MaterialTheme.shapes.small, fallback = r.tileIcon)
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        if (r.title != null) Text(r.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium))
-                        else Text(r.host, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge.copy(fontFamily = Mono, fontWeight = FontWeight.Medium, fontSize = 14.sp))
-                        Text(r.detail, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                    }
-                    StatusChip(r.state, r.kind, icon = r.icon)
-                }
+                JobRow(r) { onIntent(HomeIntent.OpenJob(r.id)) }
                 HorizontalDivider(color = line)
+            }
+            if (state.hasMore) item {
+                TextButton(onClick = { onIntent(HomeIntent.ShowMore) }, Modifier.fillMaxWidth().padding(vertical = 8.dp).testTag("show_more")) { Text("Show more") }
             }
         }
     }

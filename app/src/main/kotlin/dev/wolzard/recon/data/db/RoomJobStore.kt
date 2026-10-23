@@ -13,6 +13,8 @@ class RoomJobStore(private val db: ReconDb, private val clock: () -> Long = Syst
     private val dao = db.jobs()
 
     override fun observeAll(): Flow<List<Job>> = dao.observeAll().map { list -> list.map { it.toJob() } }
+    override fun observeRecent(limit: Int): Flow<List<Job>> = dao.observeRecent(limit).map { list -> list.map { it.toJob() } }
+    override fun observeCount(): Flow<Int> = dao.observeCount()
     override fun observe(id: String): Flow<Job?> = dao.observe(id).map { it?.toJob() }
     override suspend fun get(id: String): Job? = dao.get(id)?.toJob()
 

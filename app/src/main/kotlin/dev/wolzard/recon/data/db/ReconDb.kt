@@ -52,6 +52,8 @@ data class JobEntity(
 @Dao
 interface JobDao {
     @Query("SELECT * FROM jobs ORDER BY createdAt DESC") fun observeAll(): Flow<List<JobEntity>>
+    @Query("SELECT $LIGHT_JOB FROM jobs ORDER BY createdAt DESC LIMIT :limit") fun observeRecent(limit: Int): Flow<List<JobEntity>>
+    @Query("SELECT COUNT(*) FROM jobs") fun observeCount(): Flow<Int>
     @Query("SELECT * FROM jobs WHERE id = :id") fun observe(id: String): Flow<JobEntity?>
     @Query("SELECT * FROM jobs WHERE id = :id") suspend fun get(id: String): JobEntity?
     @Query("SELECT * FROM jobs WHERE state IN (:states)") suspend fun inStates(states: List<JobState>): List<JobEntity>

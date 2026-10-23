@@ -55,6 +55,8 @@ class RunJobTest {
         val states = mutableListOf<JobState>()
         fun put(job: Job) { jobs.value = jobs.value + (job.id to job); states += job.state }
         override fun observeAll() = jobs.map { it.values.toList() }
+        override fun observeRecent(limit: Int) = jobs.map { it.values.toList().take(limit) }
+        override fun observeCount() = jobs.map { it.size }
         override fun observe(id: String) = jobs.map { it[id] }
         override suspend fun get(id: String) = jobs.value[id]
         override suspend fun create(sharedText: String, localUri: String?, userContext: String?, normalizedUrl: String?) = error("unused")

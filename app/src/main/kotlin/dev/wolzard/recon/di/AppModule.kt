@@ -130,4 +130,13 @@ val appModule = module {
     viewModel { dev.wolzard.recon.ShareSheetViewModel(get()) }
     viewModel { params -> ContextViewModel(params.get(), get(), get(), get(), params.values.getOrNull(1) as? String, get<LinkPreviewFetcher>()::fetch) }
     viewModel { HomeViewModel(get(), get()) }
+    viewModel {
+        // Jobs finished before the library existed are filed the first time it opens, once per install.
+        val prefs = androidContext().getSharedPreferences("library", android.content.Context.MODE_PRIVATE)
+        val entries = get<dev.wolzard.recon.core.port.EntryStore>()
+        dev.wolzard.recon.feature.library.LibraryViewModel(entries) {
+            if (!prefs.getBoolean("backfilled", false)) { entries.backfill(); prefs.edit().putBoolean("backfilled", true).apply() }
+        }
+    }
+    viewModel { params -> dev.wolzard.recon.feature.library.EntryViewModel(params.get(), get()) }
 }

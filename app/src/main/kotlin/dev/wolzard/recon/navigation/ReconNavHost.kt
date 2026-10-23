@@ -19,6 +19,8 @@ import dev.wolzard.recon.feature.home.HomeViewModel
 import dev.wolzard.recon.feature.job.JobIntent
 import dev.wolzard.recon.feature.job.JobRoute
 import dev.wolzard.recon.feature.job.JobViewModel
+import dev.wolzard.recon.feature.library.EntryRoute
+import dev.wolzard.recon.feature.library.LibraryRoute
 import dev.wolzard.recon.feature.notice.NoticeScreen
 import dev.wolzard.recon.feature.settings.SettingsRoute
 import dev.wolzard.recon.feature.signin.SignInRoute
@@ -31,6 +33,8 @@ import org.koin.core.parameter.parametersOf
 @Serializable object SettingsDestination
 @Serializable object SignInDestination
 @Serializable object NoticeDestination
+@Serializable object LibraryDestination
+@Serializable data class EntryDestination(val id: Long)
 @Serializable data class JobDestination(val id: String)
 @Serializable data class ContextDestination(val link: String)
 
@@ -75,7 +79,14 @@ fun ReconNavHost(
     Scaffold { padding ->
         NavHost(nav, startDestination = start, modifier = Modifier.padding(padding)) {
             composable<HomeDestination> {
-                HomeRoute(homeVm, onOpenJob = { nav.navigate(JobDestination(it)) }, onOpenSettings = { nav.navigate(SettingsDestination) }, onAddContext = { nav.navigate(ContextDestination(it)) })
+                HomeRoute(homeVm, onOpenJob = { nav.navigate(JobDestination(it)) }, onOpenSettings = { nav.navigate(SettingsDestination) }, onOpenLibrary = { nav.navigate(LibraryDestination) }, onAddContext = { nav.navigate(ContextDestination(it)) })
+            }
+            composable<LibraryDestination> {
+                LibraryRoute(koinViewModel(), onOpenEntry = { nav.navigate(EntryDestination(it)) }, onBack = { nav.popBackStack() })
+            }
+            composable<EntryDestination> { entry ->
+                val id = entry.toRoute<EntryDestination>().id
+                EntryRoute(koinViewModel(key = "entry-$id") { parametersOf(id) }, onOpenJob = { nav.navigate(JobDestination(it)) }, onBack = { nav.popBackStack() })
             }
             composable<JobDestination> { entry ->
                 val id = entry.toRoute<JobDestination>().id

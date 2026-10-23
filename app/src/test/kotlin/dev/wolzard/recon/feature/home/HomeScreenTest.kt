@@ -5,6 +5,9 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -85,5 +88,21 @@ class HomeScreenTest {
         assertEquals("1 h", at(60))
         assertEquals("Yesterday", at(15 * 60))
         assertEquals("12 Oct", at(2 * 24 * 60))
+    }
+
+    @Test fun showMoreAppearsOnlyWhenJobsAreLeftAndSendsTheIntent() {
+        val intents = mutableListOf<HomeIntent>()
+        val rows = (1..3).map { HomeRow("j$it", "Done", "youtube.com", "T$it", "youtube.com · now") }
+        compose.setContent { HomeScreen(HomeState(rows, total = 40)) { intents += it } }
+        compose.onNodeWithText("RECENT · 40").assertExists()
+        compose.onNodeWithTag("home_list").performScrollToNode(hasTestTag("show_more"))
+        compose.onNodeWithTag("show_more").performClick()
+        compose.onNodeWithTag("open_library").performClick()
+        assertEquals(listOf(HomeIntent.ShowMore, HomeIntent.OpenLibrary), intents)
+    }
+
+    @Test fun noShowMoreWhenEverythingIsShown() {
+        compose.setContent { HomeScreen(HomeState(listOf(HomeRow("j1", "Done", "youtube.com", "T", "d")), total = 1)) {} }
+        compose.onAllNodesWithTag("show_more").assertCountEquals(0)
     }
 }

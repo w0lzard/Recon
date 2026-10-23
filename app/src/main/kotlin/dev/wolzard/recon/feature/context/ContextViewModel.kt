@@ -60,7 +60,7 @@ class ContextViewModel(
                         when (existing.state) {
                             JobState.DONE -> {
                                 if (context.isNullOrBlank()) {
-                                    send(ContextEffect.OpenJob(existing.id))
+                                    send(ContextEffect.OpenJob(existing.id, previousAt = existing.createdAt))
                                     return@launch
                                 } else {
                                     setState { copy(duplicateJobId = existing.id, starting = false) }

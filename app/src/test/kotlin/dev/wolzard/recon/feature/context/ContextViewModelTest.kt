@@ -175,4 +175,56 @@ class ContextViewModelTest {
         assertEquals(dev.wolzard.recon.core.model.JobState.QUEUED, store.get(id)!!.state)
         assertEquals(listOf(id to UserAction.RUN), queued)
     }
+
+    // --- duplicate check (D36)
+
+    private val link = "https://youtu.be/abc123?si=x"
+    private val normalizer = dev.wolzard.recon.core.link.UrlNormalizer(object : dev.wolzard.recon.core.port.LinkResolver { override suspend fun resolve(url: String) = url })
+    private suspend fun earlier(state: dev.wolzard.recon.core.model.JobState, failure: dev.wolzard.recon.core.model.FailureReason? = null): String {
+        val id = store.create("https://www.youtube.com/watch?v=abc123", null, normalizedUrl = normalizer.normalize(link))
+        store.update(id) { it.copy(state = state, failure = failure) }
+        return id
+    }
+
+    @Test fun finishedEarlierJobWithNoContextOpensItAndSaysWhen() = runBlocking {
+        val id = earlier(dev.wolzard.recon.core.model.JobState.DONE)
+        val v = ContextViewModel(link, actions, store, normalizer)
+        v.onIntent(ContextIntent.Skip)
+        val open = kotlinx.coroutines.withTimeout(5_000) { v.effects.first() } as ContextEffect.OpenJob
+        assertEquals(id, open.id)
+        assertTrue(open.previousAt != null)
+        assertTrue(queued.isEmpty())
+        assertEquals(1, jobs().size)
+    }
+
+    @Test fun finishedEarlierJobWithContextAsksAndCreatesNothing() = runBlocking {
+        val id = earlier(dev.wolzard.recon.core.model.JobState.DONE)
+        val v = ContextViewModel(link, actions, store, normalizer)
+        v.onIntent(ContextIntent.TextChanged("who is the speaker?"))
+        v.onIntent(ContextIntent.Start)
+        kotlinx.coroutines.withTimeout(5_000) { while (v.state.value.duplicateJobId == null) kotlinx.coroutines.delay(10) }
+        assertEquals(id, v.state.value.duplicateJobId)
+        assertTrue(queued.isEmpty())
+        assertEquals(1, jobs().size)
+    }
+
+    @Test fun jobAlreadyRunningOrWaitingIsOpenedNotQueuedTwice() = runBlocking {
+        for (st in listOf(dev.wolzard.recon.core.model.JobState.QUEUED, dev.wolzard.recon.core.model.JobState.ANALYSING, dev.wolzard.recon.core.model.JobState.WAITING_QUOTA)) {
+            store.observeAll().first().forEach { store.delete(it.id) }
+            val id = earlier(st)
+            val v = ContextViewModel(link, actions, store, normalizer)
+            v.onIntent(ContextIntent.Skip)
+            assertEquals(ContextEffect.OpenJob(id), kotlinx.coroutines.withTimeout(5_000) { v.effects.first() })
+        }
+        assertTrue(queued.isEmpty())
+    }
+
+    @Test fun otherFailureStartsAFreshJobWithoutAsking() = runBlocking {
+        val old = earlier(dev.wolzard.recon.core.model.JobState.FAILED, dev.wolzard.recon.core.model.FailureReason.DOWNLOAD_FAILED)
+        val v = ContextViewModel(link, actions, store, normalizer)
+        v.onIntent(ContextIntent.Skip)
+        kotlinx.coroutines.withTimeout(5_000) { while (queued.isEmpty()) kotlinx.coroutines.delay(10) }
+        assertTrue(queued.single().first != old)
+        assertEquals(null, v.state.value.duplicateJobId)
+    }
 }

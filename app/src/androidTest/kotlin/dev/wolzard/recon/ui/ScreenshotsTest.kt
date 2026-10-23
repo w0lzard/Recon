@@ -175,6 +175,21 @@ class ScreenshotsTest {
         ContextScreen(ContextState("https://www.instagram.com/reel/abc/", "instagram.com")) {}
     }
 
+    /** D36: the duplicate prompt is a dialog window, which captureToImage skips; the whole screen is taken instead. */
+    @Test fun contextDuplicate() {
+        compose.setContent {
+            ReconTheme(androidx.compose.foundation.isSystemInDarkTheme()) {
+                androidx.compose.material3.Surface(color = androidx.compose.material3.MaterialTheme.colorScheme.background) {
+                    ContextScreen(ContextState("https://www.youtube.com/watch?v=abc", "youtube.com", text = "Who is the speaker?", duplicateJobId = "7f3a21c0")) {}
+                }
+            }
+        }
+        compose.waitForIdle()
+        Thread.sleep(500)
+        val bmp = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+        File(dir, "duplicate_notice$suffix.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
     @Test fun contextFilled() = shot("context_filled") {
         ContextScreen(ContextState("https://www.instagram.com/reel/abc/", "instagram.com", text = "What song is this, and who sings it?")) {}
     }

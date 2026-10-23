@@ -28,7 +28,8 @@ sealed interface ContextIntent {
 }
 
 sealed interface ContextEffect {
-    data class OpenJob(val id: String) : ContextEffect
+    /** [previousAt] is set when this opens an earlier finished analysis of the same link (D36): the route says so. */
+    data class OpenJob(val id: String, val previousAt: Long? = null) : ContextEffect
     data object NavigateBack : ContextEffect
 }
 

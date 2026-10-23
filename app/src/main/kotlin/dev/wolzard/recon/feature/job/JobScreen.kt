@@ -685,6 +685,7 @@ private fun FailedActions(job: Job, now: Long, onIntent: (JobIntent) -> Unit) {
             else -> if (!sharedFile) retry()
         }
         link?.let { TextButton(onClick = { onIntent(JobIntent.Open(it)) }, full, colors = plain) { Text("Open link in browser") } }
+        TextButton(onClick = { onIntent(JobIntent.CopyDiagnostics) }, full.testTag("copy_diagnostics"), colors = plain) { Text("Copy diagnostics") }
     }
     if (help) AlertDialog(
         onDismissRequest = { help = false },

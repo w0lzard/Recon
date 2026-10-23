@@ -29,6 +29,8 @@ sealed interface JobIntent {
     data class Open(val url: String) : JobIntent
     data object RequestSaveVideo : JobIntent
     data object DismissSaveDialog : JobIntent
+    /** Failed card: puts the run's facts (no link, cookies or tokens) on the clipboard. */
+    data object CopyDiagnostics : JobIntent
 }
 
 sealed interface JobEffect {
@@ -36,4 +38,5 @@ sealed interface JobEffect {
     data object NavigateToSignIn : JobEffect
     data object NavigateToSettings : JobEffect
     data class OpenUrl(val url: String) : JobEffect
+    data class CopyText(val text: String) : JobEffect
 }

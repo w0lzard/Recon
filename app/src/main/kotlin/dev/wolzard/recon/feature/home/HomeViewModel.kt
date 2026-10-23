@@ -1,6 +1,7 @@
 package dev.wolzard.recon.feature.home
 
 import androidx.lifecycle.viewModelScope
+import dev.wolzard.recon.core.diagnostics.Diagnostics
 import dev.wolzard.recon.core.link.LinkRouter
 import dev.wolzard.recon.core.port.JobStore
 import dev.wolzard.recon.data.update.UpdateChecker
@@ -12,8 +13,8 @@ import kotlinx.coroutines.launch
 class HomeViewModel(store: JobStore, private val updates: UpdateChecker) : MviViewModel<HomeState, HomeIntent, HomeEffect>(HomeState()) {
     init {
         viewModelScope.launch {
-            combine(store.observeAll(), updates.available) { jobs, update -> jobs.map(HomeRow::from) to update }
-                .collect { (rows, update) -> setState { copy(rows = rows, update = update) } }
+            combine(store.observeAll(), updates.available) { jobs, update -> Triple(jobs.map(HomeRow::from), update, Diagnostics.repeatedFailure(jobs)) }
+                .collect { (rows, update, repeated) -> setState { copy(rows = rows, update = update, repeatedFailure = repeated) } }
         }
     }
 

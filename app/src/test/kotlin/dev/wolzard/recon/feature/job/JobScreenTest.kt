@@ -64,7 +64,7 @@ class JobScreenTest {
     @Test fun videoUnreadable() = assertFailure(FailureReason.VIDEO_UNREADABLE, "Share a different file")
     @Test fun apiKeyMissing() = assertFailure(FailureReason.API_KEY_MISSING, "Sign in")
     @Test fun apiKeyInvalid() = assertFailure(FailureReason.API_KEY_INVALID, "Sign in again")
-    @Test fun network() = assertFailure(FailureReason.NETWORK, "Retry")
+    @Test fun network() = assertFailure(FailureReason.NETWORK, "Retry", "Copy diagnostics")
     @Test fun modelOutputInvalid() = assertFailure(FailureReason.MODEL_OUTPUT_INVALID, "Retry")
     @Test fun modelBusy() = assertFailure(FailureReason.MODEL_BUSY, "Retry")
     @Test fun unknownShowsDetail() {

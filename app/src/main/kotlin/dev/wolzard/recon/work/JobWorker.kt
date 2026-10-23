@@ -41,7 +41,7 @@ class JobWorker(context: Context, params: WorkerParameters) : CoroutineWorker(co
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            store.update(id) { it.copy(state = JobState.FAILED, failure = FailureReason.UNKNOWN, failureDetail = e::class.simpleName, progress = null) }
+            store.update(id) { it.copy(state = JobState.FAILED, failedStep = it.state, failure = FailureReason.UNKNOWN, failureDetail = e::class.simpleName, progress = null) }
             store.get(id)?.let { presenter.finished(it, null) }
             return Result.failure()
         }

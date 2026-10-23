@@ -1,5 +1,9 @@
 package dev.wolzard.recon.feature.job
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -20,6 +24,10 @@ fun JobRoute(vm: JobViewModel, clock: () -> Long, onBack: () -> Unit, onSignIn: 
             JobEffect.NavigateToSignIn -> onSignIn()
             JobEffect.NavigateToSettings -> onSettings()
             is JobEffect.OpenUrl -> if (effect.url.startsWith("https://")) ctx.openCustomTab(effect.url)
+            is JobEffect.CopyText -> {
+                (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.setPrimaryClip(ClipData.newPlainText("Recon diagnostics", effect.text))
+                Toast.makeText(ctx, "Diagnostics copied", Toast.LENGTH_SHORT).show()
+            }
         }
     }
     // The step card's clock and Retry's enabled state follow the time, not only store updates.

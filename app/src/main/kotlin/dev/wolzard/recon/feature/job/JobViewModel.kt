@@ -1,6 +1,7 @@
 package dev.wolzard.recon.feature.job
 
 import androidx.lifecycle.viewModelScope
+import dev.wolzard.recon.core.diagnostics.Diagnostics
 import dev.wolzard.recon.core.job.UserAction
 import dev.wolzard.recon.core.link.LinkRouter
 import dev.wolzard.recon.core.link.UrlNormalizer
@@ -40,7 +41,7 @@ class JobActions(
     private val json = Json { ignoreUnknownKeys = true }
 
     suspend fun requeue(id: String, action: UserAction) {
-        store.update(id) { it.copy(state = JobState.QUEUED, failure = null, failureDetail = null, retryAtEpochMs = null, progress = null) }
+        store.update(id) { it.copy(state = JobState.QUEUED, failure = null, failureDetail = null, failedStep = null, retryAtEpochMs = null, progress = null) }
         enqueue(id, action)
     }
 
@@ -104,6 +105,7 @@ class JobViewModel(
     store: JobStore,
     private val actions: JobActions,
     private val formatFetcher: VideoFormatFetcher? = null,
+    private val environment: String = "",
 ) : MviViewModel<JobViewState, JobIntent, JobEffect>(JobViewState()) {
     private companion object { val SIGN_IN_FAILURES = setOf(FailureReason.API_KEY_MISSING, FailureReason.API_KEY_INVALID) }
 
@@ -121,6 +123,10 @@ class JobViewModel(
             is JobIntent.Open -> send(JobEffect.OpenUrl(intent.url))
             JobIntent.DismissSaveDialog -> setState { copy(saveOptions = null, isProbingFormats = false, saveError = null) }
             JobIntent.RequestSaveVideo -> requestSaveVideo()
+            JobIntent.CopyDiagnostics -> state.value.job?.let { job ->
+                val r = state.value.result
+                send(JobEffect.CopyText(Diagnostics.text(job, environment, path = r?.path, model = r?.models?.get("analyse"))))
+            }
             else -> viewModelScope.launch {
                 when (intent) {
                     JobIntent.Retry -> actions.requeue(id, UserAction.RUN)

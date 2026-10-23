@@ -3,6 +3,8 @@ package dev.wolzard.recon.feature.home
 import dev.wolzard.recon.data.update.UpdateInfo
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -49,6 +51,17 @@ class HomeScreenTest {
         compose.onNodeWithText("RECENT · 2").assertExists()
         compose.onNodeWithText("A slime video.").performClick()
         assertEquals(listOf<HomeIntent>(HomeIntent.OpenJob("j1")), intents)
+    }
+
+    @Test fun repeatedFailureShowsTheBannerWithTheReasonsWording() {
+        compose.setContent { HomeScreen(HomeState(repeatedFailure = dev.wolzard.recon.core.model.FailureReason.NETWORK)) {} }
+        compose.onNodeWithText("Several recent jobs failed the same way").assertExists()
+        compose.onNodeWithText("No connection or the request timed out.").assertExists()
+    }
+
+    @Test fun noBannerWithoutARepeatedFailure() {
+        compose.setContent { HomeScreen(HomeState()) {} }
+        compose.onAllNodesWithTag("repeated_failure").assertCountEquals(0)
     }
 
     @Test fun startReconSendsTheFieldAndShowsTheError() {

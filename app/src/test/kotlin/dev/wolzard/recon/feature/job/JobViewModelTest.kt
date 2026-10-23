@@ -152,6 +152,17 @@ class JobViewModelTest {
         assertEquals(JobEffect.OpenUrl("https://github.com/x/y"), vm.effects.first())
     }
 
+    @Test fun copyDiagnosticsSendsTheRunsFactsWithoutTheLink() = runBlocking {
+        val id = store.create("my note https://youtu.be/secretid", null)
+        store.update(id) { it.copy(state = JobState.FAILED, failure = FailureReason.NETWORK, failedStep = JobState.DOWNLOADING, url = "https://youtu.be/secretid") }
+        val vm = JobViewModel(id, store, JobActions(store) { i, a -> queued += i to a }, environment = "Recon test")
+        withTimeout(5_000) { vm.state.first { it.job != null } }
+        vm.onIntent(JobIntent.CopyDiagnostics)
+        val text = (vm.effects.first() as JobEffect.CopyText).text
+        assertTrue(text, "Recon test" in text && "reason NETWORK" in text && "failed in DOWNLOADING" in text && "youtu.be" in text)
+        assertFalse(text, "secretid" in text || "my note" in text)
+    }
+
     @Test fun retryRequeuesTheJob() = runBlocking {
         val id = jobWithPicker()
         vm(id).onIntent(JobIntent.Retry)

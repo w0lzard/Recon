@@ -4,6 +4,9 @@ import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.ui.platform.testTag
+import dev.wolzard.recon.core.model.FailureReason
+import dev.wolzard.recon.feature.job.JobCopy
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -171,6 +174,19 @@ private fun clipboardText(ctx: Context): String =
     (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.primaryClip
         ?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(ctx)?.toString()?.trim().orEmpty()
 
+/** Three or more recent jobs failed for the same reason: say so once, above the list, with the reason's own wording. */
+@Composable
+private fun RepeatedFailureBanner(reason: FailureReason) {
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).testTag("repeated_failure")
+            .border(1.dp, MaterialTheme.colorScheme.error, MaterialTheme.shapes.medium).padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text("Several recent jobs failed the same way", style = MaterialTheme.typography.labelLarge)
+        Text(JobCopy.failureMessage(reason, null), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
 @Composable
 fun HomeScreen(state: HomeState, onIntent: (HomeIntent) -> Unit) {
     val rows = state.rows
@@ -182,6 +198,7 @@ fun HomeScreen(state: HomeState, onIntent: (HomeIntent) -> Unit) {
         }
         // ponytail: the update banner lives in Settings now (design 1l); HomeState.update stays for the next layout pass.
         LinkField(state.pasteError, onIntent)
+        state.repeatedFailure?.let { RepeatedFailureBanner(it) }
         if (rows.isEmpty()) {
             Box(
                 Modifier.fillMaxSize().padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 24.dp)

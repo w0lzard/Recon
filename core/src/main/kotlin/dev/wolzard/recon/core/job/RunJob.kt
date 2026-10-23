@@ -96,7 +96,7 @@ class RunJob(
             }
             store.update(jobId) {
                 it.copy(state = JobState.DONE, resultJson = json.encodeToString(JobResult.serializer(), result),
-                    failure = null, failureDetail = null, retryAtEpochMs = null, progress = null)
+                    failure = null, failureDetail = null, failedStep = null, retryAtEpochMs = null, progress = null)
             }
             finished = true
         } catch (e: CancellationException) {
@@ -202,7 +202,9 @@ class RunJob(
     }
 
     private suspend fun fail(id: String, reason: FailureReason, detail: String?, retryAt: Long?) {
-        store.update(id) { it.copy(state = JobState.FAILED, failure = reason, failureDetail = detail, retryAtEpochMs = retryAt, progress = null) }
+        store.update(id) {
+            it.copy(state = JobState.FAILED, failedStep = it.state.takeIf { s -> s != JobState.FAILED }, failure = reason, failureDetail = detail, retryAtEpochMs = retryAt, progress = null)
+        }
     }
 
     /** Only Recon's own copies under [sharedRoot] are deleted (never an arbitrary path). */

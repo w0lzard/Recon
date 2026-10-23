@@ -122,7 +122,7 @@ val appModule = module {
         )
     }
     single { VideoFormatFetcher(get()) }
-    viewModel { params -> JobViewModel(params.get(), get(), get(), get()) }
+    viewModel { params -> JobViewModel(params.get(), get(), get(), get(), "Recon ${BuildConfig.VERSION_NAME} · Android ${android.os.Build.VERSION.SDK_INT}") }
     single { LinkPreviewFetcher({ url -> get<YtDlpRunner>().run(url, listOf("--dump-json", "--skip-download", "--no-playlist"), "preview-${java.util.UUID.randomUUID()}") {} }) }
     single { ThumbnailLoader(get()) }
     viewModel { dev.wolzard.recon.ShareSheetViewModel(get()) }

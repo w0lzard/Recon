@@ -1,8 +1,9 @@
 package dev.wolzard.recon.feature.home
 
+import dev.wolzard.recon.core.model.FailureReason
 import dev.wolzard.recon.data.update.UpdateInfo
 
-data class HomeState(val rows: List<HomeRow> = emptyList(), val update: UpdateInfo? = null, val pasteError: String? = null)
+data class HomeState(val rows: List<HomeRow> = emptyList(), val update: UpdateInfo? = null, val pasteError: String? = null, val repeatedFailure: FailureReason? = null)
 
 sealed interface HomeIntent {
     data class OpenJob(val id: String) : HomeIntent

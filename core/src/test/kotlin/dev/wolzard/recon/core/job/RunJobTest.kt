@@ -213,6 +213,7 @@ class RunJobTest {
         assertEquals(JobState.FAILED, j.state)
         assertEquals(FailureReason.QUOTA_EXCEEDED, j.failure)
         assertEquals(5_000L, j.retryAtEpochMs)
+        assertEquals(JobState.ANALYSING, j.failedStep) // D35: the step that was running
     }
 
     @Test fun noQuotaWaitBackendNeverWritesWaitingQuota() = runTest {

@@ -42,6 +42,14 @@
   - Canonical link normalizer in `:core` (`UrlNormalizer.kt` for YouTube, Instagram, TikTok, X, web). Resolves short TikTok links with HEAD-only before key extraction.
   - Room v4→v5 adds indexed `normalizedUrl` column to `jobs`.
   - Duplicate behavior: completed jobs navigate directly or show re-analyse dialog if new context provided; in-flight/waiting jobs navigate directly; failed jobs start a fresh attempt without prompting.
+- **2026-10-23, D35 Phase 0 reliability and carry-overs (owner, branch `library`).** Numbering note: `docs/library-plan.md` labels its steps D29 to D34; those are step labels, not decisions. Decisions continue here from D35, one per phase.
+  - Advice footer shows whenever the claims list is non-empty (open item 3 closed). Waiting-screen copy was checked and holds no reset-time wording.
+  - A text share with no link creates no job (`ShareOutcome.NoLink`): Home shows the paste error inline, the share sheet an inline message.
+  - Job requests need a connection and back off exponentially (30 s). A `NETWORK` failure is queued again and retried up to 3 times; every other reason, and quota (1037, its own state), is not retried automatically. Sharing the same link again after a `NETWORK` failure retries that job (owner's rule; it overrides library-plan question 2's "fresh attempt" for this one reason, other failures still start fresh).
+  - Room 5→6 adds `failedStep` and `rawJson`. The failed step is set on failure and cleared on DONE and Retry. The model's reply is kept on the job (cap 100 KB), also when unreadable.
+  - Failed card: "Copy diagnostics" (host only, step times, sizes, reason; error detail scrubbed of cookies and tokens). Home banner when 3 of the last 5 finished jobs failed for the same reason (not UNSUPPORTED_LINK, not quota).
+  - Empty result with no answer: "Add context and retry" runs `UserAction.REANALYSE`, one fresh analysis with the new note; not offered for shared files.
+  - Verified: JVM 412 (`:core` 161, `:app` 251), migrations 5→6 tested. Connected on `recon30` (API 30): 75 ran, 68 passed, 6 live-opt-in skipped, 1 `YtDlpFetcherLargeTest` (bot-check, as before). Release APKs arm64 55,847,602 B and armeabi-v7a 49,194,468 B, +14 KB over v0.5.0.
 - **2026-10-17, D29 share sheet & D30 confidence percentage removal (owner):**
   - Share sheet merged to main with `android:windowSoftInputMode="adjustResize"` for API 26-28. Open item 3 (advice footer whenever claims list is non-empty) remains open.
   - D30 establishes status badge only; confidence percentage is removed from the answer card and future library entries.

@@ -150,7 +150,7 @@ class DuplicateCaptureFlowTest {
 
     @Test fun failedJobStartsFreshAttemptWithoutPrompting() {
         val failedId = runBlocking { store.create("https://www.tiktok.com/@user/video/71234567890", null, null, normalizedUrl = "tiktok:71234567890") }
-        runBlocking { store.update(failedId) { it.copy(state = JobState.FAILED, failure = dev.wolzard.recon.core.model.FailureReason.NETWORK) } }
+        runBlocking { store.update(failedId) { it.copy(state = JobState.FAILED, failure = dev.wolzard.recon.core.model.FailureReason.DOWNLOAD_FAILED) } }
 
         show("https://www.tiktok.com/@user/video/71234567890")
         compose.onNodeWithText("Skip").performClick()
@@ -163,5 +163,19 @@ class DuplicateCaptureFlowTest {
         // Both failed old job and new job kept in history
         val all = runBlocking { store.observeAll().first() }
         assertEquals(2, all.size)
+    }
+
+    @Test fun sameLinkAfterANetworkFailureRetriesThatJob() {
+        val failedId = runBlocking { store.create("https://www.tiktok.com/@user/video/71234567891", null, null, normalizedUrl = "tiktok:71234567891") }
+        runBlocking { store.update(failedId) { it.copy(state = JobState.FAILED, failure = dev.wolzard.recon.core.model.FailureReason.NETWORK) } }
+
+        show("https://www.tiktok.com/@user/video/71234567891")
+        compose.onNodeWithText("Skip").performClick()
+        compose.waitUntil(5_000) { openedId != null }
+
+        assertEquals(failedId, openedId)
+        assertEquals(listOf(failedId to UserAction.RUN), queued)
+        assertEquals(JobState.QUEUED, runBlocking { store.get(failedId) }!!.state)
+        assertEquals(1, runBlocking { store.observeAll().first() }.size)
     }
 }

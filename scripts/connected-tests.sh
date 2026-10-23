@@ -31,6 +31,9 @@ xmls=("$dir"/TEST-*.xml)
 read -r tests failures errors skipped < <(grep -ho '<testsuite [^>]*>' "${xmls[@]}" | awk '
   { for (i = 1; i <= NF; i++) if (split($i, kv, "=") == 2) { gsub(/"/, "", kv[2]); s[kv[1]] += kv[2] } }
   END { print s["tests"]+0, s["failures"]+0, s["errors"]+0, s["skipped"]+0 }')
+# Under the test orchestrator an assumption failure (live opt-in tests) is written as <failure>; count it as skipped.
+assumed=$(grep -ho '<failure[^>]*AssumptionViolatedException' "${xmls[@]}" | wc -l)
+failures=$((failures - assumed)); skipped=$((skipped + assumed))
 # Pull matrix artifacts if present
 mkdir -p app/build/matrix-artifacts
 "$adb" ${ANDROID_SERIAL:+-s "$ANDROID_SERIAL"} pull /sdcard/Download/matrix-artifacts/. app/build/matrix-artifacts/ >/dev/null 2>&1 || true

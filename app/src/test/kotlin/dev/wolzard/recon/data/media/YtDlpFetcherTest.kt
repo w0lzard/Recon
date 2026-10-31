@@ -30,7 +30,8 @@ class YtDlpFetcherTest {
         }
     }
 
-    private fun dest() = tmp.newFolder("job")
+    private var n = 0
+    private fun dest() = tmp.newFolder("job${n++}")
 
     @Test fun buildArgsIsTheExactS3List() {
         val d = File("/cache/jobs/1")
@@ -90,12 +91,30 @@ class YtDlpFetcherTest {
     }
 
     @Test fun ytDlpErrorIsDownloadFailedWithLastStderrLine() = runTest {
-        val runner = FakeRunner(fail = "WARNING: ffmpeg-location … does not exist!\nERROR: [Instagram] x: Requested content is not available, rate-limit reached or login required\n")
+        val runner = FakeRunner(fail = "WARNING: ffmpeg-location … does not exist!\nERROR: [youtube] x: Video unavailable. This video is not available\n")
         try {
-            YtDlpFetcher(runner).fetch("https://www.instagram.com/reel/x/", dest()); fail()
+            YtDlpFetcher(runner).fetch("https://www.youtube.com/watch?v=x", dest()); fail()
         } catch (e: AnalyzerException) {
             assertEquals(FailureReason.DOWNLOAD_FAILED, e.reason)
-            assertEquals("ERROR: [Instagram] x: Requested content is not available, rate-limit reached or login required", e.message)
+            assertEquals("ERROR: [youtube] x: Video unavailable. This video is not available", e.message)
+        }
+    }
+
+    @Test fun loginWallsMapToLoginRequiredNotRateLimitOrGeneric() = runTest {
+        val walls = listOf(
+            "ERROR: [Instagram] x: Requested content is not available, rate-limit reached or login required. Use --cookies-from-browser or --cookies for the authentication.",
+            "ERROR: [youtube] x: Private video. Sign in if you've been granted access to this video",
+            "ERROR: [youtube] x: Sign in to confirm your age. This video may be inappropriate for some users.",
+        )
+        for (w in walls) try {
+            YtDlpFetcher(FakeRunner(fail = w)).fetch("https://www.instagram.com/reel/x/", dest()); fail()
+        } catch (e: AnalyzerException) {
+            assertEquals(w, FailureReason.LOGIN_REQUIRED, e.reason)
+        }
+        try {
+            YtDlpFetcher(FakeRunner(fail = "ERROR: [Instagram] x: HTTP Error 429: Too Many Requests")).fetch("https://www.instagram.com/reel/x/", dest()); fail()
+        } catch (e: AnalyzerException) {
+            assertEquals(FailureReason.DOWNLOAD_FAILED, e.reason)   // a plain rate limit is not a login wall
         }
     }
 

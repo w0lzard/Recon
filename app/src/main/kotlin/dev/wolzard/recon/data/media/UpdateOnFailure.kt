@@ -11,9 +11,12 @@ object UpdateOnFailure {
 
     val NETWORK_RE = Regex("""Errno (7|-2|-3|101|110|111)|timed out|Network is unreachable|Temporary failure in name resolution""")
     private val UNSUPPORTED_RE = Regex("""Unsupported URL""", RegexOption.IGNORE_CASE)
-    private val PRIVATE_RE = Regex("""\bprivate\b|login required|sign in to confirm your age|members-only""", RegexOption.IGNORE_CASE)
+    /** The site wants a login: private video, Instagram's "rate-limit reached or login required" wall, age or members-only gates. */
+    private val LOGIN_RE = Regex("""\bprivate\b|login required|sign in to confirm your age|members-only""", RegexOption.IGNORE_CASE)
 
-    fun eligible(stderr: String) = !NETWORK_RE.containsMatchIn(stderr) && !UNSUPPORTED_RE.containsMatchIn(stderr) && !PRIVATE_RE.containsMatchIn(stderr)
+    fun isLoginWall(stderr: String) = LOGIN_RE.containsMatchIn(stderr)
+
+    fun eligible(stderr: String) = !NETWORK_RE.containsMatchIn(stderr) && !UNSUPPORTED_RE.containsMatchIn(stderr) && !isLoginWall(stderr)
 
     fun due(lastAttemptMs: Long?, nowMs: Long) = lastAttemptMs == null || nowMs - lastAttemptMs >= MIN_GAP_MS
 

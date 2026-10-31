@@ -673,6 +673,7 @@ private fun FailedActions(job: Job, now: Long, onIntent: (JobIntent) -> Unit) {
             FailureReason.API_KEY_MISSING, FailureReason.API_KEY_INVALID -> Button(onClick = { onIntent(JobIntent.SignIn) }, full, shape = MaterialTheme.shapes.small) {
                 Text(if (reason == FailureReason.API_KEY_INVALID) "Sign in again" else "Sign in")
             }
+            FailureReason.LOGIN_REQUIRED -> TextButton(onClick = { help = true }, full, colors = plain) { Text("Share the video file instead") }   // a retry cannot get past a login
             FailureReason.DOWNLOAD_FAILED -> {
                 if (!sharedFile) retry()
                 TextButton(onClick = { help = true }, full, colors = plain) { Text("Share the video file instead") }

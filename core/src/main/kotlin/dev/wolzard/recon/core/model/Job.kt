@@ -7,6 +7,7 @@ enum class JobState { QUEUED, WAITING_QUOTA, DOWNLOADING, ANALYSING, RESEARCHING
 enum class FailureReason {
     UNSUPPORTED_LINK, DOWNLOAD_FAILED, VIDEO_UNREADABLE, QUOTA_EXCEEDED,
     API_KEY_MISSING, API_KEY_INVALID, NETWORK, MODEL_OUTPUT_INVALID, MODEL_BUSY, UNKNOWN,
+    LOGIN_REQUIRED,   // the site wants a login (private video, Instagram login wall); nothing Recon can retry its way past
 }
 
 data class Job(

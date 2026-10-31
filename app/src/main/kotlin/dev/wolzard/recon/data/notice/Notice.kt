@@ -3,7 +3,7 @@ package dev.wolzard.recon.data.notice
 import android.content.SharedPreferences
 
 /** Raise when the notice text changes in a way users must re-accept. */
-const val NOTICE_VERSION = 5 // 2: Gemini web sign-in replaced the API key (D22); 3: account-ban risk spelled out (D25); 4: link preview call (D26); 5: design rows (Recon UI 1b)
+const val NOTICE_VERSION = 6 // 2: Gemini web sign-in replaced the API key (D22); 3: account-ban risk spelled out (D25); 4: link preview call (D26); 5: design rows (Recon UI 1b); 6: yt-dlp updates itself from GitHub after a failed download
 
 /** T16: the accepted notice version, in prefs. [version] is a parameter only so tests can bump it. */
 class Notice(private val prefs: SharedPreferences, private val version: Int = NOTICE_VERSION) {
@@ -22,6 +22,8 @@ class Notice(private val prefs: SharedPreferences, private val version: Int = NO
             "Use a secondary Google account." to "Automated use may put the signed-in account at risk.",
             "Results can be wrong." to "Check the sources before you act on anything.",
             "Not professional advice." to "Health, legal and financial output is information only.",
+            "Downloads can update their own code." to "If a link download fails, Recon fetches the newest yt-dlp from GitHub over HTTPS and runs it on your phone, at most once a day. " +
+                "That code isn't reviewed by Recon or by F-Droid.",
             "Outside the Play Store." to "Install updates only from the official GitHub releases.",
         )
     }

@@ -37,7 +37,7 @@ fun NoticeScreen(onAccept: () -> Unit) {
     val line = MaterialTheme.colorScheme.outlineVariant
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     // Same order as Notice.TEXT; the account row takes the Unverified ink, as in the design.
-    val icons = listOf(Symbols.CloudUpload, Symbols.Gavel, Symbols.LinkOff, Symbols.ManageAccounts, Symbols.Rule, Symbols.MedicalInformation, Symbols.Android)
+    val icons = listOf(Symbols.CloudUpload, Symbols.Gavel, Symbols.LinkOff, Symbols.ManageAccounts, Symbols.Rule, Symbols.MedicalInformation, Symbols.Code, Symbols.Android)
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

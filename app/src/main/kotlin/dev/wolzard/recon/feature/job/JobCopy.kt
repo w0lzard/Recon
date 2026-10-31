@@ -56,7 +56,8 @@ object JobCopy {
 
     fun failureMessage(reason: FailureReason, retryAt: Long?, detail: String? = null): String = when (reason) {
         FailureReason.UNSUPPORTED_LINK -> "Recon couldn't find a link in what you shared."
-        FailureReason.DOWNLOAD_FAILED -> "Couldn't download this video (it may be private or need login)."
+        FailureReason.DOWNLOAD_FAILED -> "Couldn't download this video."
+        FailureReason.LOGIN_REQUIRED -> "This video needs a login (it's private, or the site asks you to sign in). Recon can't download it, but you can share the video file instead."
         FailureReason.VIDEO_UNREADABLE -> "This video file couldn't be read."
         FailureReason.QUOTA_EXCEEDED -> "You've reached your Gemini usage limit. " + (retryAt?.let { "Try again after ${time(it)}." } ?: "Try again later.")
         FailureReason.API_KEY_MISSING -> "Sign in to Gemini to start."

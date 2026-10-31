@@ -45,7 +45,11 @@ class YtDlpFetcher(private val runner: YtDlpRunner) : MediaFetcher {
         } catch (e: YtDlpException) {
             val stderr = e.message.orEmpty()
             val last = stderr.lines().lastOrNull { it.startsWith("ERROR") } ?: stderr.lines().lastOrNull(String::isNotBlank).orEmpty()
-            val reason = if (NETWORK_RE.containsMatchIn(stderr)) FailureReason.NETWORK else FailureReason.DOWNLOAD_FAILED
+            val reason = when {
+                NETWORK_RE.containsMatchIn(stderr) -> FailureReason.NETWORK
+                UpdateOnFailure.isLoginWall(stderr) -> FailureReason.LOGIN_REQUIRED
+                else -> FailureReason.DOWNLOAD_FAILED
+            }
             throw AnalyzerException(reason, message = last.take(300), cause = e)
         }
     }

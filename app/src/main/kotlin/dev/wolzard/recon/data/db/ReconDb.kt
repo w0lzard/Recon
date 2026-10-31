@@ -63,7 +63,7 @@ interface JobDao {
     @Query("DELETE FROM jobs WHERE id = :id") suspend fun delete(id: String)
 }
 
-@Database(entities = [JobEntity::class, EntryEntity::class, AliasEntity::class, EntryJobEntity::class, EntryLinkEntity::class, EntryFts::class], version = 8, exportSchema = true)
+@Database(entities = [JobEntity::class, EntryEntity::class, AliasEntity::class, EntryJobEntity::class, EntryLinkEntity::class, SearchPhraseEntity::class, EntryFts::class, SearchPhraseFts::class], version = 9, exportSchema = true)
 abstract class ReconDb : RoomDatabase() {
     abstract fun jobs(): JobDao
     abstract fun entries(): EntryDao
@@ -144,6 +144,25 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
         db.execSQL("CREATE TABLE IF NOT EXISTS `entry_links` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `entryId` INTEGER NOT NULL, `url` TEXT NOT NULL, `linkType` TEXT NOT NULL, FOREIGN KEY(`entryId`) REFERENCES `entries`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )")
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_entry_links_entryId` ON `entry_links` (`entryId`)")
         db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_entry_links_entryId_url` ON `entry_links` (`entryId`, `url`)")
+    }
+}
+
+/** D39: structured fields on entries, the phrases people search by, and their FTS4 index. Existing entries keep null fields until a finished job names them again. */
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `entries` ADD COLUMN `problemSolved` TEXT")
+        db.execSQL("ALTER TABLE `entries` ADD COLUMN `keyFeaturesJson` TEXT")
+        db.execSQL("ALTER TABLE `entries` ADD COLUMN `useCasesJson` TEXT")
+        db.execSQL("ALTER TABLE `entries` ADD COLUMN `whenToUse` TEXT")
+        db.execSQL("ALTER TABLE `entries` ADD COLUMN `whenNotToUse` TEXT")
+        db.execSQL("CREATE TABLE IF NOT EXISTS `entry_search_phrases` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `entryId` INTEGER NOT NULL, `phrase` TEXT NOT NULL, FOREIGN KEY(`entryId`) REFERENCES `entries`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_entry_search_phrases_entryId` ON `entry_search_phrases` (`entryId`)")
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_entry_search_phrases_entryId_phrase` ON `entry_search_phrases` (`entryId`, `phrase`)")
+        db.execSQL("CREATE VIRTUAL TABLE IF NOT EXISTS `search_phrases_fts` USING FTS4(`phrase` TEXT NOT NULL, tokenize=unicode61, content=`entry_search_phrases`)")
+        db.execSQL("CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_search_phrases_fts_BEFORE_UPDATE BEFORE UPDATE ON `entry_search_phrases` BEGIN DELETE FROM `search_phrases_fts` WHERE `docid`=OLD.`rowid`; END")
+        db.execSQL("CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_search_phrases_fts_BEFORE_DELETE BEFORE DELETE ON `entry_search_phrases` BEGIN DELETE FROM `search_phrases_fts` WHERE `docid`=OLD.`rowid`; END")
+        db.execSQL("CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_search_phrases_fts_AFTER_UPDATE AFTER UPDATE ON `entry_search_phrases` BEGIN INSERT INTO `search_phrases_fts`(`docid`, `phrase`) VALUES (NEW.`rowid`, NEW.`phrase`); END")
+        db.execSQL("CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_search_phrases_fts_AFTER_INSERT AFTER INSERT ON `entry_search_phrases` BEGIN INSERT INTO `search_phrases_fts`(`docid`, `phrase`) VALUES (NEW.`rowid`, NEW.`phrase`); END")
     }
 }
 

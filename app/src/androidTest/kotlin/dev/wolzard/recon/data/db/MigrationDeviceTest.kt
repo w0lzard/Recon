@@ -21,7 +21,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * D38: the 7→8 migration on the device's own SQLite (the JVM MigrationTest runs on Robolectric's). A real version-7
+ * D38/D39: the 7→8 and 8→9 migrations on the device's own SQLite (the JVM MigrationTest runs on Robolectric's). A real version-7
  * database is built from the exported schema 7.json (packaged as a test asset), filled, and opened by Room with every migration.
  */
 @RunWith(AndroidJUnit4::class)
@@ -47,7 +47,7 @@ class MigrationDeviceTest {
         db.close()
     }
 
-    @Test fun v7LibraryMigratesToV8WithEmptyFactsAndAWorkingLinksTable() = runBlocking {
+    @Test fun v7LibraryMigratesToV9WithEmptyFactsLinksAndPhraseIndex() = runBlocking {
         createV7 { db ->
             db.execSQL(
                 "INSERT INTO jobs (id, sharedText, url, localUri, state, failure, failureDetail, retryAtEpochMs, progress, analysisJson, resultJson, createdAt, updatedAt, normalizedUrl) " +
@@ -57,13 +57,16 @@ class MigrationDeviceTest {
             db.execSQL("INSERT INTO entry_jobs (entryId, jobId, createdAt) VALUES (5, 'j7', 3)")
         }
         val room = Room.databaseBuilder(ctx, ReconDb::class.java, name)
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8).allowMainThreadQueries().build()
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9).allowMainThreadQueries().build()
         try {
             val e = room.entries().byKey("github:kmori/stowly")!!
             assertEquals(5L, e.id); assertEquals(4100, e.stars)
             assertEquals(false, e.isArchived)
             assertNull(e.pushedAt); assertNull(e.latestReleaseTag); assertNull(e.licenseSpdx); assertNull(e.language); assertNull(e.maturity)
             assertEquals(1, room.entries().observeList(1, emptyList(), "dotfile*", "dotfile", 10).first().single().videos)   // the FTS4 index survived
+            assertNull(e.problemSolved); assertNull(e.keyFeaturesJson); assertNull(e.whenToUse)   // 8→9 (D39): structured fields start empty
+            room.entries().insertPhrase(SearchPhraseEntity(entryId = 5, phrase = "video download tool"))
+            room.openHelper.readableDatabase.query("SELECT rowid FROM search_phrases_fts WHERE search_phrases_fts MATCH 'download*'").use { assertEquals(1, it.count) }
             val db = room.openHelper.writableDatabase
             db.execSQL("INSERT INTO entry_links (entryId, url, linkType) VALUES (5, 'https://github.com/kmori/stowly', 'REPO')")
             assertTrue(runCatching { db.execSQL("INSERT INTO entry_links (entryId, url, linkType) VALUES (5, 'https://github.com/kmori/stowly', 'REPO')") }.isFailure)

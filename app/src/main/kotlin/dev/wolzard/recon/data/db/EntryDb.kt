@@ -44,6 +44,12 @@ data class EntryEntity(
     val licenseSpdx: String? = null,
     val language: String? = null,
     val maturity: String? = null,
+    // D39: structured fields from the analysis; the two lists are JSON arrays of strings.
+    val problemSolved: String? = null,
+    val keyFeaturesJson: String? = null,
+    val useCasesJson: String? = null,
+    val whenToUse: String? = null,
+    val whenNotToUse: String? = null,
 )
 
 /** A link an entry is known by, sorted by address (D38 `LinkType`, stored by name). Removed with the entry. */
@@ -74,6 +80,18 @@ data class AliasEntity(@PrimaryKey(autoGenerate = true) val id: Long = 0, val en
 )
 data class EntryJobEntity(val entryId: Long, val jobId: String, val createdAt: Long)
 
+/** What someone might type to find an entry by need (D39); at most a few dozen per entry, unique within it. */
+@Entity(
+    tableName = "entry_search_phrases",
+    foreignKeys = [ForeignKey(EntryEntity::class, ["id"], ["entryId"], onDelete = ForeignKey.CASCADE)],
+    indices = [Index("entryId"), Index(value = ["entryId", "phrase"], unique = true)],
+)
+data class SearchPhraseEntity(@PrimaryKey(autoGenerate = true) val id: Long = 0, val entryId: Long, val phrase: String)
+
+@Entity(tableName = "search_phrases_fts")
+@Fts4(contentEntity = SearchPhraseEntity::class, tokenizer = androidx.room.FtsOptions.TOKENIZER_UNICODE61)
+data class SearchPhraseFts(val phrase: String)
+
 @Entity(tableName = "entries_fts")
 @Fts4(contentEntity = EntryEntity::class, tokenizer = androidx.room.FtsOptions.TOKENIZER_UNICODE61)
 data class EntryFts(val name: String, val summary: String)
@@ -83,9 +101,17 @@ data class EntryRow(@Embedded val entry: EntryEntity, val videos: Int) {
         Entry(
             id, EntityType.fromWire(canonicalType), canonicalKey, name, summary, primaryLink, stars, status, videos, createdAt, updatedAt, needsAttention, attentionReason, aliases,
             pushedAt, latestReleaseTag, latestReleaseAt, isArchived, licenseSpdx, language, maturity?.let { m -> Maturity.entries.firstOrNull { it.name == m } }, links,
+            problemSolved, keyFeaturesJson.toStrings(), useCasesJson.toStrings(), whenToUse, whenNotToUse,
         )
     }
 }
+
+private val lists = kotlinx.serialization.builtins.ListSerializer(kotlinx.serialization.serializer<String>())
+internal fun String?.toStrings(): List<String> = this?.let { runCatching { kotlinx.serialization.json.Json.decodeFromString(lists, it) }.getOrNull() }.orEmpty()
+internal fun List<String>.toJsonOrNull(): String? = takeIf { it.isNotEmpty() }?.let { kotlinx.serialization.json.Json.encodeToString(lists, it) }
+
+data class NameRow(val id: Long, val name: String)
+data class AliasRow(val entryId: Long, val alias: String)
 
 private const val VIDEOS = "(SELECT COUNT(DISTINCT COALESCE(j.normalizedUrl, j.id)) FROM entry_jobs ej JOIN jobs j ON j.id = ej.jobId WHERE ej.entryId = e.id) AS videos"
 
@@ -98,6 +124,14 @@ interface EntryDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertAlias(a: AliasEntity): Long
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertLink(l: EntryJobEntity): Long
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertEntryLink(l: EntryLinkEntity): Long
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertPhrase(p: SearchPhraseEntity): Long
+    @Query("SELECT COUNT(*) FROM entry_search_phrases WHERE entryId = :id") suspend fun phraseCount(id: Long): Int
+
+    /** Names and aliases of every listed entry, for the typo fallback (a few hundred rows at most). */
+    @Query("SELECT id, name FROM entries WHERE EXISTS (SELECT 1 FROM entry_jobs WHERE entryId = entries.id)") suspend fun nameIndex(): List<NameRow>
+    @Query("SELECT entryId, alias FROM entry_aliases") suspend fun aliasIndex(): List<AliasRow>
+    @Query("SELECT e.*, $VIDEOS FROM entries e WHERE e.id IN (:ids) AND (:all = 1 OR e.canonicalType IN (:types)) AND EXISTS (SELECT 1 FROM entry_jobs WHERE entryId = e.id)")
+    suspend fun byIds(ids: List<Long>, all: Int, types: List<String>): List<EntryRow>
     @Query("SELECT * FROM entry_links WHERE entryId = :id ORDER BY id") fun observeEntryLinks(id: Long): Flow<List<EntryLinkEntity>>
 
     /**
@@ -107,7 +141,8 @@ interface EntryDao {
     @Query(
         "SELECT e.*, $VIDEOS FROM entries e " +
             "WHERE (:all = 1 OR e.canonicalType IN (:types)) " +
-            "AND (:fts = '' OR e.id IN (SELECT rowid FROM entries_fts WHERE entries_fts MATCH :fts) OR e.id IN (SELECT entryId FROM entry_aliases WHERE alias LIKE :prefix || '%')) " +
+            "AND (:fts = '' OR e.id IN (SELECT rowid FROM entries_fts WHERE entries_fts MATCH :fts) OR e.id IN (SELECT entryId FROM entry_aliases WHERE alias LIKE :prefix || '%') " +
+            "OR e.id IN (SELECT entryId FROM entry_search_phrases WHERE id IN (SELECT rowid FROM search_phrases_fts WHERE search_phrases_fts MATCH :fts))) " +
             "AND EXISTS (SELECT 1 FROM entry_jobs WHERE entryId = e.id) " +
             "ORDER BY e.updatedAt DESC, e.id DESC LIMIT :limit",
     )

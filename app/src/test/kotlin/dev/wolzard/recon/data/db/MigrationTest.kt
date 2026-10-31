@@ -61,7 +61,7 @@ class MigrationTest {
         db.close()
     }
 
-    private fun open() = Room.databaseBuilder(ctx, ReconDb::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8).allowMainThreadQueries().build()
+    private fun open() = Room.databaseBuilder(ctx, ReconDb::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9).allowMainThreadQueries().build()
 
     @Test fun v1RowsKeepTheirDataAndGetNoContext() {
         createV1(insertRow = true)
@@ -378,6 +378,39 @@ class MigrationTest {
         val db = SQLiteDatabase.openDatabase(ctx.getDatabasePath(name).path, null, SQLiteDatabase.OPEN_READONLY)
         db.rawQuery("PRAGMA table_info(entries)", null).use { c -> val cols = generateSequence { if (c.moveToNext()) c.getString(1) else null }.toList(); assertEquals(false, "maturity" in cols || "isArchived" in cols) }
         db.rawQuery("SELECT name FROM sqlite_master WHERE name = 'entry_links'", null).use { assertEquals(0, it.count) }
+        db.close()
+    }
+
+    // --- D39: version 8 to 9 adds the structured entry fields and the search-phrase table with its FTS4 index
+
+    @Test fun v8EntriesKeepTheirDataAndGetEmptyStructuredFieldsAndAWorkingPhraseIndex() = runBlocking {
+        create(8) { db ->
+            db.execSQL("INSERT INTO entries (id, canonicalType, canonicalKey, name, summary, primaryLink, stars, status, createdAt, updatedAt, needsAttention, attentionReason, maturity, isArchived) VALUES (5, 'repo', 'github:yt-dlp/yt-dlp', 'yt-dlp/yt-dlp', 'Downloader', NULL, 90000, 'Verified', 1, 2, 0, NULL, 'ESTABLISHED', 0)")
+        }
+        val room = open()
+        try {
+            val e = room.entries().byKey("github:yt-dlp/yt-dlp")!!
+            assertEquals("ESTABLISHED", e.maturity)                 // the version 8 columns survive
+            assertNull(e.problemSolved); assertNull(e.keyFeaturesJson); assertNull(e.useCasesJson); assertNull(e.whenToUse); assertNull(e.whenNotToUse)
+            val dao = room.entries()
+            dao.insertPhrase(SearchPhraseEntity(entryId = 5, phrase = "video download tool"))
+            dao.insertPhrase(SearchPhraseEntity(entryId = 5, phrase = "video download tool"))   // a repeat is ignored
+            assertEquals(1, dao.phraseCount(5))
+            fun hits(q: String) = room.openHelper.readableDatabase.query("SELECT rowid FROM search_phrases_fts WHERE search_phrases_fts MATCH '$q'").use { c -> generateSequence { if (c.moveToNext()) c.getLong(0) else null }.toList() }
+            assertEquals(1, hits("download*").size)
+            assertEquals(0, hits("android*").size)
+            room.openHelper.writableDatabase.execSQL("DELETE FROM entries WHERE id = 5")   // the phrase and its index row go with the entry
+            assertEquals(0, dao.phraseCount(5)); assertEquals(0, hits("download*").size)
+        } finally {
+            room.close()
+        }
+    }
+
+    @Test fun v8SchemaHasNoStructuredFieldsOrPhrases() { // guards the test itself
+        create(8) { }
+        val db = SQLiteDatabase.openDatabase(ctx.getDatabasePath(name).path, null, SQLiteDatabase.OPEN_READONLY)
+        db.rawQuery("PRAGMA table_info(entries)", null).use { c -> val cols = generateSequence { if (c.moveToNext()) c.getString(1) else null }.toList(); assertEquals(false, "problemSolved" in cols) }
+        db.rawQuery("SELECT name FROM sqlite_master WHERE name LIKE '%search_phrases%'", null).use { assertEquals(0, it.count) }
         db.close()
     }
 

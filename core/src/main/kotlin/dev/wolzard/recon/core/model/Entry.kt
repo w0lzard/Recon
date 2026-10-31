@@ -28,6 +28,12 @@ data class Entry(
     val language: String? = null,
     val maturity: Maturity? = null,
     val links: List<EntryLink> = emptyList(),  // filled for the detail screen only
+    // D39: what the model said about it, cleaned by ResultParser. Null / empty when the video did not say.
+    val problemSolved: String? = null,
+    val keyFeatures: List<String> = emptyList(),
+    val useCases: List<String> = emptyList(),
+    val whenToUse: String? = null,
+    val whenNotToUse: String? = null,
 )
 
 data class EntryLink(val url: String, val type: LinkType)

@@ -3,6 +3,7 @@ package dev.wolzard.recon.feature.library
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -17,6 +18,10 @@ import dev.wolzard.recon.core.model.Basis
 import dev.wolzard.recon.core.model.EntityType
 import dev.wolzard.recon.core.model.Entity
 import dev.wolzard.recon.core.model.Entry
+import dev.wolzard.recon.core.model.EntryLink
+import dev.wolzard.recon.core.research.LinkType
+import dev.wolzard.recon.core.research.Maturity
+import dev.wolzard.recon.designsystem.ChipKind
 import dev.wolzard.recon.core.model.Evidence
 import dev.wolzard.recon.core.model.Finding
 import dev.wolzard.recon.core.model.JobResult
@@ -119,6 +124,51 @@ class LibraryTest {
         compose.onNodeWithTag("entry_link").performClick()
         compose.onNodeWithText("My desk setup").performClick()
         assertEquals(listOf(EntryIntent.OpenLink("https://github.com/x/y"), EntryIntent.OpenVideo("j1")), sent)
+    }
+
+    @Test fun entryScreenShowsMaturityChipFactsAndTypedLinks() {
+        val now = System.currentTimeMillis()
+        val e = entry(1, "kmori/stowly").copy(
+            maturity = Maturity.ESTABLISHED, license = "MIT", language = "Rust", pushedAt = now - 3 * 86_400_000L, latestReleaseTag = "v1.2", latestReleaseAt = now - 40 * 86_400_000L,
+            links = listOf(EntryLink("https://github.com/kmori/stowly", LinkType.REPO), EntryLink("https://docs.stowly.dev/start", LinkType.DOCS)),
+        )
+        val sent = mutableListOf<EntryIntent>()
+        compose.setContent { EntryScreen(EntryState(e, emptyList(), loaded = true)) { sent += it } }
+        compose.onNodeWithTag("entry_maturity").assertExists()
+        compose.onNodeWithText("ESTABLISHED").assertExists()
+        compose.onNodeWithTag("entry_facts").assertExists()
+        compose.onNodeWithText("MIT · Rust · pushed 3 days ago · v1.2, 1 month ago").assertExists()
+        compose.onNodeWithText("LINKS").assertExists()
+        compose.onNodeWithText("Code · github.com").assertExists()
+        compose.onNodeWithTag("entry_link_DOCS").performClick()
+        assertEquals(listOf(EntryIntent.OpenLink("https://docs.stowly.dev/start")), sent)
+    }
+
+    @Test fun entryScreenWithoutFactsShowsNoChipFactsOrLinks() {
+        compose.setContent { EntryScreen(EntryState(entry(1, "kmori/stowly"), emptyList(), loaded = true)) {} }
+        compose.onAllNodesWithTag("entry_maturity").assertCountEquals(0)
+        compose.onAllNodesWithTag("entry_facts").assertCountEquals(0)
+        compose.onAllNodesWithText("LINKS").assertCountEquals(0)
+    }
+
+    @Test fun maturityChipMapsEveryTierAndHidesUnknown() {
+        assertEquals("Established" to ChipKind.Ok, maturityChip(Maturity.ESTABLISHED))
+        assertEquals("Growing" to ChipKind.Neutral, maturityChip(Maturity.GROWING))
+        assertEquals("Experimental" to ChipKind.Neutral, maturityChip(Maturity.EXPERIMENTAL))
+        assertEquals("Inactive" to ChipKind.Bad, maturityChip(Maturity.INACTIVE))
+        assertEquals(null, maturityChip(Maturity.UNKNOWN))
+        assertEquals(null, maturityChip(null))
+    }
+
+    @Test fun agoLabelAndFactsLine() {
+        val day = 86_400_000L
+        assertEquals("today", agoLabel(0, day - 1)); assertEquals("1 day ago", agoLabel(0, day)); assertEquals("29 days ago", agoLabel(0, 29 * day))
+        assertEquals("1 month ago", agoLabel(0, 30 * day)); assertEquals("11 months ago", agoLabel(0, 359 * day))
+        assertEquals("1 year ago", agoLabel(0, 365 * day)); assertEquals("3 years ago", agoLabel(0, 1100 * day))
+        assertEquals("today", agoLabel(5 * day, 0))   // a clock a little behind GitHub's
+        assertEquals(null, factsLine(entry(1, "a/b"), 0))
+        assertEquals("MIT", factsLine(entry(1, "a/b").copy(license = "MIT"), 0))
+        assertEquals("v2", factsLine(entry(1, "a/b").copy(latestReleaseTag = "v2"), 0))
     }
 
     @Test fun goneEntryIsSaid() {

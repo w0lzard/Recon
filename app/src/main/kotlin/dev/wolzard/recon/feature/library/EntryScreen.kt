@@ -1,6 +1,15 @@
 package dev.wolzard.recon.feature.library
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import dev.wolzard.recon.core.link.hostOf
+import dev.wolzard.recon.core.research.LinkType
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -54,8 +63,10 @@ fun EntryScreen(state: EntryState, onIntent: (EntryIntent) -> Unit) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         StatusChip(typeLabel(e.type), ChipKind.Neutral)
                         StatusChip(e.status, statusKind(e.status))
+                        maturityChip(e.maturity)?.let { (label, kind) -> StatusChip(label, kind, Modifier.testTag("entry_maturity")) }
                         e.stars?.let { Text("★ ${stars(it)}", color = muted, style = MaterialTheme.typography.labelSmall) }
                     }
+                    factsLine(e, System.currentTimeMillis())?.let { Text(it, color = muted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("entry_facts")) }
                     if (e.summary.isNotBlank()) Text(e.summary, style = MaterialTheme.typography.bodyLarge)
                     e.primaryLink?.let { link ->
                         Button(onClick = { onIntent(EntryIntent.OpenLink(link)) }, Modifier.fillMaxWidth().height(48.dp).testTag("entry_link"), shape = MaterialTheme.shapes.small) {
@@ -68,6 +79,23 @@ fun EntryScreen(state: EntryState, onIntent: (EntryIntent) -> Unit) {
                     if (e.needsAttention) Text(e.attentionReason ?: "Needs attention", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("entry_attention"))
                 }
                 HorizontalDivider(color = line)
+                if (e.links.isNotEmpty()) {
+                    Text("LINKS", Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 6.dp), color = muted, style = MaterialTheme.typography.labelSmall)
+                    @OptIn(ExperimentalLayoutApi::class)
+                    FlowRow(Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        e.links.forEach { l ->
+                            Row(
+                                Modifier.heightIn(min = 48.dp).border(1.dp, line, RoundedCornerShape(6.dp)).clip(RoundedCornerShape(6.dp))
+                                    .clickable(onClickLabel = "Open ${linkLabel(l.type)} link") { onIntent(EntryIntent.OpenLink(l.url)) }.padding(horizontal = 12.dp).testTag("entry_link_${l.type.name}"),
+                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Icon(linkIcon(l.type), contentDescription = null, Modifier.size(16.dp))
+                                Text("${linkLabel(l.type)} · ${hostOf(l.url)}", style = MaterialTheme.typography.labelLarge)
+                            }
+                        }
+                    }
+                    HorizontalDivider(color = line)
+                }
                 Text("VIDEOS · ${state.videos.size}", Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 6.dp), color = muted, style = MaterialTheme.typography.labelSmall)
             }
             items(state.videos, key = { it.id }) { r ->
@@ -76,4 +104,10 @@ fun EntryScreen(state: EntryState, onIntent: (EntryIntent) -> Unit) {
             }
         }
     }
+}
+
+private fun linkIcon(t: LinkType) = when (t) {
+    LinkType.REPO -> Symbols.Code
+    LinkType.DOCS -> Symbols.MenuBook
+    else -> Symbols.Link
 }

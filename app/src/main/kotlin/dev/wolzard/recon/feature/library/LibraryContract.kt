@@ -1,5 +1,7 @@
 package dev.wolzard.recon.feature.library
 
+import dev.wolzard.recon.core.research.LinkType
+import dev.wolzard.recon.core.research.Maturity
 import dev.wolzard.recon.core.model.EntityType
 import dev.wolzard.recon.core.model.Entry
 import dev.wolzard.recon.designsystem.ChipKind
@@ -65,3 +67,38 @@ fun statusKind(status: String) = when (status) {
 /** "REPO · 3 videos"-style type word for the card. */
 fun typeLabel(t: EntityType) = if (t == EntityType.MEDIA) "MEDIA" else t.wire.uppercase()
 
+
+/** The maturity chip: a label and colour, or null when there is nothing to say (never fetched, or GitHub gave too little). */
+fun maturityChip(m: Maturity?): Pair<String, ChipKind>? = when (m) {
+    Maturity.ESTABLISHED -> "Established" to ChipKind.Ok
+    Maturity.GROWING -> "Growing" to ChipKind.Neutral        // the plan wanted a blue chip; the design system has no such kind yet
+    Maturity.EXPERIMENTAL -> "Experimental" to ChipKind.Neutral
+    Maturity.INACTIVE -> "Inactive" to ChipKind.Bad
+    Maturity.UNKNOWN, null -> null
+}
+
+/** "3 days ago" style age of [then] at [now]; "today" under a day. */
+fun agoLabel(then: Long, now: Long): String {
+    val days = ((now - then) / 86_400_000L).coerceAtLeast(0)
+    return when {
+        days < 1 -> "today"
+        days < 30 -> if (days == 1L) "1 day ago" else "$days days ago"
+        days < 365 -> "${days / 30} ${if (days / 30 == 1L) "month" else "months"} ago"
+        else -> "${days / 365} ${if (days / 365 == 1L) "year" else "years"} ago"
+    }
+}
+
+/** License, language, last push and latest release on one line; null when the entry has none of them. */
+fun factsLine(e: Entry, now: Long): String? = listOfNotNull(
+    e.license, e.language,
+    e.pushedAt?.let { "pushed ${agoLabel(it, now)}" },
+    e.latestReleaseTag?.let { tag -> e.latestReleaseAt?.let { "$tag, ${agoLabel(it, now)}" } ?: tag },
+).takeIf { it.isNotEmpty() }?.joinToString(" · ")
+
+fun linkLabel(t: LinkType) = when (t) {
+    LinkType.REPO -> "Code"
+    LinkType.DOCS -> "Docs"
+    LinkType.PACKAGE -> "Package"
+    LinkType.PAPER -> "Paper"
+    LinkType.WEBSITE -> "Web"
+}

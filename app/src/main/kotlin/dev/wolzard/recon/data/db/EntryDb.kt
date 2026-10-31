@@ -14,6 +14,8 @@ import androidx.room.Query
 import androidx.room.Update
 import dev.wolzard.recon.core.model.EntityType
 import dev.wolzard.recon.core.model.Entry
+import dev.wolzard.recon.core.model.EntryLink
+import dev.wolzard.recon.core.research.Maturity
 import kotlinx.coroutines.flow.Flow
 
 /** D37: the library. INTEGER key so the FTS index keeps pointing at the right row (a TEXT key's rowid can change on VACUUM). */
@@ -77,8 +79,11 @@ data class EntryJobEntity(val entryId: Long, val jobId: String, val createdAt: L
 data class EntryFts(val name: String, val summary: String)
 
 data class EntryRow(@Embedded val entry: EntryEntity, val videos: Int) {
-    fun toEntry(aliases: List<String> = emptyList()) = with(entry) {
-        Entry(id, EntityType.fromWire(canonicalType), canonicalKey, name, summary, primaryLink, stars, status, videos, createdAt, updatedAt, needsAttention, attentionReason, aliases)
+    fun toEntry(aliases: List<String> = emptyList(), links: List<EntryLink> = emptyList()) = with(entry) {
+        Entry(
+            id, EntityType.fromWire(canonicalType), canonicalKey, name, summary, primaryLink, stars, status, videos, createdAt, updatedAt, needsAttention, attentionReason, aliases,
+            pushedAt, latestReleaseTag, latestReleaseAt, isArchived, licenseSpdx, language, maturity?.let { m -> Maturity.entries.firstOrNull { it.name == m } }, links,
+        )
     }
 }
 
@@ -92,6 +97,8 @@ interface EntryDao {
     @Update suspend fun update(e: EntryEntity)
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertAlias(a: AliasEntity): Long
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertLink(l: EntryJobEntity): Long
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertEntryLink(l: EntryLinkEntity): Long
+    @Query("SELECT * FROM entry_links WHERE entryId = :id ORDER BY id") fun observeEntryLinks(id: Long): Flow<List<EntryLinkEntity>>
 
     /**
      * Entries with at least one video, newest activity first. [fts] is a ready MATCH expression, "" for no search;

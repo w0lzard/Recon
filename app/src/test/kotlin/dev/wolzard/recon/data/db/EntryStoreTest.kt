@@ -7,9 +7,13 @@ import dev.wolzard.recon.core.model.AnalysisResult
 import dev.wolzard.recon.core.model.Basis
 import dev.wolzard.recon.core.model.Entity
 import dev.wolzard.recon.core.model.EntityType
+import dev.wolzard.recon.core.model.EntryLink
 import dev.wolzard.recon.core.model.Evidence
 import dev.wolzard.recon.core.model.Finding
 import dev.wolzard.recon.core.model.JobResult
+import dev.wolzard.recon.core.model.RepoFacts
+import dev.wolzard.recon.core.research.LinkType
+import dev.wolzard.recon.core.research.Maturity
 import dev.wolzard.recon.core.model.JobState
 import dev.wolzard.recon.core.model.Verdict
 import kotlinx.coroutines.flow.first
@@ -31,8 +35,8 @@ class EntryStoreTest {
     private val entries = RoomEntryStore(db) { ++tick }
     @After fun close() = db.close()
 
-    private fun finding(type: EntityType, name: String, title: String = name, verdict: Verdict = Verdict.CONFIRMED, basis: Basis = Basis.GITHUB_API, link: String? = null, stars: Int? = null, what: String = "") =
-        Finding(Entity(type, name, null, Evidence.SPOKEN, "said"), "web", verdict, title, what, emptyList(), "", "", link, stars, basis)
+    private fun finding(type: EntityType, name: String, title: String = name, verdict: Verdict = Verdict.CONFIRMED, basis: Basis = Basis.GITHUB_API, link: String? = null, stars: Int? = null, what: String = "", facts: RepoFacts? = null) =
+        Finding(Entity(type, name, null, Evidence.SPOKEN, "said"), "web", verdict, title, what, emptyList(), "", "", link, stars, basis, repoFacts = facts)
 
     /** A finished job carrying [findings] and a distinct video link. */
     private fun done(vararg findings: Finding, url: String = "https://youtu.be/${tick + 1}") = runBlocking {
@@ -133,6 +137,46 @@ class EntryStoreTest {
         assertEquals(1, list("links symlink").size)
         assertEquals(0, list("symlink OR nothing").size)   // OR is a plain word, so every word must match
         assertEquals(0, list("NEAR").size)
+    }
+
+    private fun repoWith(facts: RepoFacts?, link: String? = "https://github.com/kmori/stowly") =
+        finding(EntityType.REPO, "stowly", "kmori/stowly", link = link, stars = 4100, facts = facts)
+
+    @Test fun repoFactsAreStoredAndTheLinkIsTyped() {
+        done(repoWith(RepoFacts(pushedAt = 1_000, licenseSpdx = "MIT", language = "Rust", releaseTag = "v1.0", releaseAt = 900, maturity = Maturity.ESTABLISHED)))
+        val e = runBlocking { entries.observe(list().single().id).first()!! }
+        assertEquals(1_000L, e.pushedAt); assertEquals("MIT", e.license); assertEquals("Rust", e.language)
+        assertEquals("v1.0", e.latestReleaseTag); assertEquals(900L, e.latestReleaseAt)
+        assertFalse(e.archived)
+        assertEquals(Maturity.ESTABLISHED, e.maturity)
+        assertEquals(listOf(EntryLink("https://github.com/kmori/stowly", LinkType.REPO)), e.links)
+    }
+
+    @Test fun aNewerFindingReplacesFactsButNoFactsLeavesThem() {
+        done(repoWith(RepoFacts(pushedAt = 1_000, licenseSpdx = "MIT", releaseTag = "v1.0", releaseAt = 900, maturity = Maturity.GROWING)))
+        done(repoWith(RepoFacts(pushedAt = 2_000, archived = true, licenseSpdx = "Apache-2.0", maturity = Maturity.INACTIVE)))   // no release this time (rate limit)
+        val id = list().single().id
+        val e = runBlocking { entries.observe(id).first()!! }
+        assertEquals(2_000L, e.pushedAt); assertEquals("Apache-2.0", e.license); assertTrue(e.archived); assertEquals(Maturity.INACTIVE, e.maturity)
+        assertEquals("v1.0", e.latestReleaseTag)   // an earlier release is kept when this lookup found none
+        done(repoWith(null))
+        val again = runBlocking { entries.observe(id).first()!! }
+        assertEquals(2_000L, again.pushedAt); assertEquals(Maturity.INACTIVE, again.maturity)
+        assertEquals(1, again.links.size)           // the same link twice is one row
+    }
+
+    @Test fun unknownMaturityShowsNoBadgeAndAGuessHasNoFacts() {
+        done(repoWith(RepoFacts(maturity = Maturity.UNKNOWN)))
+        assertNull(runBlocking { entries.observe(list().single().id).first()!!.maturity })
+        done(finding(EntityType.APP, "Obsidian", basis = Basis.AI_KNOWLEDGE, verdict = Verdict.BEST_MATCH))
+        val app = list(types = setOf(EntityType.APP)).single()
+        val e = runBlocking { entries.observe(app.id).first()!! }
+        assertNull(e.maturity); assertNull(e.pushedAt); assertTrue(e.links.isEmpty())
+    }
+
+    @Test fun nonHttpsLinkIsNotKept() {
+        done(repoWith(RepoFacts(maturity = Maturity.GROWING), link = "http://github.com/kmori/stowly"))
+        assertTrue(runBlocking { entries.observe(list().single().id).first()!!.links }.isEmpty())
     }
 
     @Test fun backfillFilesOldFinishedJobsOnce() = runBlocking {

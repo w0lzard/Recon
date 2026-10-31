@@ -1,5 +1,8 @@
 package dev.wolzard.recon.core.model
 
+import dev.wolzard.recon.core.research.LinkType
+import dev.wolzard.recon.core.research.Maturity
+
 /** D37: one thing in the library (a repo, app, book, film...), kept once however many videos mention it. */
 data class Entry(
     val id: Long,
@@ -16,4 +19,15 @@ data class Entry(
     val needsAttention: Boolean = false,
     val attentionReason: String? = null,
     val aliases: List<String> = emptyList(),   // filled for the detail screen only
+    // D38: GitHub facts for repos; null / false when never fetched. No badge for a null maturity or UNKNOWN.
+    val pushedAt: Long? = null,
+    val latestReleaseTag: String? = null,
+    val latestReleaseAt: Long? = null,
+    val archived: Boolean = false,
+    val license: String? = null,
+    val language: String? = null,
+    val maturity: Maturity? = null,
+    val links: List<EntryLink> = emptyList(),  // filled for the detail screen only
 )
+
+data class EntryLink(val url: String, val type: LinkType)

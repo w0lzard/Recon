@@ -4,7 +4,11 @@ import androidx.room.withTransaction
 import dev.wolzard.recon.core.library.CanonicalKey
 import dev.wolzard.recon.core.model.EntityType
 import dev.wolzard.recon.core.model.Entry
+import dev.wolzard.recon.core.model.EntryLink
 import dev.wolzard.recon.core.model.Finding
+import dev.wolzard.recon.core.research.LinkClassifier
+import dev.wolzard.recon.core.research.LinkType
+import dev.wolzard.recon.core.research.Maturity
 import dev.wolzard.recon.core.model.Job
 import dev.wolzard.recon.core.model.JobResult
 import dev.wolzard.recon.core.port.EntryStore
@@ -28,7 +32,9 @@ class RoomEntryStore(private val db: ReconDb, private val clock: () -> Long = Sy
     }
 
     override fun observe(id: Long): Flow<Entry?> =
-        combine(dao.observe(id), dao.observeAliases(id)) { row, aliases -> row?.toEntry(aliases) }
+        combine(dao.observe(id), dao.observeAliases(id), dao.observeEntryLinks(id)) { row, aliases, links ->
+            row?.toEntry(aliases, links.mapNotNull { l -> LinkType.entries.firstOrNull { it.name == l.linkType }?.let { EntryLink(l.url, it) } })
+        }
 
     override fun observeVideos(id: Long): Flow<List<Job>> = dao.observeVideos(id).map { rows -> rows.map { it.toJob() } }
 
@@ -63,17 +69,28 @@ class RoomEntryStore(private val db: ReconDb, private val clock: () -> Long = Sy
             dao.update(entry.copy(
                 updatedAt = now, status = status, stars = f.stars ?: entry.stars,
                 primaryLink = entry.primaryLink ?: f.primaryLink.safe(), summary = entry.summary.ifBlank { summaryOf(f) },
-            ))
+            ).withFacts(f))
             entry.id
         } else {
             dao.insert(EntryEntity(
                 canonicalType = f.entity.type.wire, canonicalKey = key, name = f.title.ifBlank { f.entity.name }.take(MAX_NAME), summary = summaryOf(f),
                 primaryLink = f.primaryLink.safe(), stars = f.stars, status = status, createdAt = now, updatedAt = now,
                 needsAttention = flag != null, attentionReason = flag,
-            ))
+            ).withFacts(f))
         }
         aliases.forEach { dao.insertAlias(AliasEntity(entryId = id, alias = it)) }   // an alias another entry owns is left with that entry
         dao.insertLink(EntryJobEntity(id, jobId, now))
+        f.primaryLink.safe()?.let { url -> LinkClassifier.classify(url)?.let { dao.insertEntryLink(EntryLinkEntity(entryId = id, url = url, linkType = it.name)) } }
+    }
+
+    /** GitHub facts from this finding replace the stored ones; a finding without any (not a GitHub hit, or an AI guess) leaves them alone. */
+    private fun EntryEntity.withFacts(f: Finding): EntryEntity {
+        val facts = f.repoFacts ?: return this
+        return copy(
+            pushedAt = facts.pushedAt, isArchived = facts.archived, licenseSpdx = facts.licenseSpdx, language = facts.language,
+            latestReleaseTag = facts.releaseTag ?: latestReleaseTag, latestReleaseAt = if (facts.releaseTag != null) facts.releaseAt else latestReleaseAt,
+            maturity = facts.maturity.takeIf { it != Maturity.UNKNOWN }?.name,
+        )
     }
 
     private fun summaryOf(f: Finding) = f.whatItIs.ifBlank { f.entity.saidInVideo }.take(MAX_SUMMARY)

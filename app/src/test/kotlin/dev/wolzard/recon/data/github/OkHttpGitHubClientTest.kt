@@ -41,6 +41,36 @@ class OkHttpGitHubClientTest {
         assertNull(req.headers["Authorization"])
     }
 
+    @Test fun repoParsesPushDateLicenseLanguageAndArchived() = runTest {
+        server.enqueue(json("""{"full_name":"a/b","html_url":"https://github.com/a/b","stargazers_count":5,"pushed_at":"2026-10-20T08:30:00Z","archived":true,"license":{"key":"mit","spdx_id":"MIT","name":"MIT License"},"language":"Rust"}"""))
+        val r = client.repo("a", "b")!!
+        assertEquals("2026-10-20T08:30:00Z", r.pushedAt)
+        assertEquals(true, r.archived)
+        assertEquals("MIT", r.license?.spdxId)
+        assertEquals("Rust", r.language)
+    }
+
+    @Test fun repoWithNullLicenseAndLanguageParses() = runTest {
+        server.enqueue(json("""{"full_name":"a/b","html_url":"https://github.com/a/b","stargazers_count":5,"pushed_at":null,"license":null,"language":null}"""))
+        val r = client.repo("a", "b")!!
+        assertNull(r.pushedAt); assertNull(r.license); assertNull(r.language); assertEquals(false, r.archived)
+    }
+
+    @Test fun latestReleaseParsesAndNoReleaseIsNull() = runTest {
+        server.enqueue(json("""{"tag_name":"v1.2.0","published_at":"2026-09-01T10:00:00Z","name":"x","draft":false}"""))
+        val rel = client.latestRelease("a", "b")!!
+        assertEquals("v1.2.0", rel.tag)
+        assertEquals("2026-09-01T10:00:00Z", rel.publishedAt)
+        assertEquals("/repos/a/b/releases/latest", server.takeRequest().url.encodedPath)
+        server.enqueue(json("""{"message":"Not Found"}""", 404))
+        assertNull(client.latestRelease("a", "b"))
+    }
+
+    @Test fun latestReleaseRateLimitThrows() = runTest {
+        server.enqueue(MockResponse.Builder().code(403).addHeader("X-RateLimit-Remaining", "0").body("{}").build())
+        try { client.latestRelease("a", "b"); fail() } catch (_: GitHubRateLimited) { }
+    }
+
     @Test fun tokenIsSentOnlyWhenSet() = runTest {
         token = "ghp_test"
         server.enqueue(json("{}", 404))

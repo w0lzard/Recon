@@ -14,6 +14,29 @@ data class GhRepo(
     @SerialName("html_url") val htmlUrl: String,
     val description: String? = null,
     @SerialName("stargazers_count") val stars: Int = 0,
+    @SerialName("pushed_at") val pushedAt: String? = null,     // ISO-8601; null when GitHub sent none
+    val archived: Boolean = false,
+    val license: GhLicense? = null,
+    val language: String? = null,
+)
+
+@Serializable
+data class GhLicense(@SerialName("spdx_id") val spdxId: String? = null)
+
+/** `releases/latest`: the newest published, non-draft, non-prerelease release. */
+@Serializable
+data class GhRelease(@SerialName("tag_name") val tag: String, @SerialName("published_at") val publishedAt: String? = null)
+
+/** Repo facts straight from the GitHub API (D38), kept on the finding so the library can show them without a model. */
+@Serializable
+data class RepoFacts(
+    val pushedAt: Long? = null,
+    val archived: Boolean = false,
+    val licenseSpdx: String? = null,
+    val language: String? = null,
+    val releaseTag: String? = null,
+    val releaseAt: Long? = null,
+    val maturity: dev.wolzard.recon.core.research.Maturity = dev.wolzard.recon.core.research.Maturity.UNKNOWN,
 )
 
 @Serializable
@@ -31,6 +54,7 @@ data class Finding(
     val basis: Basis,
     val candidates: List<GhRepo> = emptyList(),   // repos: 2–3 fuzzy GitHub matches for the user to pick
     val source: String? = null,    // claims (D24): the one source the verdict rests on, by name; never a link
+    val repoFacts: RepoFacts? = null,   // repos GitHub resolved (D38)
 )
 
 @Serializable

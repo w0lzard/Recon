@@ -1,5 +1,6 @@
 package dev.wolzard.recon.core.research
 
+@kotlinx.serialization.Serializable
 enum class Maturity { ESTABLISHED, GROWING, EXPERIMENTAL, INACTIVE, UNKNOWN }
 
 /** Maturity of a GitHub repo from API facts only (D38); no model is asked. */

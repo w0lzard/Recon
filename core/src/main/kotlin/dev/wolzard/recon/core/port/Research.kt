@@ -3,6 +3,7 @@ package dev.wolzard.recon.core.port
 import dev.wolzard.recon.core.model.Entity
 import dev.wolzard.recon.core.model.EntityType
 import dev.wolzard.recon.core.model.Finding
+import dev.wolzard.recon.core.model.GhRelease
 import dev.wolzard.recon.core.model.GhRepo
 import dev.wolzard.recon.core.model.ResearchContext
 import dev.wolzard.recon.core.model.ResearchItem
@@ -32,6 +33,8 @@ class ResearchUnavailable(val retryAtEpochMs: Long?, cause: Throwable? = null) :
 interface GitHubClient {
     suspend fun repo(owner: String, name: String): GhRepo?      // null = 404. @throws GitHubRateLimited, IOException
     suspend fun readme(owner: String, name: String): String?
+    /** The latest published release; null = the repo has none (404). @throws GitHubRateLimited, IOException */
+    suspend fun latestRelease(owner: String, name: String): GhRelease? = null
     suspend fun search(query: String): List<GhRepo>             // `q=<query> in:name`, ≤ 10 results
 }
 

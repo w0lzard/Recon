@@ -4,6 +4,8 @@ import dev.wolzard.recon.core.model.Basis
 import dev.wolzard.recon.core.model.Entity
 import dev.wolzard.recon.core.model.EntityType
 import dev.wolzard.recon.core.model.Evidence
+import dev.wolzard.recon.core.model.GhLicense
+import dev.wolzard.recon.core.model.GhRelease
 import dev.wolzard.recon.core.model.GhRepo
 import dev.wolzard.recon.core.model.ResearchContext
 import dev.wolzard.recon.core.model.Verdict
@@ -27,6 +29,7 @@ class GitHubResearcherTest {
         val repos: Map<String, GhRepo> = emptyMap(),
         val searches: Map<String, List<GhRepo>> = emptyMap(),
         val rateLimited: Boolean = false,
+        val release: () -> GhRelease? = { null },
     ) : GitHubClient {
         val queries = mutableListOf<String>()
         val readmes = mutableListOf<String>()
@@ -35,6 +38,7 @@ class GitHubResearcherTest {
             return repos["$owner/$name".lowercase()]
         }
         override suspend fun readme(owner: String, name: String): String { readmes += "$owner/$name"; return "README of $owner/$name" }
+        override suspend fun latestRelease(owner: String, name: String): GhRelease? = release()
         override suspend fun search(query: String): List<GhRepo> { queries += query; return searches[query].orEmpty() }
     }
 
@@ -51,6 +55,43 @@ class GitHubResearcherTest {
         assertEquals("GitHub's official command line tool", f.whatItIs)
         assertEquals("README of cli/cli", out.references[e])
         assertTrue(client.queries.isEmpty())
+    }
+
+    private val now = java.time.Instant.parse("2026-10-31T00:00:00Z").toEpochMilli()
+    private val rich = GhRepo("cli/cli", "https://github.com/cli/cli", "GitHub CLI", 40000, "2026-10-20T08:30:00Z", false, GhLicense("MIT"), "Go")
+
+    @Test fun resolvedRepoCarriesApiFactsReleaseAndMaturity() = runTest {
+        val client = FakeClient(repos = mapOf("cli/cli" to rich), release = { GhRelease("v2.80.0", "2026-10-01T00:00:00Z") })
+        val facts = GitHubResearcher(client) { now }.research(listOf(repo("cli", "cli")), ctx).findings.single().repoFacts!!
+        assertEquals(java.time.Instant.parse("2026-10-20T08:30:00Z").toEpochMilli(), facts.pushedAt)
+        assertEquals("MIT", facts.licenseSpdx)
+        assertEquals("Go", facts.language)
+        assertEquals("v2.80.0", facts.releaseTag)
+        assertEquals(java.time.Instant.parse("2026-10-01T00:00:00Z").toEpochMilli(), facts.releaseAt)
+        assertEquals(Maturity.ESTABLISHED, facts.maturity)
+    }
+
+    @Test fun releaseRateLimitOrNetworkErrorKeepsTheFindingWithoutARelease() = runTest {
+        for (boom in listOf<() -> GhRelease?>({ throw GitHubRateLimited(1L) }, { throw java.io.IOException("offline") })) {
+            val client = FakeClient(repos = mapOf("cli/cli" to rich), release = boom)
+            val f = GitHubResearcher(client) { now }.research(listOf(repo("cli", "cli")), ctx).findings.single()
+            assertEquals(Verdict.CONFIRMED, f.verdict)
+            assertNull(f.repoFacts!!.releaseTag)
+            assertEquals(Maturity.ESTABLISHED, f.repoFacts!!.maturity)   // maturity does not need the release
+        }
+    }
+
+    @Test fun noPushDateMeansUnknownMaturityAndNoAssertionLicenseIsDropped() = runTest {
+        val bare = GhRepo("a/b", "https://github.com/a/b", null, 3000, null, false, GhLicense("NOASSERTION"), null)
+        val facts = GitHubResearcher(FakeClient(repos = mapOf("a/b" to bare))) { now }.research(listOf(repo("b", "a")), ctx).findings.single().repoFacts!!
+        assertEquals(Maturity.UNKNOWN, facts.maturity)
+        assertNull(facts.licenseSpdx)
+        assertNull(facts.pushedAt)
+    }
+
+    @Test fun candidatesOnlyFindingHasNoFacts() = runTest {
+        val client = FakeClient(searches = mapOf("zed" to listOf(gh("a/zed-one"), gh("b/zed-two"))))
+        GitHubResearcher(client) { now }.research(listOf(repo("zed")), ctx).findings.forEach { assertNull(it.repoFacts) }
     }
 
     @Test fun notFoundThenExactNameSearchHitIsBestMatch() = runTest {

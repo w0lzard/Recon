@@ -1,5 +1,6 @@
 package dev.wolzard.recon.data.github
 
+import dev.wolzard.recon.core.model.GhRelease
 import dev.wolzard.recon.core.model.GhRepo
 import dev.wolzard.recon.core.port.GitHubClient
 import dev.wolzard.recon.core.port.GitHubRateLimited
@@ -29,6 +30,9 @@ class OkHttpGitHubClient(
 
     override suspend fun readme(owner: String, name: String): String? =
         get("/repos/$owner/$name/readme", accept = "application/vnd.github.raw")?.body?.take(README_CHARS)
+
+    override suspend fun latestRelease(owner: String, name: String): GhRelease? =
+        get("/repos/$owner/$name/releases/latest")?.let { json.decodeFromString(GhRelease.serializer(), it.body) }
 
     override suspend fun search(query: String): List<GhRepo> {
         val url = "$baseUrl/search/repositories".toHttpUrl().newBuilder()

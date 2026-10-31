@@ -33,6 +33,12 @@ object ResultParser {
     private const val MAX_STRING = 500
     private const val MAX_FACTS = 5
     private const val MAX_ANSWER_SOURCES = 4
+    private const val MAX_PHRASES = 8
+    private const val MAX_PHRASE_LEN = 40
+    private const val MAX_PHRASE_WORDS = 6
+    private const val MAX_FEATURES = 4
+    private const val MAX_USE_CASES = 3
+    const val MAX_FIELD = 120
     const val MAX_TITLE = 80
 
     private val json = Json { isLenient = true; ignoreUnknownKeys = true }
@@ -111,8 +117,39 @@ object ResultParser {
             saidInVideo = o.str("saidInVideo")?.trim().orEmpty().take(MAX_STRING),
             domain = if (type == EntityType.CLAIM) ClaimDomain.fromWire(o.str("domain")) else null,
             subtype = if (type == EntityType.MEDIA) MediaType.fromWire(o.str("subtype")) else null,
+        ).withLibraryFields(o)
+    }
+
+    /** D39: search phrases and structured fields. Never kept for a person or a claim; everything is cleaned, capped and deduplicated. */
+    private fun Entity.withLibraryFields(o: JsonObject): Entity {
+        if (type == EntityType.PERSON || type == EntityType.CLAIM) return this
+        return copy(
+            searchPhrases = phrases(o["searchPhrases"]),
+            problemSolved = field(o.str("problemSolved")),
+            keyFeatures = fields(o["keyFeatures"], MAX_FEATURES),
+            useCases = fields(o["useCases"], MAX_USE_CASES),
+            whenToUse = field(o.str("whenToUse")),
+            whenNotToUse = field(o.str("whenNotToUse")),
         )
     }
+
+    /** Model text shown in the library: no tags, angle brackets, links or control characters, one line, at most [MAX_FIELD]. Blank = null. */
+    internal fun field(s: String?): String? {
+        val t = s.orEmpty().replace(Regex("<[^>]*>"), " ").replace(urlRe, "").replace("<", "").replace(">", "")
+            .replace(Regex("[\\p{Cntrl}]"), " ").replace(Regex("\\s+"), " ").trim()
+        if (t.isEmpty()) return null
+        return if (t.length <= MAX_FIELD) t else t.take(MAX_FIELD - 1).trimEnd() + "…"
+    }
+
+    private fun fields(el: JsonElement?, max: Int): List<String> =
+        (el as? JsonArray).orEmpty().mapNotNull { field((it as? JsonPrimitive)?.contentOrNull) }.distinct().take(max)
+
+    /** Lowercase plain words (letters and digits of any script), 2 to [MAX_PHRASE_WORDS] words, under [MAX_PHRASE_LEN] characters; one-word phrases are too generic to search by. */
+    internal fun phrases(el: JsonElement?): List<String> =
+        (el as? JsonArray).orEmpty().mapNotNull { e ->
+            val words = Regex("[\\p{L}\\p{N}]+").findAll(field((e as? JsonPrimitive)?.contentOrNull).orEmpty().lowercase()).map { it.value }.toList()
+            words.joinToString(" ").takeIf { words.size in 2..MAX_PHRASE_WORDS && it.length < MAX_PHRASE_LEN }
+        }.distinct().take(MAX_PHRASES)
 
     /**
      * Parses the single research call's `{"items":[…]}`. Items are keyed by `index` into [items];

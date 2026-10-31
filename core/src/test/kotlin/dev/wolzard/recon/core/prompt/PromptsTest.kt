@@ -10,6 +10,9 @@ import dev.wolzard.recon.core.model.ResearchItem
 import dev.wolzard.recon.core.model.Verdict
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -133,5 +136,13 @@ class PromptsTest {
 
     @Test fun knowledgePromptStillMakesEveryClaimUnclear() {
         assertTrue(Prompts.knowledge(ctx, listOf(ResearchItem(claim))).contains("for claims: always \"unclear\""))
+    }
+
+    @Test fun schemaAsksForLibraryFieldsAndTheyAreOptional() {
+        val props = (Json.parseToJsonElement(Prompts.ANALYZE_SCHEMA) as JsonObject)["properties"]!!.jsonObject["entities"]!!.jsonObject["items"]!!.jsonObject
+        val fields = props["properties"]!!.jsonObject.keys
+        assertTrue(fields.containsAll(listOf("searchPhrases", "problemSolved", "keyFeatures", "useCases", "whenToUse", "whenNotToUse")))
+        assertEquals(listOf("type", "name", "qualifier", "evidence", "saidInVideo"), props["required"]!!.jsonArray.map { it.jsonPrimitive.content })   // an answer without them stays valid
+        assertTrue(Prompts.ANALYZE_SCHEMA.contains("\"maxItems\": 8"))
     }
 }

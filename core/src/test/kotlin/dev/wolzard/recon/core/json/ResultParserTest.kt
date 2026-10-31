@@ -376,4 +376,55 @@ class ResultParserTest {
         ))
         assertEquals(listOf(dev.wolzard.recon.core.model.MediaType.MOVIE, null, null, null), r.entities.map { it.subtype })
     }
+
+    // --- D39: search phrases and structured fields (all model text is untrusted)
+
+    private fun rich(type: String, extra: String) =
+        """{"type":"$type","name":"yt-dlp","qualifier":"yt-dlp","evidence":"on-screen","saidInVideo":"s",$extra}"""
+
+    private fun parsed(type: String, extra: String) = ResultParser.parseAnalysis(analysis(rich(type, extra))).entities.single()
+
+    @Test fun libraryFieldsAreParsedAndCapped() {
+        val e = parsed(
+            "repo",
+            """"searchPhrases":["Video Download tool","download online videos","a b c d e f g h","batch download audio","save clips offline","grab videos fast","extract audio track","mirror a channel","one more phrase here"],
+               "problemSolved":"Saves videos from many sites.","keyFeatures":["a","b","c","d","e"],"useCases":["x","y","z","w"],"whenToUse":"For archiving.","whenNotToUse":"For DRM streams."""",
+        )
+        assertEquals(8, e.searchPhrases.size)                       // capped
+        assertEquals("video download tool", e.searchPhrases.first()) // lowercased
+        assertTrue("a b c d e f g h" !in e.searchPhrases)           // 8 words is too long
+        assertEquals(listOf("a", "b", "c", "d"), e.keyFeatures)
+        assertEquals(listOf("x", "y", "z"), e.useCases)
+        assertEquals("Saves videos from many sites.", e.problemSolved)
+        assertEquals("For archiving.", e.whenToUse); assertEquals("For DRM streams.", e.whenNotToUse)
+    }
+
+    @Test fun phrasesAreLowercasePlainWordsAndNeverASingleGenericWord() {
+        val e = parsed("repo", """"searchPhrases":["video","Tool!","edit  videos, on Android!","  ","edit videos on android","Éditer des vidéos","${"x".repeat(60)} y"]""")
+        assertEquals(listOf("edit videos on android", "éditer des vidéos"), e.searchPhrases)   // one-word and too-long phrases dropped, punctuation gone, duplicates merged
+    }
+
+    @Test fun fieldsLoseTagsBracketsLinksAndControlCharacters() {
+        val e = parsed("app", """"problemSolved":"<b>Fast</b> <script>alert(1)</script> see https://evil.example/x now\u0007 ok","keyFeatures":["<img src=x onerror=1>Cut clips","a > b <<<c>>>"],"whenToUse":"${"w".repeat(300)}"""")
+        assertEquals("Fast alert(1) see now ok", e.problemSolved)
+        assertEquals(listOf("Cut clips", "a b"), e.keyFeatures)   // a tag-like <<<c>>> is dropped whole
+        assertEquals(ResultParser.MAX_FIELD, e.whenToUse!!.length)
+        assertTrue(e.whenToUse!!.endsWith("…"))
+    }
+
+    @Test fun peopleAndClaimsKeepNoLibraryFields() {
+        for (t in listOf("person", "claim")) {
+            val e = parsed(t, """"searchPhrases":["famous chef recipes"],"problemSolved":"x","keyFeatures":["y"],"useCases":["z"],"whenToUse":"a","whenNotToUse":"b"""")
+            assertTrue(t, e.searchPhrases.isEmpty() && e.keyFeatures.isEmpty() && e.useCases.isEmpty())
+            assertNull(t, e.problemSolved); assertNull(t, e.whenToUse); assertNull(t, e.whenNotToUse)
+        }
+    }
+
+    @Test fun missingOrWrongTypedLibraryFieldsAreEmptyNotInvalid() {
+        val e = parsed("repo", """"searchPhrases":"not an array","keyFeatures":[1,null,{"a":1}],"useCases":null,"problemSolved":5""")
+        assertTrue(e.searchPhrases.isEmpty()); assertTrue(e.useCases.isEmpty())
+        assertEquals(listOf("1"), e.keyFeatures)   // a number is text; null and objects are dropped
+        assertEquals("5", e.problemSolved)
+        assertTrue(ResultParser.parseAnalysis(analysis(ent("repo", "stowly", "kmori"))).entities.single().searchPhrases.isEmpty())   // an older answer without the fields
+    }
 }

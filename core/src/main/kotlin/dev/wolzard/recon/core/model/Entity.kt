@@ -72,4 +72,11 @@ data class Entity(
     val saidInVideo: String,   // one sentence: what the video says about it (device language)
     val domain: ClaimDomain? = null,   // claims only (D24)
     val subtype: MediaType? = null,    // media only, allow-listed (D26)
+    // D39: what the library searches by and shows. Model text, cleaned and capped by ResultParser; empty for people and claims.
+    val searchPhrases: List<String> = emptyList(),   // what someone would type to find this solution, lowercase plain words
+    val problemSolved: String? = null,
+    val keyFeatures: List<String> = emptyList(),
+    val useCases: List<String> = emptyList(),
+    val whenToUse: String? = null,
+    val whenNotToUse: String? = null,
 )

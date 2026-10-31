@@ -63,6 +63,9 @@ Return:
    - evidence: "on-screen" if the name is visibly shown, "spoken" if said aloud but not shown, "inferred" if you deduce it from a description, logo or appearance.
    - saidInVideo: one sentence on what the video says about it.
    - domain: for claims only, what the claim is about: "health", "legal", "financial" or "other"; null for every other type. Medical, legal and money claims must be marked as such.
+   - searchPhrases: for repo, app, product, book, media and other (empty list for person, place, recipe and claim): 5 to 8 phrases someone would type when looking for this solution, by what they need, not by the name. Lowercase plain words, 2 to 6 words each, under 40 characters, no punctuation (for example "edit videos on android"). No one-word phrases like "video" or "tool".
+   - problemSolved: for the same types, 1–2 sentences on the core problem it solves; null otherwise.
+   - keyFeatures: up to 4 short features; useCases: up to 3 concrete scenarios; whenToUse: when it is the best fit; whenNotToUse: when an alternative is better. Null or empty when the video does not say and you are not sure. Write these in {language}.
    Skip generic things (e.g. "a phone", "coffee") unless the video is specifically about them.
    An empty list is a correct, complete answer. Return an empty list if nothing specific is mentioned, or if you are not sure an item is really named or shown in the video. Do not guess an entity from a character, toy or style alone. For media, give a title only if it is shown, captioned or said aloud, or you clearly recognise the exact work; otherwise leave it out. Never fill in a year you are not sure of.
 2. summary — 2 to 4 sentences: what the video is about and what it claims.
@@ -162,7 +165,13 @@ Respond only with a JSON object exactly in this shape, no other text:
           "evidence":    { "type": "string", "enum": ["spoken","on-screen","inferred"] },
           "saidInVideo": { "type": "string" },
           "domain":      { "type": "string", "enum": ["health","legal","financial","other"], "nullable": true },
-          "subtype":     { "type": "string", "enum": ["movie","series","song","game","anime","other"], "nullable": true }
+          "subtype":     { "type": "string", "enum": ["movie","series","song","game","anime","other"], "nullable": true },
+          "searchPhrases": { "type": "array", "items": { "type": "string" }, "maxItems": 8 },
+          "problemSolved": { "type": "string", "nullable": true },
+          "keyFeatures":   { "type": "array", "items": { "type": "string" }, "maxItems": 4 },
+          "useCases":      { "type": "array", "items": { "type": "string" }, "maxItems": 3 },
+          "whenToUse":     { "type": "string", "nullable": true },
+          "whenNotToUse":  { "type": "string", "nullable": true }
         },
         "required": ["type","name","qualifier","evidence","saidInVideo"]
       }

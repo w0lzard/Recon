@@ -21,8 +21,9 @@ class RoomEntryStore(private val db: ReconDb, private val clock: () -> Long = Sy
     override fun observeList(query: String, types: Set<EntityType>?, limit: Int): Flow<List<Entry>> {
         val tokens = WORD.findAll(query).map { it.value }.toList()
         if (query.isNotBlank() && tokens.isEmpty()) return flowOf(emptyList())
-        // Every word must match, the last as a prefix too; quoted so a typed AND / OR / NEAR is just a word.
-        val fts = tokens.joinToString(" ") { "\"$it\"*" }
+        // Every word must match, the last as a prefix too. FTS4 has no quoted prefix ("w"*), so the last word is bare w*;
+        // that still makes a typed OR / NEAR a plain word, since only the exact keyword is an operator.
+        val fts = tokens.mapIndexed { i, t -> if (i == tokens.lastIndex) "$t*" else "\"$t\"" }.joinToString(" ")
         return dao.observeList(if (types == null) 1 else 0, types.orEmpty().map { it.wire }, fts, CanonicalKey.slug(query), limit).map { rows -> rows.map { it.toEntry() } }
     }
 

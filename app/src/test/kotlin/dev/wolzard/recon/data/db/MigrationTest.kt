@@ -5,6 +5,14 @@ import android.database.sqlite.SQLiteDatabase
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import dev.wolzard.recon.core.model.AnalysisResult
+import dev.wolzard.recon.core.model.Basis
+import dev.wolzard.recon.core.model.Entity
+import dev.wolzard.recon.core.model.EntityType
+import dev.wolzard.recon.core.model.Evidence
+import dev.wolzard.recon.core.model.Finding
+import dev.wolzard.recon.core.model.JobResult
+import dev.wolzard.recon.core.model.Verdict
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -273,6 +281,54 @@ class MigrationTest {
             // Deleting the video removes the link; with no video left the entry is not listed.
             RoomJobStore(room).delete("j6")
             assertEquals(emptyList<Long>(), dao.observeList(1, emptyList(), "", "", 10).first().map { it.entry.id })
+        } finally {
+            room.close()
+        }
+    }
+
+    /** A real v6 database: two done videos on one repo (different links, same canonical key), a failed job and an in-flight job that both carry a result. */
+    @Test fun v6BackfillFilesDuplicatesOnceSkipsUnfinishedJobsAndTheIndexFollowsRenameAndDelete() = runBlocking {
+        fun finding(name: String, title: String) = Finding(Entity(EntityType.REPO, name, null, Evidence.SPOKEN, "said"), "web", Verdict.CONFIRMED, title, "Dotfile manager", emptyList(), "", "", "https://github.com/kmori/stowly", 4100, Basis.GITHUB_API)
+        fun result(f: Finding) = Json.encodeToString(JobResult.serializer(), JobResult(AnalysisResult(summary = "s", confidence = 0.9), listOf(f), emptyList(), null, "A")).replace("'", "''")
+        val stowly = result(finding("stowly", "kmori/stowly"))
+        create(6) { db ->
+            fun job(id: String, url: String, state: String, at: Long) = db.execSQL(
+                "INSERT INTO jobs (id, sharedText, url, localUri, state, failure, failureDetail, retryAtEpochMs, progress, analysisJson, resultJson, createdAt, updatedAt, normalizedUrl) " +
+                    "VALUES ('$id', '$url', '$url', NULL, '$state', NULL, NULL, NULL, NULL, NULL, '$stowly', $at, $at, '$url')",
+            )
+            job("a", "https://youtu.be/a", "DONE", 1)
+            job("b", "https://youtu.be/b", "DONE", 2)
+            job("failed", "https://youtu.be/f", "FAILED", 3)
+            job("busy", "https://youtu.be/r", "ANALYSING", 4)
+        }
+        val room = open()
+        try {
+            val store = RoomEntryStore(room) { 100 }
+            assertEquals(emptyList<Long>(), store.observeList("", null, 10).first().map { it.id })
+            store.backfill()
+            val e = store.observeList("", null, 10).first().single()
+            assertEquals("github:kmori/stowly", e.key)
+            assertEquals(2, e.videos)   // the failed and in-flight jobs are not filed
+            assertEquals(listOf("b", "a"), store.observeVideos(e.id).first().map { it.id })
+            // Running it again changes nothing.
+            store.backfill()
+            val again = store.observeList("", null, 10).first().single()
+            assertEquals(e, again)
+            room.openHelper.readableDatabase.query("SELECT COUNT(*) FROM entry_jobs WHERE jobId IN ('failed','busy')").use { it.moveToFirst(); assertEquals(0, it.getInt(0)) }
+            // The FTS4 index follows a rename: the old name stops matching, the new one starts. (Checked on the index itself;
+            // the alias "kmori-stowly" still finds the entry by search, which is intended.)
+            fun hits(word: String) = room.openHelper.readableDatabase.query("SELECT rowid FROM entries_fts WHERE entries_fts MATCH '$word'").use { c -> generateSequence { if (c.moveToNext()) c.getLong(0) else null }.toList() }
+            assertEquals(listOf(e.id), hits("kmori"))
+            val dao = room.entries()
+            dao.update(dao.byKey(e.key)!!.copy(name = "Symlinkr"))
+            assertEquals(emptyList<Long>(), hits("kmori"))
+            assertEquals(listOf(e.id), hits("symlinkr"))
+            assertEquals(listOf(e.id), hits("symlink*"))
+            assertEquals(listOf(e.id), store.observeList("symlink", null, 10).first().map { it.id })
+            // ...and a delete: the entry and its index row are gone.
+            room.openHelper.writableDatabase.execSQL("DELETE FROM entries WHERE id = ${e.id}")
+            assertEquals(emptyList<Long>(), hits("symlinkr"))
+            assertEquals(emptyList<Long>(), store.observeList("symlink", null, 10).first().map { it.id })
         } finally {
             room.close()
         }

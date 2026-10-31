@@ -127,6 +127,14 @@ class EntryStoreTest {
         assertNull(entries.observe(999).first())
     }
 
+    @Test fun lastWordMatchesAsPrefixAndTypedOperatorsAreWords() {
+        done(finding(EntityType.APP, "Symlinkr", what = "Links things"))
+        assertEquals(1, list("symlink").size)     // prefix of a name token
+        assertEquals(1, list("links symlink").size)
+        assertEquals(0, list("symlink OR nothing").size)   // OR is a plain word, so every word must match
+        assertEquals(0, list("NEAR").size)
+    }
+
     @Test fun backfillFilesOldFinishedJobsOnce() = runBlocking {
         val id = jobs.create("https://youtu.be/old", null)
         val result = JobResult(AnalysisResult(summary = "s", confidence = 0.9), listOf(finding(EntityType.APP, "Tern")), emptyList(), null, "A")

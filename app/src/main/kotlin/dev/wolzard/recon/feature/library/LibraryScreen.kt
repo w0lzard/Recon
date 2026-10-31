@@ -62,7 +62,7 @@ fun LibraryScreen(state: LibraryState, onIntent: (LibraryIntent) -> Unit) {
         )
         OutlinedTextField(
             value = state.query, onValueChange = { onIntent(LibraryIntent.QueryChanged(it)) }, singleLine = true,
-            placeholder = { Text("Search names and notes", style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp)) },
+            placeholder = { Text("Search by name or by need", style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp)) },
             leadingIcon = { Icon(StatusIcons.Search, contentDescription = null, Modifier.size(20.dp), tint = muted) },
             textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = Mono, fontSize = 15.sp),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),

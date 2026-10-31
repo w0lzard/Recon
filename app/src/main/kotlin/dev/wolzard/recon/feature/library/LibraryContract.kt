@@ -102,3 +102,5 @@ fun linkLabel(t: LinkType) = when (t) {
     LinkType.PAPER -> "Paper"
     LinkType.WEBSITE -> "Web"
 }
+
+fun hasStructuredFields(e: Entry) = e.problemSolved != null || e.keyFeatures.isNotEmpty() || e.useCases.isNotEmpty() || e.whenToUse != null || e.whenNotToUse != null

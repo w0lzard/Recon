@@ -79,6 +79,18 @@ fun EntryScreen(state: EntryState, onIntent: (EntryIntent) -> Unit) {
                     if (e.needsAttention) Text(e.attentionReason ?: "Needs attention", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("entry_attention"))
                 }
                 HorizontalDivider(color = line)
+                if (hasStructuredFields(e)) {
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp).testTag("entry_structured"), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        e.problemSolved?.let { Field("PROBLEM SOLVED", muted) { Text(it, style = MaterialTheme.typography.bodyLarge) } }
+                        if (e.keyFeatures.isNotEmpty()) Field("KEY FEATURES", muted) { Bullets(e.keyFeatures) }
+                        if (e.useCases.isNotEmpty()) Field("USE CASES", muted) { Bullets(e.useCases) }
+                        if (e.whenToUse != null || e.whenNotToUse != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            e.whenToUse?.let { WhenCard("WHEN TO USE", it, Modifier.weight(1f).testTag("entry_when_to_use"), line, muted) }
+                            e.whenNotToUse?.let { WhenCard("WHEN NOT TO USE", it, Modifier.weight(1f).testTag("entry_when_not_to_use"), line, muted) }
+                        }
+                    }
+                    HorizontalDivider(color = line)
+                }
                 if (e.links.isNotEmpty()) {
                     Text("LINKS", Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 6.dp), color = muted, style = MaterialTheme.typography.labelSmall)
                     @OptIn(ExperimentalLayoutApi::class)
@@ -110,4 +122,28 @@ private fun linkIcon(t: LinkType) = when (t) {
     LinkType.REPO -> Symbols.Code
     LinkType.DOCS -> Symbols.MenuBook
     else -> Symbols.Link
+}
+
+@Composable
+private fun Field(label: String, muted: androidx.compose.ui.graphics.Color, body: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(label, color = muted, style = MaterialTheme.typography.labelSmall)
+        body()
+    }
+}
+
+@Composable
+private fun Bullets(items: List<String>) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        items.forEach { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Text("•"); Text(it, style = MaterialTheme.typography.bodyLarge) } }
+    }
+}
+
+/** A hairline card with a small label; "when to use" and "when not to use" sit side by side. */
+@Composable
+private fun WhenCard(label: String, text: String, modifier: Modifier, line: androidx.compose.ui.graphics.Color, muted: androidx.compose.ui.graphics.Color) {
+    Column(modifier.border(1.dp, line, RoundedCornerShape(6.dp)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(label, color = muted, style = MaterialTheme.typography.labelSmall)
+        Text(text, style = MaterialTheme.typography.bodyMedium)
+    }
 }

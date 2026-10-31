@@ -232,6 +232,20 @@ class ScreenshotsTest {
         ) {}
     }
 
+    /** D39: the structured fields the analysis now asks for. */
+    @Test fun entryDetailStructured() = shot("entry_detail_structured") {
+        dev.wolzard.recon.feature.library.EntryScreen(
+            dev.wolzard.recon.feature.library.EntryState(
+                libraryEntries[1].copy(
+                    name = "Snipper", summary = "Phone video editor named in the video.",
+                    problemSolved = "Trims and subtitles short videos without leaving the phone.", keyFeatures = listOf("Trim and split", "Auto subtitles", "Export without watermark"),
+                    useCases = listOf("Cutting a reel before posting", "Adding captions to a lecture clip"), whenToUse = "Quick edits on a phone.", whenNotToUse = "Colour grading or multi-track audio.",
+                ),
+                emptyList(), loaded = true,
+            ),
+        ) {}
+    }
+
     @Test fun contextFilled() = shot("context_filled") {
         ContextScreen(ContextState("https://www.instagram.com/reel/abc/", "instagram.com", text = "What song is this, and who sings it?")) {}
     }

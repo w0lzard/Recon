@@ -171,6 +171,33 @@ class LibraryTest {
         assertEquals("v2", factsLine(entry(1, "a/b").copy(latestReleaseTag = "v2"), 0))
     }
 
+    @Test fun entryScreenShowsTheStructuredFieldsAndNothingWhenThereAreNone() {
+        val e = entry(1, "yt-dlp").copy(
+            problemSolved = "Saves videos from many sites.", keyFeatures = listOf("Many sites", "Audio only"), useCases = listOf("Archiving a channel"),
+            whenToUse = "You need a local copy.", whenNotToUse = "The site uses DRM.",
+        )
+        compose.setContent { EntryScreen(EntryState(e, emptyList(), loaded = true)) {} }
+        compose.onNodeWithText("PROBLEM SOLVED").assertExists()
+        compose.onNodeWithText("Saves videos from many sites.").assertExists()
+        compose.onNodeWithText("KEY FEATURES").assertExists(); compose.onNodeWithText("Audio only").assertExists()
+        compose.onNodeWithText("USE CASES").assertExists(); compose.onNodeWithText("Archiving a channel").assertExists()
+        compose.onNodeWithTag("entry_when_to_use").assertExists(); compose.onNodeWithTag("entry_when_not_to_use").assertExists()
+        compose.onNodeWithText("The site uses DRM.").assertExists()
+    }
+
+    @Test fun entryScreenWithoutStructuredFieldsHasNoSections() {
+        compose.setContent { EntryScreen(EntryState(entry(1, "stowly"), emptyList(), loaded = true)) {} }
+        compose.onAllNodesWithTag("entry_structured").assertCountEquals(0)
+        assertEquals(false, hasStructuredFields(entry(1, "stowly")))
+        assertEquals(true, hasStructuredFields(entry(1, "stowly").copy(whenNotToUse = "x")))
+    }
+
+    @Test fun onlyOneOfWhenToUseAndWhenNotToUseStillShows() {
+        compose.setContent { EntryScreen(EntryState(entry(1, "stowly").copy(whenToUse = "Dotfiles in git."), emptyList(), loaded = true)) {} }
+        compose.onNodeWithTag("entry_when_to_use").assertExists()
+        compose.onAllNodesWithTag("entry_when_not_to_use").assertCountEquals(0)
+    }
+
     @Test fun goneEntryIsSaid() {
         compose.setContent { EntryScreen(EntryState(loaded = true)) {} }
         compose.onNodeWithText("This entry is gone.").assertExists()

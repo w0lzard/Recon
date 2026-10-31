@@ -63,7 +63,7 @@ interface JobDao {
     @Query("DELETE FROM jobs WHERE id = :id") suspend fun delete(id: String)
 }
 
-@Database(entities = [JobEntity::class, EntryEntity::class, AliasEntity::class, EntryJobEntity::class, EntryFts::class], version = 7, exportSchema = true)
+@Database(entities = [JobEntity::class, EntryEntity::class, AliasEntity::class, EntryJobEntity::class, EntryLinkEntity::class, EntryFts::class], version = 8, exportSchema = true)
 abstract class ReconDb : RoomDatabase() {
     abstract fun jobs(): JobDao
     abstract fun entries(): EntryDao
@@ -128,6 +128,22 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
         db.execSQL("CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_entries_fts_BEFORE_DELETE BEFORE DELETE ON `entries` BEGIN DELETE FROM `entries_fts` WHERE `docid`=OLD.`rowid`; END")
         db.execSQL("CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_entries_fts_AFTER_UPDATE AFTER UPDATE ON `entries` BEGIN INSERT INTO `entries_fts`(`docid`, `name`, `summary`) VALUES (NEW.`rowid`, NEW.`name`, NEW.`summary`); END")
         db.execSQL("CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_entries_fts_AFTER_INSERT AFTER INSERT ON `entries` BEGIN INSERT INTO `entries_fts`(`docid`, `name`, `summary`) VALUES (NEW.`rowid`, NEW.`name`, NEW.`summary`); END")
+    }
+}
+
+/** D38: GitHub facts and typed links on entries. Nothing is fetched here; entries get their facts the next time a finished job names them. */
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `entries` ADD COLUMN `pushedAt` INTEGER")
+        db.execSQL("ALTER TABLE `entries` ADD COLUMN `latestReleaseTag` TEXT")
+        db.execSQL("ALTER TABLE `entries` ADD COLUMN `latestReleaseAt` INTEGER")
+        db.execSQL("ALTER TABLE `entries` ADD COLUMN `isArchived` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE `entries` ADD COLUMN `licenseSpdx` TEXT")
+        db.execSQL("ALTER TABLE `entries` ADD COLUMN `language` TEXT")
+        db.execSQL("ALTER TABLE `entries` ADD COLUMN `maturity` TEXT")
+        db.execSQL("CREATE TABLE IF NOT EXISTS `entry_links` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `entryId` INTEGER NOT NULL, `url` TEXT NOT NULL, `linkType` TEXT NOT NULL, FOREIGN KEY(`entryId`) REFERENCES `entries`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_entry_links_entryId` ON `entry_links` (`entryId`)")
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_entry_links_entryId_url` ON `entry_links` (`entryId`, `url`)")
     }
 }
 

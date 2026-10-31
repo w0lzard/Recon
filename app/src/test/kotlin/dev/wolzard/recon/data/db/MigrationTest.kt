@@ -53,6 +53,7 @@ class MigrationTest {
         schema["entities"]!!.jsonArray.forEach { e ->
             val table = e.jsonObject["tableName"]!!.jsonPrimitive.content
             db.execSQL(e.jsonObject["createSql"]!!.jsonPrimitive.content.replace("\${TABLE_NAME}", table))
+            e.jsonObject["contentSyncTriggers"]?.jsonArray?.forEach { db.execSQL(it.jsonPrimitive.content) } // v7 onwards: the FTS4 index stays in step
             e.jsonObject["indices"]?.jsonArray?.forEach { db.execSQL(it.jsonObject["createSql"]!!.jsonPrimitive.content.replace("\${TABLE_NAME}", table)) } // v5 onwards
         }
         fill(db)
@@ -60,7 +61,7 @@ class MigrationTest {
         db.close()
     }
 
-    private fun open() = Room.databaseBuilder(ctx, ReconDb::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7).allowMainThreadQueries().build()
+    private fun open() = Room.databaseBuilder(ctx, ReconDb::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8).allowMainThreadQueries().build()
 
     @Test fun v1RowsKeepTheirDataAndGetNoContext() {
         createV1(insertRow = true)
@@ -332,6 +333,52 @@ class MigrationTest {
         } finally {
             room.close()
         }
+    }
+
+    // --- D38: version 7 to 8 adds GitHub facts to entries and the typed entry_links table
+
+    @Test fun v7EntriesKeepTheirDataAndGetEmptyFactsAndNoBadge() = runBlocking {
+        create(7) { db ->
+            db.execSQL(
+                "INSERT INTO jobs (id, sharedText, url, localUri, state, failure, failureDetail, retryAtEpochMs, progress, analysisJson, resultJson, createdAt, updatedAt, normalizedUrl) " +
+                    "VALUES ('j7', 'https://youtu.be/g', 'https://youtu.be/g', NULL, 'DONE', NULL, NULL, NULL, NULL, NULL, '{}', 1, 2, 'https://youtu.be/g')",
+            )
+            db.execSQL("INSERT INTO entries (id, canonicalType, canonicalKey, name, summary, primaryLink, stars, status, createdAt, updatedAt, needsAttention, attentionReason) VALUES (5, 'repo', 'github:kmori/stowly', 'kmori/stowly', 'Dotfile manager', NULL, 4100, 'Verified', 1, 2, 0, NULL)")
+            db.execSQL("INSERT INTO entry_jobs (entryId, jobId, createdAt) VALUES (5, 'j7', 3)")
+        }
+        val room = open()
+        try {
+            val dao = room.entries()
+            val e = dao.byKey("github:kmori/stowly")!!
+            assertEquals(5L, e.id)
+            assertEquals("Dotfile manager", e.summary)
+            assertEquals(4100, e.stars)
+            assertEquals(false, e.isArchived)                       // NOT NULL DEFAULT 0
+            assertNull(e.pushedAt); assertNull(e.latestReleaseTag); assertNull(e.latestReleaseAt)
+            assertNull(e.licenseSpdx); assertNull(e.language)
+            assertNull(e.maturity)                                  // null renders as no badge
+            assertEquals(1, room.entries().observeList(1, emptyList(), "", "", 10).first().single().videos)   // link and FTS survived
+            assertEquals(listOf(5L), room.openHelper.readableDatabase.query("SELECT rowid FROM entries_fts WHERE entries_fts MATCH 'dotfile'").use { c -> generateSequence { if (c.moveToNext()) c.getLong(0) else null }.toList() })
+            // entry_links exists, takes rows, refuses a repeat of the same link, and goes with its entry.
+            val db = room.openHelper.writableDatabase
+            db.execSQL("INSERT INTO entry_links (entryId, url, linkType) VALUES (5, 'https://github.com/kmori/stowly', 'REPO')")
+            db.execSQL("INSERT INTO entry_links (entryId, url, linkType) VALUES (5, 'https://docs.stowly.dev', 'DOCS')")
+            val dup = runCatching { db.execSQL("INSERT INTO entry_links (entryId, url, linkType) VALUES (5, 'https://docs.stowly.dev', 'DOCS')") }
+            assertEquals(true, dup.isFailure)
+            db.query("SELECT COUNT(*) FROM entry_links").use { it.moveToFirst(); assertEquals(2, it.getInt(0)) }
+            db.execSQL("DELETE FROM entries WHERE id = 5")
+            db.query("SELECT COUNT(*) FROM entry_links").use { it.moveToFirst(); assertEquals(0, it.getInt(0)) }
+        } finally {
+            room.close()
+        }
+    }
+
+    @Test fun v7SchemaHasNoFactsColumnsOrLinksTable() { // guards the test itself
+        create(7) { }
+        val db = SQLiteDatabase.openDatabase(ctx.getDatabasePath(name).path, null, SQLiteDatabase.OPEN_READONLY)
+        db.rawQuery("PRAGMA table_info(entries)", null).use { c -> val cols = generateSequence { if (c.moveToNext()) c.getString(1) else null }.toList(); assertEquals(false, "maturity" in cols || "isArchived" in cols) }
+        db.rawQuery("SELECT name FROM sqlite_master WHERE name = 'entry_links'", null).use { assertEquals(0, it.count) }
+        db.close()
     }
 
     @Test fun v6SchemaHasNoLibraryTables() { // guards the test itself

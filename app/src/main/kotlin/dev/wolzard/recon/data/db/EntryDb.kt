@@ -34,7 +34,23 @@ data class EntryEntity(
     val updatedAt: Long,
     @ColumnInfo(defaultValue = "0") val needsAttention: Boolean = false,
     val attentionReason: String? = null,
+    // D38: GitHub facts for repos. Null = never fetched (or not a repo); a null maturity shows no badge.
+    val pushedAt: Long? = null,
+    val latestReleaseTag: String? = null,
+    val latestReleaseAt: Long? = null,
+    @ColumnInfo(defaultValue = "0") val isArchived: Boolean = false,
+    val licenseSpdx: String? = null,
+    val language: String? = null,
+    val maturity: String? = null,
 )
+
+/** A link an entry is known by, sorted by address (D38 `LinkType`, stored by name). Removed with the entry. */
+@Entity(
+    tableName = "entry_links",
+    foreignKeys = [ForeignKey(EntryEntity::class, ["id"], ["entryId"], onDelete = ForeignKey.CASCADE)],
+    indices = [Index("entryId"), Index(value = ["entryId", "url"], unique = true)],
+)
+data class EntryLinkEntity(@PrimaryKey(autoGenerate = true) val id: Long = 0, val entryId: Long, val url: String, val linkType: String)
 
 /** Slugs this entry is also known by; unique across the library, so one alias points at one entry. */
 @Entity(

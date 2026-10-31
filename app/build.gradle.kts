@@ -62,6 +62,7 @@ android {
         }
     }
     packaging { jniLibs { useLegacyPackaging = true } } // youtubedl-android extracts its native Python
+    sourceSets.getByName("androidTest").assets.srcDir("$projectDir/schemas") // the exported Room schemas, so a device test can build an old database
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

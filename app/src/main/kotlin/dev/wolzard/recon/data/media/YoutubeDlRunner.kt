@@ -10,7 +10,7 @@ import dev.wolzard.recon.core.link.LinkRouter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -70,7 +70,12 @@ object YtDlp {
         block()
     }
 
+    /** For a failed run, inside [use]: update once (at most daily) and run [block] again once. See [UpdateOnFailure]. */
+    suspend fun <T> retryAfterUpdate(context: Context, block: suspend () -> T): T =
+        UpdateOnFailure.run(System::currentTimeMillis, { prefs(context).getLong(LAST_ATTEMPT, 0L).takeIf { it > 0 } }, { updateLocked(context) != null }, block)
+
     private suspend fun updateLocked(context: Context): YoutubeDL.UpdateStatus? = withContext(Dispatchers.IO) {
+        prefs(context).edit().putLong(LAST_ATTEMPT, System.currentTimeMillis()).apply()
         runCatching { YoutubeDL.getInstance().updateYoutubeDL(context.applicationContext, YoutubeDL.UpdateChannel._STABLE) }
             .onSuccess { prefs(context).edit().putBoolean(UPDATED, true).apply() }
             .onFailure { Log.w("YtDlpUpdate", "yt-dlp update failed", it) }
@@ -80,6 +85,7 @@ object YtDlp {
     private fun prefs(context: Context) = context.getSharedPreferences("ytdlp", Context.MODE_PRIVATE)
     private const val UPDATED = "updatedOnce"
     private const val AUTO_UPDATE = "autoUpdate"
+    private const val LAST_ATTEMPT = "lastUpdateAttemptAt"
 }
 
 class YoutubeDlRunner(private val context: Context) : YtDlpRunner {
@@ -91,15 +97,19 @@ class YoutubeDlRunner(private val context: Context) : YtDlpRunner {
             if (isSave) {
                 YtDlp.ensureFFmpeg(context)
             }
-            coroutineScope {
-                val call = async(Dispatchers.IO) { ytdl.execute(request, processId) { progress, _, _ -> onProgress((progress / 100f).coerceIn(0f, 1f)) } }
-                try {
-                    call.await().out
-                } catch (e: CancellationException) {
-                    ytdl.destroyProcessById(processId) // kills the Python child; the job's finally deletes its dir
-                    throw e
-                } catch (e: YoutubeDLException) {
-                    throw YtDlpException(e.message.orEmpty())
+            YtDlp.retryAfterUpdate(context) {
+                // supervisorScope: with coroutineScope the failed async cancels the scope and the raw YoutubeDLException
+                // comes out instead of the YtDlpException below, so the fetcher never saw stderr (NETWORK went unclassified).
+                supervisorScope {
+                    val call = async(Dispatchers.IO) { ytdl.execute(request, processId) { progress, _, _ -> onProgress((progress / 100f).coerceIn(0f, 1f)) } }
+                    try {
+                        call.await().out
+                    } catch (e: CancellationException) {
+                        ytdl.destroyProcessById(processId) // kills the Python child; the job's finally deletes its dir
+                        throw e
+                    } catch (e: YoutubeDLException) {
+                        throw YtDlpException(e.message.orEmpty())
+                    }
                 }
             }
         }

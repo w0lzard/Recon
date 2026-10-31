@@ -30,7 +30,9 @@ class YtDlpFetcherLargeTest {
         try {
             val m = YtDlpFetcher(YoutubeDlRunner(ctx)).fetch("https://www.youtube.com/watch?v=Psy_4mEWNDI", dir)
             assertTrue(m.video.length() > 0)
-            assertEquals(listOf("video/avc"), mimes(m.video))           // never AV1 on API 26
+            // Video-only or muxed with audio, depending on what YouTube offers today; what matters is avc1 and never AV1 on API 26.
+            assertTrue(mimes(m.video).contains("video/avc"))
+            assertTrue(mimes(m.video).none { it == "video/av01" })
             assertEquals(listOf("audio/mp4a-latm"), mimes(m.audio!!))
             println("LARGE format=${m.formatId} video=${m.video.length()} audio=${m.audio!!.length()}")
         } finally {

@@ -17,8 +17,10 @@ interface YtDlpRunner {
 class YtDlpException(stderr: String) : Exception(stderr)
 
 /**
- * Link downloads (D5, policy list): ≤ 480p muxed for non-YouTube; YouTube has no muxed formats, so it is
- * two separate files (avc1 video ≤ 480p + m4a audio), never merged and never AV1 (API 26 can't decode it).
+ * Link downloads (D5, policy list): ≤ 480p muxed for non-YouTube; YouTube is asked for two files (avc1 video ≤ 480p +
+ * m4a audio), never merged and never AV1 (API 26 can't decode it). The video file may already carry audio: with
+ * current YouTube only a muxed avc1 format may be offered, and the selector takes it (`bv*` allows it). That is fine
+ * for the pipeline, which uses the separate audio when present and frames either way.
  */
 class YtDlpFetcher(private val runner: YtDlpRunner) : MediaFetcher {
 
@@ -60,7 +62,7 @@ class YtDlpFetcher(private val runner: YtDlpRunner) : MediaFetcher {
     companion object {
         private const val CAP_480 = "[height<=854][width<=854]"
         private const val CAP_720 = "[height<=1280][width<=1280]"
-        private val NETWORK_RE = Regex("""Errno (7|-2|-3|101|110|111)|timed out|Network is unreachable|Temporary failure in name resolution""")
+        private val NETWORK_RE = UpdateOnFailure.NETWORK_RE
 
         fun buildArgs(destDir: File, quality: FetchQuality = FetchQuality.DEFAULT, avoid: String? = null): List<String> {
             val x = avoid?.let { "[format_id!=$it]" }.orEmpty()

@@ -16,7 +16,7 @@ data class SettingsState(
     val lastChecked: Long? = null,
     /** SHA-256 of this APK's signing certificate, "AB:CD:…"; null if Android wouldn't say. */
     val certSha256: String? = null,
-    /** yt-dlp downloads its own updates (code); opt-in, see YtDlp. */
+    /** yt-dlp downloads its own updates (code): this switch is the "update before the first download" option; an update after a failed download happens either way, see YtDlp. */
     val ytDlpAutoUpdate: Boolean = false,
 )
 

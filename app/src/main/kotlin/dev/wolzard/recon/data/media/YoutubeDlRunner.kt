@@ -18,9 +18,11 @@ import kotlinx.coroutines.withContext
 /**
  * youtubedl-android access. One lock covers init, update and every download, because an update replaces the
  * yt-dlp zip in place and a download running at the same time fails with "ZipImportError: bad local file header"
- * (seen on the API 26 AVD, 2026-10-08). Updating downloads new code, so it is opt-in (Settings, F-Droid's inclusion
- * policy); when on, an install that never updated does so before its first download, because the bundled yt-dlp ages
- * out (the 0.18.1 library ships 2025.11.12).
+ * (seen on the API 26 AVD, 2026-10-08). Updating downloads new code from GitHub over HTTPS and runs
+ * it, so it happens in two ways only: after a download fails for a reason an update could fix ([retryAfterUpdate], at most
+ * daily, whatever the setting says; owner's decision, plan.md 2026-10-31), and, when the Settings switch is on, before
+ * the first download of an install. The switch is off by default. The bundled yt-dlp ages out (the 0.18.1 library ships
+ * 2025.11.12).
  */
 object YtDlp {
     private val lock = Mutex()

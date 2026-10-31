@@ -144,7 +144,8 @@ fun SettingsScreen(state: SettingsState, onIntent: (SettingsIntent) -> Unit) {
             // F-Droid's inclusion policy: downloading code needs opt-in consent that says it skips F-Droid's checks.
             SettingRow(
                 "Update yt-dlp",
-                "Downloads the newest yt-dlp from GitHub once a day, so video sites keep working between Recon releases. " +
+                "Downloads the newest yt-dlp from GitHub before your first download after installing Recon. " +
+                    "Even with this off, Recon updates it once (at most daily) and tries again when a download fails. " +
                     "It's code that runs on your phone and skips F-Droid's checks.",
                 trailing = { Switch(checked = state.ytDlpAutoUpdate, onCheckedChange = { onIntent(SettingsIntent.SetYtDlpAutoUpdate(it)) }, Modifier.semantics { contentDescription = "Update yt-dlp" }) },
             )

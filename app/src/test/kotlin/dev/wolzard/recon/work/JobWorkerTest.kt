@@ -104,6 +104,56 @@ class JobWorkerTest {
         assertEquals(JobState.FAILED, store.get(id)!!.state)
     }
 
+    /** yt-dlp prints a name-resolution error: the fetcher says NETWORK, the job fails NETWORK, waits off the chain, then the same job runs again and finishes. */
+    @Test fun ytDlpNetworkFailureBecomesANetworkJobThatBacksOffOffTheChainAndRetriesTheSameJob() = runBlocking {
+        val id = store.create("https://www.instagram.com/reel/x/", null)
+        var calls = 0
+        val seenJobIds = mutableListOf<String>()
+        val ytDlp = object : dev.wolzard.recon.data.media.YtDlpRunner {
+            override suspend fun run(url: String, args: List<String>, processId: String, onProgress: (Float) -> Unit): String {
+                seenJobIds += processId
+                if (calls++ == 0) throw dev.wolzard.recon.data.media.YtDlpException("ERROR: [Instagram] x: Unable to download webpage: <urlopen error [Errno -3] Temporary failure in name resolution>")
+                val out = args[args.indexOf("-o") + 1].replace("%(ext)s", "mp4")
+                File(out).apply { parentFile!!.mkdirs(); writeBytes(ByteArray(4)) }
+                return "18|$out\n"
+            }
+        }
+        val dir = File(ctx.cacheDir, "jobs/$id")
+        // What RunJob does with a fetch failure: the AnalyzerException's reason is the job's failure.
+        behaviour = { jobId ->
+            try {
+                dev.wolzard.recon.data.media.YtDlpFetcher(ytDlp).fetch("https://www.instagram.com/reel/x/", dir)
+                store.update(jobId) { it.copy(state = JobState.DONE) }
+            } catch (e: dev.wolzard.recon.core.model.AnalyzerException) {
+                store.update(jobId) { it.copy(state = JobState.FAILED, failure = e.reason) }
+            }
+        }
+
+        // First run: fails NETWORK, goes back to QUEUED with the failure kept, and its wait is separate delayed work.
+        val first = worker(id).doWork()
+        assertEquals(store.get(id)!!.failureDetail, ListenableWorker.Result.success(), first)
+        val queued = store.get(id)!!
+        assertEquals(JobState.QUEUED, queued.state)
+        assertEquals(FailureReason.NETWORK, queued.failure)
+        val wm = WorkManager.getInstance(ctx)
+        assertEquals(30_000L, wm.getWorkInfosForUniqueWork(JobQueue.waitName(id)).get().single().initialDelayMillis)
+        assertTrue("the queue slot is free while it waits", wm.getWorkInfosForUniqueWork(JobQueue.NAME).get().isEmpty())
+
+        // The wait ends: the same job re-joins the chain (one entry, this job's id), no new job.
+        val rejoin = TestListenableWorkerBuilder<JobWorker>(ctx).setInputData(JobQueue.input(id, UserAction.RUN, requeue = true, tries = 1)).build()
+        assertEquals(ListenableWorker.Result.success(), rejoin.doWork())
+        val chain = wm.getWorkInfosForUniqueWork(JobQueue.NAME).get().single()
+        assertTrue(JobQueue.tag(id) in chain.tags)
+
+        // The retry runs the same job and finishes it.
+        val retry = TestListenableWorkerBuilder<JobWorker>(ctx).setInputData(JobQueue.input(id, UserAction.RUN, tries = 1)).build()
+        assertEquals(ListenableWorker.Result.success(), retry.doWork())
+        assertEquals(JobState.DONE, store.get(id)!!.state)
+        assertEquals(2, calls)
+        assertEquals(listOf(id, id), seenJobIds)   // both tries ran in this job's directory
+        assertEquals(1, store.observeAll().first().size)
+    }
+
     @Test fun otherFailuresAreNeverRetriedAutomatically() = runBlocking {
         val id = store.create("https://youtu.be/x", null)
         behaviour = { store.update(it) { j -> j.copy(state = JobState.FAILED, failure = FailureReason.DOWNLOAD_FAILED) } }

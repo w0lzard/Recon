@@ -35,8 +35,8 @@ class EntryStoreTest {
     private val entries = RoomEntryStore(db) { ++tick }
     @After fun close() = db.close()
 
-    private fun finding(type: EntityType, name: String, title: String = name, verdict: Verdict = Verdict.CONFIRMED, basis: Basis = Basis.GITHUB_API, link: String? = null, stars: Int? = null, what: String = "", facts: RepoFacts? = null) =
-        Finding(Entity(type, name, null, Evidence.SPOKEN, "said"), "web", verdict, title, what, emptyList(), "", "", link, stars, basis, repoFacts = facts)
+    private fun finding(type: EntityType, name: String, title: String = name, verdict: Verdict = Verdict.CONFIRMED, basis: Basis = Basis.GITHUB_API, link: String? = null, stars: Int? = null, what: String = "", facts: RepoFacts? = null, fields: (Entity) -> Entity = { it }) =
+        Finding(fields(Entity(type, name, null, Evidence.SPOKEN, "said")), "web", verdict, title, what, emptyList(), "", "", link, stars, basis, repoFacts = facts)
 
     /** A finished job carrying [findings] and a distinct video link. */
     private fun done(vararg findings: Finding, url: String = "https://youtu.be/${tick + 1}") = runBlocking {
@@ -177,6 +177,56 @@ class EntryStoreTest {
     @Test fun nonHttpsLinkIsNotKept() {
         done(repoWith(RepoFacts(maturity = Maturity.GROWING), link = "http://github.com/kmori/stowly"))
         assertTrue(runBlocking { entries.observe(list().single().id).first()!!.links }.isEmpty())
+    }
+
+    private val editor = { e: Entity -> e.copy(searchPhrases = listOf("edit videos on android", "trim and cut clips", "add subtitles to videos")) }
+
+    @Test fun searchByNeedFindsAnEntryWhoseNameHasNoneOfTheWords() {
+        done(finding(EntityType.APP, "Snipper", fields = editor))
+        done(finding(EntityType.APP, "Tern"))
+        assertEquals(listOf("Snipper"), list("edit videos on android").map { it.name })
+        assertEquals(listOf("Snipper"), list("trim clip").map { it.name })              // earlier words whole, the last as a prefix
+        assertEquals(listOf("Snipper"), list("subtitles").map { it.name })
+        assertTrue(list("android subtitles").isEmpty())                               // every word, in one phrase
+        assertEquals(setOf("Snipper", "Tern"), list().map { it.name }.toSet())
+    }
+
+    @Test fun typosFallBackToNamesAndAliasesOnlyWhenFullTextFindsNothing() {
+        done(finding(EntityType.REPO, "stowly", "kmori/stowly", link = "https://github.com/kmori/stowly"))
+        done(finding(EntityType.APP, "Tern"))
+        assertEquals(listOf("kmori/stowly"), list("stowlly").map { it.name })          // one extra letter
+        assertEquals(listOf("Tern"), list("tren").map { it.name })                    // a swap
+        assertEquals(listOf("Tern"), list("tren", types = setOf(EntityType.APP)).map { it.name })
+        assertTrue(list("tren", types = setOf(EntityType.REPO)).isEmpty())            // the type filter still applies
+        assertTrue(list("zebra").isEmpty())
+        assertEquals(listOf("Tern"), list("tern").map { it.name })                    // a hit needs no typo pass
+    }
+
+    @Test fun typoFallbackNeverListsAnEntryWithoutAVideo() {
+        val a = done(finding(EntityType.APP, "Obsidian", basis = Basis.AI_KNOWLEDGE, verdict = Verdict.BEST_MATCH))
+        assertEquals(1, list("obsidan").size)
+        runBlocking { jobs.delete(a.id) }
+        assertTrue(list("obsidan").isEmpty())
+    }
+
+    @Test fun structuredFieldsAreStoredAndAnEmptyAnswerNeverWipesThem() {
+        val full = { e: Entity -> e.copy(problemSolved = "Cuts clips.", keyFeatures = listOf("Trim", "Subtitles"), useCases = listOf("Reels"), whenToUse = "Quick edits", whenNotToUse = "Colour grading", searchPhrases = listOf("cut video clips")) }
+        done(finding(EntityType.APP, "Snipper", fields = full))
+        done(finding(EntityType.APP, "Snipper"))   // a later video that says nothing more
+        val e = runBlocking { entries.observe(list().single().id).first()!! }
+        assertEquals("Cuts clips.", e.problemSolved); assertEquals(listOf("Trim", "Subtitles"), e.keyFeatures); assertEquals(listOf("Reels"), e.useCases)
+        assertEquals("Quick edits", e.whenToUse); assertEquals("Colour grading", e.whenNotToUse)
+        done(finding(EntityType.APP, "Snipper", fields = { it.copy(problemSolved = "Edits video on a phone.") }))
+        assertEquals("Edits video on a phone.", runBlocking { entries.observe(e.id).first()!!.problemSolved })   // newer text replaces
+        assertEquals(1, list("cut video clips").size)   // the phrase from the first video is still searchable
+    }
+
+    @Test fun phrasesAreUniquePerEntryAndCappedAtTwentyFour() {
+        val many = { n: Int -> { e: Entity -> e.copy(searchPhrases = (1..8).map { "phrase number ${n * 10 + it}" }) } }
+        repeat(4) { done(finding(EntityType.APP, "Snipper", fields = many(it))) }   // 32 distinct phrases offered
+        done(finding(EntityType.APP, "Snipper", fields = many(0)))                  // the first eight again
+        val id = list().single().id
+        assertEquals(24, runBlocking { db.entries().phraseCount(id) })
     }
 
     @Test fun backfillFilesOldFinishedJobsOnce() = runBlocking {

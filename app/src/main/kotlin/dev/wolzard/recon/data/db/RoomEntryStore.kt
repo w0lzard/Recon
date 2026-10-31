@@ -9,6 +9,7 @@ import dev.wolzard.recon.core.model.Finding
 import dev.wolzard.recon.core.research.LinkClassifier
 import dev.wolzard.recon.core.research.LinkType
 import dev.wolzard.recon.core.research.Maturity
+import dev.wolzard.recon.core.search.NeedMatcher
 import dev.wolzard.recon.core.model.Job
 import dev.wolzard.recon.core.model.JobResult
 import dev.wolzard.recon.core.port.EntryStore
@@ -23,12 +24,24 @@ class RoomEntryStore(private val db: ReconDb, private val clock: () -> Long = Sy
     private val dao = db.entries()
 
     override fun observeList(query: String, types: Set<EntityType>?, limit: Int): Flow<List<Entry>> {
-        val tokens = WORD.findAll(query).map { it.value }.toList()
-        if (query.isNotBlank() && tokens.isEmpty()) return flowOf(emptyList())
-        // Every word must match, the last as a prefix too. FTS4 has no quoted prefix ("w"*), so the last word is bare w*;
-        // that still makes a typed OR / NEAR a plain word, since only the exact keyword is an operator.
-        val fts = tokens.mapIndexed { i, t -> if (i == tokens.lastIndex) "$t*" else "\"$t\"" }.joinToString(" ")
-        return dao.observeList(if (types == null) 1 else 0, types.orEmpty().map { it.wire }, fts, CanonicalKey.slug(query), limit).map { rows -> rows.map { it.toEntry() } }
+        val fts = NeedMatcher.ftsQuery(query)
+        if (query.isNotBlank() && fts.isEmpty()) return flowOf(emptyList())
+        val all = if (types == null) 1 else 0
+        val wires = types.orEmpty().map { it.wire }
+        return dao.observeList(all, wires, fts, CanonicalKey.slug(query), limit).map { rows ->
+            // Full-text search first (name, summary, aliases, search phrases); only a search that finds nothing tries typos.
+            val found = if (rows.isEmpty() && fts.isNotEmpty()) typoFallback(query, all, wires, limit) else rows
+            found.map { it.toEntry() }
+        }
+    }
+
+    /** On-device edit-distance match over the names and aliases of the listed entries. */
+    private suspend fun typoFallback(query: String, all: Int, wires: List<String>, limit: Int): List<EntryRow> {
+        val aliases = dao.aliasIndex().groupBy({ it.entryId }, { it.alias })
+        val ids = NeedMatcher.typoMatches(query, dao.nameIndex().map { NeedMatcher.Candidate(it.id, listOf(it.name) + aliases[it.id].orEmpty()) })
+        if (ids.isEmpty()) return emptyList()
+        val byId = dao.byIds(ids, all, wires).associateBy { it.entry.id }
+        return ids.mapNotNull(byId::get).take(limit)
     }
 
     override fun observe(id: Long): Flow<Entry?> =
@@ -69,18 +82,27 @@ class RoomEntryStore(private val db: ReconDb, private val clock: () -> Long = Sy
             dao.update(entry.copy(
                 updatedAt = now, status = status, stars = f.stars ?: entry.stars,
                 primaryLink = entry.primaryLink ?: f.primaryLink.safe(), summary = entry.summary.ifBlank { summaryOf(f) },
-            ).withFacts(f))
+            ).withFacts(f).withFields(f))
             entry.id
         } else {
             dao.insert(EntryEntity(
                 canonicalType = f.entity.type.wire, canonicalKey = key, name = f.title.ifBlank { f.entity.name }.take(MAX_NAME), summary = summaryOf(f),
                 primaryLink = f.primaryLink.safe(), stars = f.stars, status = status, createdAt = now, updatedAt = now,
                 needsAttention = flag != null, attentionReason = flag,
-            ).withFacts(f))
+            ).withFacts(f).withFields(f))
         }
-        aliases.forEach { dao.insertAlias(AliasEntity(entryId = id, alias = it)) }   // an alias another entry owns is left with that entry
+        aliases.forEach { dao.insertAlias(AliasEntity(entryId = id, alias = it)) }
+        f.entity.searchPhrases.take((MAX_PHRASES_PER_ENTRY - dao.phraseCount(id)).coerceAtLeast(0)).forEach { dao.insertPhrase(SearchPhraseEntity(entryId = id, phrase = it)) }   // an alias another entry owns is left with that entry
         dao.insertLink(EntryJobEntity(id, jobId, now))
         f.primaryLink.safe()?.let { url -> LinkClassifier.classify(url)?.let { dao.insertEntryLink(EntryLinkEntity(entryId = id, url = url, linkType = it.name)) } }
+    }
+
+    /** What the model said about the entity replaces the stored text when it said something; an empty field never wipes an earlier one. */
+    private fun EntryEntity.withFields(f: Finding): EntryEntity = f.entity.let { e ->
+        copy(
+            problemSolved = e.problemSolved ?: problemSolved, keyFeaturesJson = e.keyFeatures.toJsonOrNull() ?: keyFeaturesJson,
+            useCasesJson = e.useCases.toJsonOrNull() ?: useCasesJson, whenToUse = e.whenToUse ?: whenToUse, whenNotToUse = e.whenNotToUse ?: whenNotToUse,
+        )
     }
 
     /** GitHub facts from this finding replace the stored ones; a finding without any (not a GitHub hit, or an AI guess) leaves them alone. */
@@ -100,6 +122,7 @@ class RoomEntryStore(private val db: ReconDb, private val clock: () -> Long = Sy
         val WORD = Regex("[\\p{L}\\p{N}]+")
         val json = Json { ignoreUnknownKeys = true }
         const val MAX_NAME = 200
+        const val MAX_PHRASES_PER_ENTRY = 24
         const val MAX_SUMMARY = 600
     }
 }

@@ -212,6 +212,26 @@ class ScreenshotsTest {
         ) {}
     }
 
+    /** D38: a repo with GitHub facts, the maturity chip and typed links. */
+    @Test fun entryDetailMaturity() = shot("entry_detail_maturity") {
+        val rows = listOf(HomeRow.from(job(JobState.DONE).copy(id = "a", videoTitle = "My desk setup and the CLI behind my dotfiles", createdAt = now - 3_600_000), now))
+        val day = 86_400_000L
+        dev.wolzard.recon.feature.library.EntryScreen(
+            dev.wolzard.recon.feature.library.EntryState(
+                libraryEntries[0].copy(
+                    aliases = listOf("kmori-stowly", "stowly"), maturity = dev.wolzard.recon.core.research.Maturity.ESTABLISHED, license = "MIT", language = "Rust",
+                    pushedAt = now - 3 * day, latestReleaseTag = "v1.2.0", latestReleaseAt = now - 40 * day,
+                    links = listOf(
+                        dev.wolzard.recon.core.model.EntryLink("https://github.com/kmori/stowly", dev.wolzard.recon.core.research.LinkType.REPO),
+                        dev.wolzard.recon.core.model.EntryLink("https://stowly.readthedocs.io/en/latest/", dev.wolzard.recon.core.research.LinkType.DOCS),
+                        dev.wolzard.recon.core.model.EntryLink("https://crates.io/crates/stowly", dev.wolzard.recon.core.research.LinkType.PACKAGE),
+                    ),
+                ),
+                rows, loaded = true,
+            ),
+        ) {}
+    }
+
     @Test fun contextFilled() = shot("context_filled") {
         ContextScreen(ContextState("https://www.instagram.com/reel/abc/", "instagram.com", text = "What song is this, and who sings it?")) {}
     }
